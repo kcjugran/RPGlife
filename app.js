@@ -143,7 +143,7 @@ function buildInitialState() {
   const domainState = {};
   DOMAIN_KEYS.forEach(k => {
     domainState[k] = {
-      totalXp: 320 + Math.floor(Math.random()*400),
+      totalXp: 0,
       level: 0,
       rank: 0,
       potentialRank: 0,
@@ -152,18 +152,21 @@ function buildInitialState() {
 
   return {
     activities: STARTER_ACTIVITIES,
-    quests: STARTER_QUESTS,
+    quests: [],
     dailyLogs: {},
     activityLog: [],
     domains: domainState,
-    consistencyStreak: 4,
-    powerStreak: 1,
+    consistencyStreak: 0,
+    powerStreak: 0,
     lastConsistencyDate: null,
     lastPowerDate: null,
-    gold: 240,
+    gold: 0,
     rewards: DEFAULT_REWARDS,
     customSubcats: {},
     bossCompletions: {},
+    customBosses: {},        // {[domain]: {[level]: [str, str, str]}}
+    goldHistory: {},          // {[dateKey]: total gold earned that day}
+    createdAt: Date.now(),    // for daily-average estimates
   };
 }
 
@@ -232,6 +235,49 @@ function yesterdayKey() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function computeDailyGoldAverage(state) {
+  const history = state.goldHistory || {};
+  const today = new Date();
+  let total = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = dateKey(d);
+    if (history[key] !== undefined) total += history[key];
+  }
+  const daysAlive = Math.max(1, Math.floor((Date.now() - (state.createdAt || Date.now())) / (1000*60*60*24)));
+  const denom = Math.min(30, Math.max(daysAlive, 1));
+  if (total === 0) return 0;
+  return total / denom;
+}
+
+function formatEstimate(cost, avgPerDay) {
+  if (!avgPerDay || avgPerDay <= 0) return null;
+  const days = Math.ceil(cost / avgPerDay);
+  if (days <= 1) return '≈ today';
+  if (days < 14) return `≈ ${days} days`;
+  if (days < 60) return `≈ ${Math.ceil(days/7)} weeks`;
+  if (days < 365) return `≈ ${Math.ceil(days/30)} months`;
+  return `≈ ${(days/365).toFixed(1)} years`;
+}
+
+// Inspect a daily log to determine streak status for that day.
+// Returns: 'power' | 'consistency' | 'partial' | 'none'
+function dayStatus(log) {
+  if (!log) return 'none';
+  const hasAny = DOMAIN_KEYS.some(k => (log[k] || 0) > 0);
+  if (!hasAny) return 'none';
+  const allMin = DOMAIN_KEYS.every(k => (log[k] || 0) >= CONSISTENCY_MIN);
+  const allFull = DOMAIN_KEYS.every(k => (log[k] || 0) >= DAILY_GOAL);
+  if (allFull) return 'power';
+  if (allMin) return 'consistency';
+  return 'partial';
+}
+
 // ---------- Main Component ----------
 
 function RPGLife({ user, onSignOut }) {
@@ -247,6 +293,10 @@ function RPGLife({ user, onSignOut }) {
   const [toast, setToast] = useState(null);
   const [bossModal, setBossModal] = useState(null);
   const [migrationPrompt, setMigrationPrompt] = useState(null); // { localState }
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const [streakCalendar, setStreakCalendar] = useState(null); // 'consistency' | 'power' | null
+  const [resetPrompt, setResetPrompt] = useState(null); // 'all' | domainKey | null
+  const [bossEditor, setBossEditor] = useState(null); // { domain, level } | null
   const toastTimer = useRef(null);
   const saveTimer = useRef(null);
   const lastSavedJson = useRef(null);
@@ -323,15 +373,30 @@ function RPGLife({ user, onSignOut }) {
     }, 800);
   }, [state, loaded, user]);
 
+  // helper: start the realtime sync subscription for cross-device updates
+  const subscribeRef = useRef(null);
+  function startSync() {
+    if (subscribeRef.current) return; // already subscribed
+    subscribeRef.current = window.RPGLifeSync.subscribeToState(user.uid, (snapState, updatedAt) => {
+      if (!snapState) return;
+      if (updatedAt <= remoteUpdatedAt.current) return;
+      remoteUpdatedAt.current = updatedAt;
+      const snapJson = JSON.stringify(snapState);
+      if (snapJson === lastSavedJson.current) return;
+      lastSavedJson.current = snapJson;
+      setState(snapState);
+    });
+  }
+
   function acceptMigration() {
     const local = migrationPrompt.localState;
     setState(local);
     lastSavedJson.current = JSON.stringify(local);
     setMigrationPrompt(null);
     setLoaded(true);
-    // Save to Firestore immediately so other devices get it
     window.RPGLifeSync.saveState(user.uid, local).then(() => {
       remoteUpdatedAt.current = Date.now();
+      startSync();
     });
   }
 
@@ -343,6 +408,7 @@ function RPGLife({ user, onSignOut }) {
     setLoaded(true);
     window.RPGLifeSync.saveState(user.uid, fresh).then(() => {
       remoteUpdatedAt.current = Date.now();
+      startSync();
     });
   }
 
@@ -372,7 +438,7 @@ function RPGLife({ user, onSignOut }) {
   const domainProgress = {};
   DOMAIN_KEYS.forEach(k => {
     const earned = todayLog[k] || 0;
-    domainProgress[k] = Math.min(earned, DAILY_GOAL);
+    domainProgress[k] = earned;
   });
 
   const domainComputed = {};
@@ -418,20 +484,26 @@ function RPGLife({ user, onSignOut }) {
     }
 
     setState(prev => {
+      const oldDayLog = (prev.dailyLogs[today] && prev.dailyLogs[today][activity.domain]) || 0;
+      // Only the portion of xpGain that keeps the daily meter ≤ DAILY_GOAL counts toward total/levels.
+      // The rest is "overflow" — visible in the meter as e.g. 127/100 but not stored as total XP.
+      const xpToTotal = Math.max(0, Math.min(xpGain, DAILY_GOAL - oldDayLog));
+      const xpOverflow = xpGain - xpToTotal;
+
       const next = { ...prev };
       next.domains = { ...prev.domains };
       next.domains[activity.domain] = {
         ...next.domains[activity.domain],
-        totalXp: next.domains[activity.domain].totalXp + xpGain,
+        totalXp: next.domains[activity.domain].totalXp + xpToTotal,
       };
 
       next.dailyLogs = { ...prev.dailyLogs };
       const dayLog = { ...(next.dailyLogs[today] || {}) };
-      dayLog[activity.domain] = (dayLog[activity.domain] || 0) + xpGain;
+      dayLog[activity.domain] = oldDayLog + xpGain;
       next.dailyLogs[today] = dayLog;
 
       next.activityLog = [
-        { id: uid('log'), activityName: activity.name, domain: activity.domain, xp: xpGain, timestamp: Date.now(), detail: activity.type === 'duration' ? `${value} min` : null },
+        { id: uid('log'), activityName: activity.name, domain: activity.domain, xp: xpGain, overflow: xpOverflow, timestamp: Date.now(), detail: activity.type === 'duration' ? `${value} min` : null },
         ...prev.activityLog,
       ].slice(0, 30);
 
@@ -481,10 +553,13 @@ function RPGLife({ user, onSignOut }) {
       const oldQuest = prev.quests.find(q=>q.id===id);
       const quest = quests.find(q => q.id === id);
       if (quest && quest.progress === 100 && oldQuest.progress < 100) {
+        const goldGain = Math.round(quest.xpReward / 3);
         next.domains = { ...next.domains };
         next.domains[quest.domain] = { ...next.domains[quest.domain], totalXp: next.domains[quest.domain].totalXp + quest.xpReward };
-        next.gold = next.gold + Math.round(quest.xpReward / 3);
-        showToast(`Quest complete! +${quest.xpReward} XP, +${Math.round(quest.xpReward/3)} gold`);
+        next.gold = next.gold + goldGain;
+        next.goldHistory = { ...(prev.goldHistory || {}) };
+        next.goldHistory[today] = (next.goldHistory[today] || 0) + goldGain;
+        showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold`);
       }
       return next;
     });
@@ -499,7 +574,9 @@ function RPGLife({ user, onSignOut }) {
       const key = `${domainKey}-${level}`;
       const bossCompletions = { ...prev.bossCompletions, [key]: true };
       const gold = prev.gold + 75;
-      return { ...prev, bossCompletions, gold };
+      const goldHistory = { ...(prev.goldHistory || {}) };
+      goldHistory[today] = (goldHistory[today] || 0) + 75;
+      return { ...prev, bossCompletions, gold, goldHistory };
     });
     showToast(`Boss defeated! Rank unlocked. +75 gold`);
     setBossModal(null);
@@ -539,6 +616,53 @@ function RPGLife({ user, onSignOut }) {
     });
   }
 
+  function resetDomain(domainKey) {
+    setState(prev => {
+      const domains = { ...prev.domains };
+      domains[domainKey] = { totalXp: 0, level: 0, rank: 0, potentialRank: 0 };
+      // Clear today's daily log for this domain too, so the meter reads 0
+      const dailyLogs = { ...prev.dailyLogs };
+      if (dailyLogs[today]) {
+        const day = { ...dailyLogs[today] };
+        delete day[domainKey];
+        dailyLogs[today] = day;
+      }
+      // Wipe boss completions for this domain
+      const bossCompletions = { ...prev.bossCompletions };
+      Object.keys(bossCompletions).forEach(k => {
+        if (k.startsWith(`${domainKey}-`)) delete bossCompletions[k];
+      });
+      return { ...prev, domains, dailyLogs, bossCompletions };
+    });
+    setResetPrompt(null);
+    showToast(`${DOMAINS[domainKey].name} reset`);
+  }
+
+  function resetAll() {
+    setState(prev => {
+      const fresh = buildInitialState();
+      // Preserve activity & reward templates and custom config (not progress)
+      fresh.activities = prev.activities;
+      fresh.rewards = prev.rewards;
+      fresh.customSubcats = prev.customSubcats;
+      fresh.customBosses = prev.customBosses;
+      return fresh;
+    });
+    setResetPrompt(null);
+    showToast('Character reset. Fresh start.');
+  }
+
+  function saveCustomBoss(domain, level, challenges) {
+    setState(prev => {
+      const customBosses = { ...(prev.customBosses || {}) };
+      customBosses[domain] = { ...(customBosses[domain] || {}) };
+      customBosses[domain][level] = challenges;
+      return { ...prev, customBosses };
+    });
+    setBossEditor(null);
+    showToast('Boss challenges saved');
+  }
+
   return h('div', { style: styles.app },
     h('style', null, `
       @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -554,7 +678,14 @@ function RPGLife({ user, onSignOut }) {
       * { box-sizing: border-box; }
     `),
     toast && h('div', { style: styles.toast }, toast),
-    h(Header, { gold: state.gold, consistencyStreak: state.consistencyStreak, powerStreak: state.powerStreak, user, onSignOut, syncStatus }),
+    h(Header, {
+      gold: state.gold,
+      consistencyStreak: state.consistencyStreak,
+      powerStreak: state.powerStreak,
+      user, onSignOut, syncStatus,
+      onGoldClick: () => setActiveTab('rewards'),
+      onStreakClick: (mode) => setStreakCalendar(mode),
+    }),
     h('nav', { style: styles.nav },
       [
         { id: 'dashboard', label: 'Adventure log', icon: 'scroll' },
@@ -562,6 +693,7 @@ function RPGLife({ user, onSignOut }) {
         { id: 'quests', label: 'Quests', icon: 'target' },
         { id: 'character', label: 'Character', icon: 'shield' },
         { id: 'rewards', label: 'Rewards', icon: 'gift' },
+        { id: 'settings', label: 'Settings', icon: 'settings' },
       ].map(tab =>
         h('button', {
           key: tab.id,
@@ -585,8 +717,38 @@ function RPGLife({ user, onSignOut }) {
       }),
       activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onDelete: deleteQuest }),
       activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat }),
-      activeTab === 'rewards' && h(RewardsView, { state, onSpend: spendGold, onAdd: () => setShowRewardForm(true), onEdit: (r) => setShowRewardForm(r), onDelete: deleteReward })
+      activeTab === 'rewards' && h(RewardsView, { state, onSpend: spendGold, onAdd: () => setShowRewardForm(true), onEdit: (r) => setShowRewardForm(r), onDelete: deleteReward }),
+      activeTab === 'settings' && h(SettingsView, {
+        state,
+        onResetDomain: (k) => setResetPrompt(k),
+        onResetAll: () => setResetPrompt('all'),
+        onEditBoss: (domain, level) => setBossEditor({ domain, level }),
+      })
     ),
+    // Floating "+" button — only when not on auth screens
+    h(FAB, { onClick: () => setShowQuickLog(true) }),
+    showQuickLog && h(QuickLogSheet, {
+      activities: state.activities,
+      onSelect: (act) => { setShowQuickLog(false); setLogModal(act); },
+      onClose: () => setShowQuickLog(false),
+    }),
+    streakCalendar && h(StreakCalendarModal, {
+      mode: streakCalendar,
+      dailyLogs: state.dailyLogs,
+      onClose: () => setStreakCalendar(null),
+    }),
+    resetPrompt && h(ResetConfirmModal, {
+      target: resetPrompt,
+      onConfirm: () => { if (resetPrompt === 'all') resetAll(); else resetDomain(resetPrompt); },
+      onCancel: () => setResetPrompt(null),
+    }),
+    bossEditor && h(BossEditorModal, {
+      domain: bossEditor.domain,
+      level: bossEditor.level,
+      existing: (state.customBosses && state.customBosses[bossEditor.domain] && state.customBosses[bossEditor.domain][bossEditor.level]) || null,
+      onSave: (challenges) => saveCustomBoss(bossEditor.domain, bossEditor.level, challenges),
+      onClose: () => setBossEditor(null),
+    }),
     logModal && h(LogActivityModal, {
       activity: logModal,
       onClose: () => setLogModal(null),
@@ -608,6 +770,7 @@ function RPGLife({ user, onSignOut }) {
     bossModal && h(BossModal, {
       domainKey: bossModal.domain,
       level: bossModal.level,
+      customBosses: state.customBosses,
       onClose: () => setBossModal(null),
       onComplete: () => completeBoss(bossModal.domain, bossModal.level),
     })
@@ -616,7 +779,7 @@ function RPGLife({ user, onSignOut }) {
 
 // ---------- Header ----------
 
-function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncStatus }) {
+function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncStatus, onGoldClick, onStreakClick }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Close menu on outside click
@@ -647,17 +810,32 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
       )
     ),
     h('div', { style: styles.headerRight },
-      h('div', { style: styles.streakChip },
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => onStreakClick && onStreakClick('consistency'),
+        style: { ...styles.streakChip, cursor: 'pointer' },
+        title: 'View consistency streak calendar',
+      },
         h(Icon, { name: 'flame', size: 15, color: '#fb923c' }),
         h('span', { style: styles.streakNum }, consistencyStreak),
         h('span', { style: styles.streakLabel }, 'day streak')
       ),
-      h('div', { style: styles.streakChip },
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => onStreakClick && onStreakClick('power'),
+        style: { ...styles.streakChip, cursor: 'pointer' },
+        title: 'View power streak calendar',
+      },
         h(Icon, { name: 'star', size: 15, color: '#fbbf24' }),
         h('span', { style: styles.streakNum }, powerStreak),
         h('span', { style: styles.streakLabel }, 'power streak')
       ),
-      h('div', { style: styles.goldChip },
+      h('button', {
+        className: 'rpg-btn',
+        onClick: onGoldClick,
+        style: { ...styles.goldChip, cursor: 'pointer' },
+        title: 'Open rewards',
+      },
         h(Icon, { name: 'coins', size: 15, color: '#fbbf24' }),
         h('span', { style: styles.streakNum }, gold)
       ),
@@ -702,23 +880,28 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
       h('div', { style: styles.metersGrid },
         DOMAIN_KEYS.map(k => {
           const d = DOMAINS[k];
-          const pct = Math.round((domainProgress[k] / DAILY_GOAL) * 100);
           const earned = todayLog[k] || 0;
+          const pct = Math.round((earned / DAILY_GOAL) * 100);
+          const overflow = Math.max(0, earned - DAILY_GOAL);
+          const isOverflow = overflow > 0;
           return h('div', { key: k, style: styles.meterCard },
             h('div', { style: styles.meterTop },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
                 h(Icon, { name: d.icon, size: 16, color: d.color }),
                 h('span', { style: styles.meterName }, d.name)
               ),
-              h('span', { style: { ...styles.meterValue, color: d.color } }, `${earned}/${DAILY_GOAL}`)
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                h('span', { style: { ...styles.meterValue, color: d.color } }, `${earned}/${DAILY_GOAL}`),
+                isOverflow && h('span', { style: { ...styles.overflowBadge, color: d.color, borderColor: hexToRgba(d.color, 0.45), background: hexToRgba(d.color, 0.12) } }, `+${overflow}`)
+              )
             ),
-            h('div', { style: styles.meterTrack },
+            h('div', { style: { ...styles.meterTrack, boxShadow: isOverflow ? `0 0 0 1px ${hexToRgba(d.color, 0.5)}, 0 0 12px ${hexToRgba(d.color, 0.35)}` : 'none', transition: 'box-shadow 0.4s ease' } },
               h('div', { style: { ...styles.meterFill, width: `${Math.min(pct,100)}%`, background: d.color, animation: 'barFill 0.6s ease-out' } }),
               h('div', { style: { position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.15)' } })
             ),
             h('div', { style: styles.meterSub },
               earned >= CONSISTENCY_MIN
-                ? h('span', { style: { color: '#86efac' } }, h(Icon, { name: 'check', size: 11, style: { verticalAlign: -1, marginRight: 4 } }), 'Minimum met')
+                ? h('span', { style: { color: '#86efac' } }, h(Icon, { name: 'check', size: 11, style: { verticalAlign: -1, marginRight: 4 } }), isOverflow ? 'Overachieving today' : 'Minimum met')
                 : h('span', { style: { color: '#9ca3af' } }, `${CONSISTENCY_MIN - earned} XP to minimum`)
             )
           );
@@ -1049,6 +1232,9 @@ function AddSubcatButton({ domain, onAdd, color }) {
 // ---------- Rewards View ----------
 
 function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
+  const avgPerDay = computeDailyGoldAverage(state);
+  const haveEstimate = avgPerDay > 0;
+
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: styles.goldBanner },
       h('div', null,
@@ -1057,7 +1243,10 @@ function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
           h(Icon, { name: 'coins', size: 22, color: '#fbbf24' }),
           h('span', { style: { fontSize: 28, fontWeight: 700, color: '#fbbf24' } }, state.gold),
           h('span', { style: { fontSize: 13, color: '#9ca3af' } }, 'gold')
-        )
+        ),
+        haveEstimate
+          ? h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, `Current pace: ~${avgPerDay.toFixed(1)} gold/day`)
+          : h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, 'No earning history yet — estimates will appear after you earn some gold.')
       )
     ),
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 12px' } },
@@ -1065,25 +1254,31 @@ function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
       h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New reward')
     ),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-      state.rewards.map(r => h('div', { key: r.id, style: styles.rewardCard },
-        h('div', { style: { flex: 1 } },
-          h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, r.name),
-          r.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, r.desc)
-        ),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h('span', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
-            h(Icon, { name: 'coins', size: 13 }), ` ${r.cost}`
+      state.rewards.map(r => {
+        const estimate = haveEstimate ? formatEstimate(Math.max(0, r.cost - state.gold), avgPerDay) : null;
+        const canAfford = state.gold >= r.cost;
+        return h('div', { key: r.id, style: styles.rewardCard },
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, r.name),
+            r.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, r.desc),
+            estimate && !canAfford && h('div', { style: { fontSize: 11.5, color: '#a78bfa', marginTop: 4 } }, `Est. ${estimate}`),
+            canAfford && h('div', { style: { fontSize: 11.5, color: '#86efac', marginTop: 4 } }, '✓ Ready to redeem')
           ),
-          h('button', {
-            className: 'rpg-btn',
-            style: { ...styles.primaryBtn, opacity: state.gold < r.cost ? 0.4 : 1, cursor: state.gold < r.cost ? 'not-allowed' : 'pointer' },
-            disabled: state.gold < r.cost,
-            onClick: () => onSpend(r),
-          }, 'Redeem'),
-          h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(r) }, h(Icon, { name: 'edit2', size: 12 })),
-          h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(r.id) }, h(Icon, { name: 'trash2', size: 12 }))
-        )
-      ))
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
+              h(Icon, { name: 'coins', size: 13 }), ` ${r.cost}`
+            ),
+            h('button', {
+              className: 'rpg-btn',
+              style: { ...styles.primaryBtn, opacity: !canAfford ? 0.4 : 1, cursor: !canAfford ? 'not-allowed' : 'pointer' },
+              disabled: !canAfford,
+              onClick: () => onSpend(r),
+            }, 'Redeem'),
+            h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(r) }, h(Icon, { name: 'edit2', size: 12 })),
+            h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(r.id) }, h(Icon, { name: 'trash2', size: 12 }))
+          )
+        );
+      })
     )
   );
 }
@@ -1293,9 +1488,12 @@ function RewardFormModal({ reward, onClose, onSave }) {
   );
 }
 
-function BossModal({ domainKey, level, onClose, onComplete }) {
+function BossModal({ domainKey, level, customBosses, onClose, onComplete }) {
   const d = DOMAINS[domainKey];
-  const bosses = (DEFAULT_BOSSES[domainKey] && DEFAULT_BOSSES[domainKey][level]) || ['Complete a milestone challenge'];
+  const custom = customBosses && customBosses[domainKey] && customBosses[domainKey][level];
+  const bosses = (custom && custom.filter(c => c && c.trim()).length > 0)
+    ? custom.filter(c => c && c.trim())
+    : ((DEFAULT_BOSSES[domainKey] && DEFAULT_BOSSES[domainKey][level]) || ['Complete a milestone challenge']);
 
   return h(ModalShell, { title: `${d.name} — boss battle: level ${level}`, onClose, width: 440 },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
@@ -1308,11 +1506,328 @@ function BossModal({ domainKey, level, onClose, onComplete }) {
         h('span', { style: { fontSize: 13, color: '#d1d5db' } }, b)
       ))
     ),
+    custom && h('div', { style: { fontSize: 11, color: '#7c7c8a', marginBottom: 10, textAlign: 'center' } }, 'Your custom challenges'),
     h('button', {
       className: 'rpg-btn',
       style: { ...styles.primaryBtn, width: '100%', justifyContent: 'center', padding: '10px 0', background: 'rgba(251,191,36,0.15)', borderColor: '#fbbf24', color: '#fbbf24' },
       onClick: onComplete,
     }, h(Icon, { name: 'trophy', size: 14 }), ' Mark boss defeated')
+  );
+}
+
+// ---------- Floating action button (quick log) ----------
+
+function FAB({ onClick }) {
+  return h('button', {
+    className: 'rpg-btn',
+    onClick,
+    style: styles.fab,
+    title: 'Quick log',
+    'aria-label': 'Quick log',
+  }, h(Icon, { name: 'plus', size: 26, color: 'white' }));
+}
+
+function QuickLogSheet({ activities, onSelect, onClose }) {
+  return h('div', { style: styles.modalOverlay, onClick: onClose },
+    h('div', { style: styles.bottomSheet, onClick: e => e.stopPropagation() },
+      h('div', { style: styles.modalHeader },
+        h('span', { style: styles.modalTitle }, 'Quick log'),
+        h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: onClose }, h(Icon, { name: 'x', size: 14 }))
+      ),
+      h('div', { style: { padding: 12, maxHeight: '60vh', overflowY: 'auto' }, className: 'rpg-scroll' },
+        activities.length === 0
+          ? h(EmptyState, { text: 'No activities yet. Create one in the Activities tab first.' })
+          : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+              activities.map(act => {
+                const d = DOMAINS[act.domain];
+                return h('button', {
+                  key: act.id,
+                  className: 'rpg-btn',
+                  onClick: () => onSelect(act),
+                  style: styles.quickLogBtn,
+                },
+                  h('div', { style: { ...styles.quickLogDot, background: d.color } }),
+                  h('div', { style: { flex: 1, textAlign: 'left' } },
+                    h('div', { style: styles.quickLogName }, act.name),
+                    h('div', { style: styles.quickLogMeta }, `${d.name} · ${act.subcat}`)
+                  ),
+                  h(Icon, { name: 'plus', size: 15, color: '#9ca3af' })
+                );
+              })
+            )
+      )
+    )
+  );
+}
+
+// ---------- Streak calendar ----------
+
+function StreakCalendarModal({ mode, dailyLogs, onClose }) {
+  const [monthOffset, setMonthOffset] = useState(0);
+  const now = new Date();
+  const viewDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthName = viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayOfWeek = viewDate.getDay();
+  const todayKeyStr = dateKey(now);
+
+  const cells = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const log = dailyLogs[key];
+    const status = dayStatus(log);
+    cells.push({ day: d, status, key, isToday: key === todayKeyStr });
+  }
+
+  // Color logic
+  function cellColor(status, isToday) {
+    if (mode === 'power') {
+      if (status === 'power') return { bg: '#fbbf24', fg: '#13131a', border: '#fbbf24' };
+      if (status === 'consistency') return { bg: 'rgba(251,191,36,0.15)', fg: '#fbbf24', border: 'rgba(251,191,36,0.3)' };
+      if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: '#9ca3af', border: '#2a2a35' };
+      return { bg: 'transparent', fg: '#5e5e6b', border: '#22222e' };
+    }
+    // consistency mode
+    if (status === 'consistency' || status === 'power') return { bg: '#22c55e', fg: '#13131a', border: '#22c55e' };
+    if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: '#9ca3af', border: '#2a2a35' };
+    return { bg: 'transparent', fg: '#5e5e6b', border: '#22222e' };
+  }
+
+  const dayLabels = ['S','M','T','W','T','F','S'];
+  const title = mode === 'power' ? 'Power streak' : 'Day streak';
+
+  return h(ModalShell, { title, onClose, width: 380 },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
+      h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => setMonthOffset(o => o - 1) },
+        h(Icon, { name: 'chevronLeft', size: 14 })
+      ),
+      h('span', { style: { fontSize: 14, fontWeight: 600, color: '#f4f1ea' } }, monthName),
+      h('button', {
+        className: 'rpg-btn',
+        style: { ...styles.iconBtn, opacity: monthOffset >= 0 ? 0.3 : 1, cursor: monthOffset >= 0 ? 'not-allowed' : 'pointer' },
+        disabled: monthOffset >= 0,
+        onClick: () => setMonthOffset(o => Math.min(0, o + 1)),
+      },
+        h(Icon, { name: 'chevronRight', size: 14 })
+      )
+    ),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 } },
+      dayLabels.map((d, i) => h('div', { key: i, style: { textAlign: 'center', fontSize: 10, color: '#7c7c8a', fontWeight: 600, padding: '4px 0' } }, d))
+    ),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 } },
+      cells.map((c, i) => {
+        if (!c) return h('div', { key: `e${i}` });
+        const colors = cellColor(c.status, c.isToday);
+        return h('div', {
+          key: c.key,
+          style: {
+            aspectRatio: '1',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 600,
+            background: colors.bg,
+            color: colors.fg,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            outline: c.isToday ? '2px solid #a78bfa' : 'none',
+            outlineOffset: -2,
+          },
+          title: `${c.key} — ${c.status}`,
+        }, c.day);
+      })
+    ),
+    h('div', { style: { marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, color: '#9ca3af' } },
+      mode === 'power'
+        ? [
+            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#fbbf24', borderRadius: 3, display: 'inline-block' } }), 'Power day (all 4 hit 100/100)'),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 3, display: 'inline-block' } }), 'Consistency day only'),
+            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity, below threshold'),
+          ]
+        : [
+            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#22c55e', borderRadius: 3, display: 'inline-block' } }), 'Consistency met (all 4 ≥ 50 XP)'),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity, below threshold'),
+          ]
+    )
+  );
+}
+
+// ---------- Reset confirmation ----------
+
+function ResetConfirmModal({ target, onConfirm, onCancel }) {
+  const isAll = target === 'all';
+  const [typed, setTyped] = useState('');
+
+  const domainName = isAll ? null : DOMAINS[target].name;
+  const canConfirm = isAll ? typed.trim().toUpperCase() === 'RESET' : true;
+
+  return h(ModalShell, {
+    title: isAll ? 'Reset entire character?' : `Reset ${domainName}?`,
+    onClose: onCancel,
+    width: 420,
+  },
+    h('div', { style: { fontSize: 13, color: '#d1d5db', lineHeight: 1.6, marginBottom: 14 } },
+      isAll
+        ? 'This will permanently erase all your XP, levels, gold, streaks, completed bosses, and quest progress. Your activity templates, rewards, and custom bosses will be kept.'
+        : `${domainName}'s XP and level will go back to 0. Boss completions and today's progress for this domain will be cleared. Other domains aren't affected.`
+    ),
+    h('div', { style: { fontSize: 12, color: '#f09595', background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 } },
+      'This cannot be undone.'
+    ),
+    isAll && h('div', { style: { marginBottom: 14 } },
+      h('label', { style: styles.label }, 'Type RESET to confirm'),
+      h('input', {
+        value: typed,
+        onChange: e => setTyped(e.target.value),
+        style: styles.input,
+        autoFocus: true,
+        placeholder: 'RESET',
+      })
+    ),
+    h('div', { style: { display: 'flex', gap: 8 } },
+      h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: onCancel }, 'Cancel'),
+      h('button', {
+        className: 'rpg-btn',
+        disabled: !canConfirm,
+        style: { ...styles.dangerBtn, flex: 1, justifyContent: 'center', padding: '10px 0', opacity: canConfirm ? 1 : 0.4, cursor: canConfirm ? 'pointer' : 'not-allowed' },
+        onClick: () => { if (canConfirm) onConfirm(); },
+      }, isAll ? 'Reset everything' : 'Reset')
+    )
+  );
+}
+
+// ---------- Boss editor ----------
+
+function BossEditorModal({ domain, level, existing, onSave, onClose }) {
+  const d = DOMAINS[domain];
+  const defaults = (DEFAULT_BOSSES[domain] && DEFAULT_BOSSES[domain][level]) || ['', '', ''];
+  const initial = existing && existing.length === 3 ? existing : [defaults[0] || '', defaults[1] || '', defaults[2] || ''];
+  const [challenges, setChallenges] = useState(initial);
+
+  function updateChallenge(i, val) {
+    setChallenges(c => c.map((x, idx) => idx === i ? val : x));
+  }
+
+  function resetToDefaults() {
+    setChallenges([defaults[0] || '', defaults[1] || '', defaults[2] || '']);
+  }
+
+  return h(ModalShell, { title: `${d.name} — Level ${level} boss`, onClose, width: 460 },
+    h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 14 } },
+      'Define the 3 challenges you can choose from at this boss gate. Leave blank to skip a slot.'
+    ),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 } },
+      challenges.map((c, i) => h('div', { key: i },
+        h('label', { style: styles.label }, `Challenge ${i + 1}`),
+        h('input', {
+          value: c,
+          onChange: e => updateChallenge(i, e.target.value),
+          style: styles.input,
+          placeholder: defaults[i] || 'Enter a challenge…',
+        })
+      ))
+    ),
+    h('div', { style: { display: 'flex', gap: 8 } },
+      h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: resetToDefaults }, 'Reset to suggested'),
+      h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: () => onSave(challenges) },
+        h(Icon, { name: 'check', size: 14 }), ' Save'
+      )
+    )
+  );
+}
+
+// ---------- Settings view ----------
+
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss }) {
+  const [expandedDomain, setExpandedDomain] = useState(null);
+
+  return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
+
+    h('section', { style: { marginBottom: 24 } },
+      h(SectionLabel, { text: 'Custom boss battles' }),
+      h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
+        'Replace the suggested challenges with your own for each 10-level milestone. Up to 3 challenges per gate.'
+      ),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        DOMAIN_KEYS.map(k => {
+          const d = DOMAINS[k];
+          const isOpen = expandedDomain === k;
+          const customCount = state.customBosses && state.customBosses[k]
+            ? Object.keys(state.customBosses[k]).length
+            : 0;
+          return h('div', { key: k, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, overflow: 'hidden' } },
+            h('button', {
+              className: 'rpg-btn',
+              onClick: () => setExpandedDomain(isOpen ? null : k),
+              style: { width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', color: '#e5e7eb' },
+            },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                h(Icon, { name: d.icon, size: 16, color: d.color }),
+                h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, d.name),
+                customCount > 0 && h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, `· ${customCount} customized`)
+              ),
+              h('div', { style: { transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' } },
+                h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' })
+              )
+            ),
+            isOpen && h('div', { style: { padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 6 } },
+              BOSS_LEVELS.map(bl => {
+                const custom = state.customBosses && state.customBosses[k] && state.customBosses[k][bl];
+                const isCustom = custom && custom.filter(c => c && c.trim()).length > 0;
+                return h('button', {
+                  key: bl,
+                  className: 'rpg-btn',
+                  onClick: () => onEditBoss(k, bl),
+                  style: { ...styles.bossLevelRow, borderColor: isCustom ? hexToRgba(d.color, 0.3) : '#2a2a35' },
+                },
+                  h('span', { style: { fontSize: 13, color: '#e5e7eb' } }, `Level ${bl} gate`),
+                  isCustom
+                    ? h('span', { style: { fontSize: 11, color: d.color } }, 'Custom')
+                    : h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, 'Default'),
+                  h(Icon, { name: 'edit2', size: 12, color: '#9ca3af' })
+                );
+              })
+            )
+          );
+        })
+      )
+    ),
+
+    h('section', { style: { marginBottom: 24 } },
+      h(SectionLabel, { text: 'Reset progress' }),
+      h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
+        'Resets erase XP, levels, and boss completions for the chosen scope. Activity templates and rewards are kept.'
+      ),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        DOMAIN_KEYS.map(k => {
+          const d = DOMAINS[k];
+          const totalXp = state.domains[k] ? state.domains[k].totalXp : 0;
+          return h('div', { key: k, style: { ...styles.rewardCard } },
+            h('div', { style: { flex: 1, display: 'flex', alignItems: 'center', gap: 10 } },
+              h(Icon, { name: d.icon, size: 16, color: d.color }),
+              h('div', null,
+                h('div', { style: { fontSize: 13, fontWeight: 600, color: '#f4f1ea' } }, `Reset ${d.name}`),
+                h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, `Currently ${totalXp.toLocaleString()} total XP`)
+              )
+            ),
+            h('button', { className: 'rpg-btn', style: styles.dangerBtnSmall, onClick: () => onResetDomain(k) }, 'Reset')
+          );
+        })
+      )
+    ),
+
+    h('section', null,
+      h(SectionLabel, { text: 'Danger zone' }),
+      h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
+        'Wipes everything except your saved activity templates, rewards, and custom bosses. Requires typing RESET to confirm.'
+      ),
+      h('button', {
+        className: 'rpg-btn',
+        style: { ...styles.dangerBtn, width: '100%', justifyContent: 'center', padding: '12px 0', fontSize: 13 },
+        onClick: onResetAll,
+      }, h(Icon, { name: 'trash2', size: 14 }), ' Reset entire character')
+    )
   );
 }
 
@@ -1713,6 +2228,52 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
     background: 'transparent', border: '1px solid #2e2e3a', borderRadius: 8,
     color: '#9ca3af', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+  },
+  dangerBtn: {
+    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+    background: 'rgba(226,75,74,0.12)', border: '1px solid rgba(226,75,74,0.4)', borderRadius: 8,
+    color: '#f09595', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+  },
+  dangerBtnSmall: {
+    padding: '6px 12px',
+    background: 'rgba(226,75,74,0.1)', border: '1px solid rgba(226,75,74,0.3)', borderRadius: 8,
+    color: '#f09595', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+  },
+  fab: {
+    position: 'fixed',
+    bottom: 'calc(env(safe-area-inset-bottom) + 20px)',
+    right: 20,
+    width: 56, height: 56, borderRadius: '50%',
+    background: 'linear-gradient(135deg, #a78bfa, #7c3aed)',
+    border: 'none',
+    color: 'white',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 6px 24px rgba(124,58,237,0.45), 0 2px 6px rgba(0,0,0,0.3)',
+    zIndex: 80,
+    cursor: 'pointer',
+  },
+  bottomSheet: {
+    background: '#1a1a24',
+    border: '1px solid #2e2e3a',
+    borderRadius: 14,
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '80vh',
+    overflow: 'hidden',
+    display: 'flex', flexDirection: 'column',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+  },
+  overflowBadge: {
+    fontSize: 11, fontWeight: 700,
+    padding: '2px 8px',
+    borderRadius: 999,
+    border: '1px solid',
+  },
+  bossLevelRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+    padding: '10px 12px',
+    background: 'rgba(255,255,255,0.02)', border: '1px solid #2a2a35', borderRadius: 8,
+    cursor: 'pointer',
   },
 };
 
