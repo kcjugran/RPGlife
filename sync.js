@@ -1,14 +1,14 @@
-// sync.js — Firebase wrapper as an ES module.
+// sync.js — Firebase wrapper using gstatic CDN (shares state correctly across modules).
 // Loaded by index.html as type="module" and exposes window.RPGLifeSync.
 
-import { initializeApp } from './vendor/firebase-app.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js';
 import {
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-} from './vendor/firebase-auth.js';
+} from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js';
 import {
   initializeFirestore,
   doc,
@@ -17,7 +17,7 @@ import {
   onSnapshot,
   persistentLocalCache,
   persistentMultipleTabManager,
-} from './vendor/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
 
 const cfg = window.FIREBASE_CONFIG;
 if (!cfg || cfg.apiKey === 'PASTE_API_KEY_HERE') {
@@ -30,7 +30,6 @@ if (!window.__RPGLIFE_NEEDS_CONFIG__) {
   try {
     app = initializeApp(cfg);
     auth = getAuth(app);
-    // Firestore with offline persistence so the app keeps working without internet
     db = initializeFirestore(app, {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
@@ -40,7 +39,6 @@ if (!window.__RPGLIFE_NEEDS_CONFIG__) {
   }
 }
 
-// Surface a friendly auth-error message
 function friendlyError(err) {
   const code = (err && err.code) || '';
   if (code === 'auth/invalid-email') return 'That email address doesn\'t look right.';
