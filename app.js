@@ -65,35 +65,59 @@ const DOMAIN_KEYS = Object.keys(DOMAINS);
 const DAILY_GOAL = 100;
 const CONSISTENCY_MIN = 50;
 
-const BOSS_LEVELS = [10, 20, 30, 40, 50];
+const BOSS_LEVELS_ALL = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+const BOSS_LEVELS_DEFAULT = [10, 20, 30, 40, 50];
+const BOSS_LEVELS = BOSS_LEVELS_ALL; // back-compat alias for existing UI references
+
+const SELL_REFUND_RATIO = 0.5; // tickets sell back for 50% of cost — hardcoded
 
 const DEFAULT_BOSSES = {
   health: {
+    5: ['Walk daily for 1 week', 'Try a new healthy recipe', 'Sleep 7+ hours for 3 nights'],
     10: ['Run a 5K', 'Complete a 2-week sleep reset', 'Hit a strength PR'],
+    15: ['Try a new physical activity (yoga, climbing, etc.)', 'Meal-prep for one full week', 'Hold a daily stretch routine for 14 days'],
     20: ['Complete a 30-day mobility challenge', '10,000 steps for 14 days straight', 'Cut a habit for 30 days'],
+    25: ['Run a 7-8K distance', 'Hit a new strength PR', '21 days mindful eating'],
     30: ['Run a 10K', 'Complete a fitness milestone', 'Finish a structured training block'],
+    35: ['Complete a multi-week strength program', 'Hit a flexibility/mobility benchmark', '30 days alcohol-free'],
     40: ['Complete a half-marathon', 'Reach a body composition goal', 'Master a new physical skill'],
+    45: ['Complete a 100-day workout streak', 'Run a 15K', 'Earn a fitness certification'],
     50: ['Complete a major endurance event', 'Reach peak physical milestone', 'Year-long consistency badge'],
   },
   relationships: {
+    5: ['Have a meaningful 1:1 with someone close', 'Send a thoughtful message to 3 friends', 'Plan a small gathering'],
     10: ['Plan a meaningful experience', 'Have a difficult conversation', 'Reconnect with an old friend'],
+    15: ['Mentor or help someone', 'Reach out to 5 distant contacts', 'Host a small dinner or hangout'],
     20: ['Complete a communication challenge', 'Plan a trip with someone close', 'Resolve a lingering conflict'],
+    25: ['Strengthen a key relationship through commitment', 'Volunteer with someone', 'Mediate a conflict for others'],
     30: ['Plan a meaningful experience', 'Complete a communication challenge', 'Reach a relationship milestone'],
+    35: ['Build a regular tradition', 'Help someone through a major life event', 'Lead a community initiative'],
     40: ['Deepen a key relationship', 'Host a gathering', 'Mentor someone'],
+    45: ['Reconnect across distance with intention', 'Sustain weekly meaningful conversations for a quarter', 'Build a lasting friendship anchor'],
     50: ['Major relationship milestone', 'Build a lasting tradition', 'Community contribution'],
   },
   career: {
+    5: ['Read a foundational book/article in your field', 'Apply something you learned', 'Talk to a professional in your field'],
     10: ['Finish an intro course', 'Ship a small project', 'Complete a skill assessment'],
+    15: ['Build a small public project', 'Start a learning journal', 'Get feedback on your work'],
     20: ['Build a portfolio piece', 'Get feedback from a mentor', 'Complete an intermediate course'],
-    30: ['Finish RPG Maker course', 'Release a playable prototype', 'Complete a creative project'],
+    25: ['Lead a small initiative', 'Teach what you know', 'Publish something publicly'],
+    30: ['Finish a major course', 'Release a playable prototype', 'Complete a creative project'],
+    35: ['Build a long-term portfolio piece', 'Establish a side project', 'Get a notable mention/recognition'],
     40: ['Launch a product or service', 'Land a major opportunity', 'Complete an advanced certification'],
+    45: ['Sustain a long-term project for 6+ months', 'Mentor others in your craft', 'Reach a domain expertise marker'],
     50: ['Major career milestone', 'Establish recurring income stream', 'Master-level project complete'],
   },
   finance: {
+    5: ['Track every expense for 2 weeks', 'Read a personal finance book', 'Cancel one unused subscription'],
     10: ['Track spending for 30 days', 'Set up a budget system', 'Pay off a small debt'],
+    15: ['Save first ₹10,000 / $100', 'Negotiate a bill down', 'Open a separate savings account'],
     20: ['Build a starter emergency fund', 'Automate savings', 'Complete a financial literacy course'],
+    25: ['Increase income through a side gig', 'Reach a savings milestone', 'Build a simple budget that holds for 3 months'],
     30: ['Create an investment plan', 'Build a full emergency fund', 'Complete a financial milestone'],
+    35: ['Reach a meaningful net worth marker', 'Open an investment account and contribute monthly', 'Pay off significant debt'],
     40: ['Reach a net worth milestone', 'Diversify income streams', 'Optimize tax strategy'],
+    45: ['Sustain investment habit for a year', 'Build a meaningful passive income line', 'Reach financial flexibility'],
     50: ['Major financial independence milestone', 'Reach a long-term wealth goal', 'Achieve a passive income target'],
   },
 };
@@ -165,12 +189,22 @@ function buildInitialState() {
     customSubcats: {},
     bossCompletions: {},
     customBosses: {},        // {[domain]: {[level]: [str, str, str]}}
+    enabledBosses: {},        // {[domain]: number[]} — list of active gate levels; defaults to BOSS_LEVELS_DEFAULT
+    tickets: [],              // [{id, rewardId, name, desc, cost, purchasedAt, usedAt|null}]
     goldHistory: {},          // {[dateKey]: total gold earned that day}
     createdAt: Date.now(),    // for daily-average estimates
   };
 }
 
-function computeProgression(totalXp, bossCompletions, domainKey) {
+// Resolve which boss gates are active for a domain (custom override or defaults)
+function activeBossLevelsFor(state, domain) {
+  if (state && state.enabledBosses && Array.isArray(state.enabledBosses[domain])) {
+    return state.enabledBosses[domain];
+  }
+  return BOSS_LEVELS_DEFAULT;
+}
+
+function computeProgression(totalXp, bossCompletions, domainKey, activeBossLevels) {
   let level = 1;
   let remaining = totalXp;
   let req = levelXpRequirement(level);
@@ -181,8 +215,9 @@ function computeProgression(totalXp, bossCompletions, domainKey) {
   }
   const potentialRank = level;
 
+  const gates = activeBossLevels || BOSS_LEVELS_DEFAULT;
   let rank = level;
-  for (const bossLevel of BOSS_LEVELS) {
+  for (const bossLevel of gates) {
     if (potentialRank > bossLevel) {
       const key = `${domainKey}-${bossLevel}`;
       if (!bossCompletions[key]) {
@@ -292,11 +327,11 @@ function RPGLife({ user, onSignOut }) {
   const [editingActivity, setEditingActivity] = useState(null);
   const [toast, setToast] = useState(null);
   const [bossModal, setBossModal] = useState(null);
-  const [migrationPrompt, setMigrationPrompt] = useState(null); // { localState }
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [streakCalendar, setStreakCalendar] = useState(null); // 'consistency' | 'power' | null
   const [resetPrompt, setResetPrompt] = useState(null); // 'all' | domainKey | null
   const [bossEditor, setBossEditor] = useState(null); // { domain, level } | null
+  const [buyConfirm, setBuyConfirm] = useState(null); // reward object | null
   const toastTimer = useRef(null);
   const saveTimer = useRef(null);
   const lastSavedJson = useRef(null);
@@ -318,33 +353,23 @@ function RPGLife({ user, onSignOut }) {
         setState(remote);
         lastSavedJson.current = JSON.stringify(remote);
       } else {
-        // No remote state yet. Check if there's local state to migrate.
-        let localRaw = null;
-        try { localRaw = localStorage.getItem('rpglife-state'); } catch (e) {}
-        if (localRaw) {
-          try {
-            const localState = JSON.parse(localRaw);
-            setMigrationPrompt({ localState });
-            // wait for user choice before setting state
-            return;
-          } catch (e) {}
-        }
+        // Brand new account — always start with a pristine state.
+        // We intentionally do NOT import any localStorage data; new users get zero.
         const fresh = buildInitialState();
         setState(fresh);
         lastSavedJson.current = JSON.stringify(fresh);
-        // seed Firestore so subsequent loads/devices see the same starting point
         await window.RPGLifeSync.saveState(user.uid, fresh);
+        remoteUpdatedAt.current = Date.now();
       }
       setLoaded(true);
 
-      // Now subscribe to ongoing changes from other devices.
+      // Subscribe to ongoing changes from other devices.
       unsub = window.RPGLifeSync.subscribeToState(user.uid, (snapState, updatedAt) => {
         if (!snapState) return;
-        // Ignore snapshots older than what we already have (echo of our own writes)
         if (updatedAt <= remoteUpdatedAt.current) return;
         remoteUpdatedAt.current = updatedAt;
         const snapJson = JSON.stringify(snapState);
-        if (snapJson === lastSavedJson.current) return; // no actual change
+        if (snapJson === lastSavedJson.current) return;
         lastSavedJson.current = snapJson;
         setState(snapState);
       });
@@ -388,41 +413,10 @@ function RPGLife({ user, onSignOut }) {
     });
   }
 
-  function acceptMigration() {
-    const local = migrationPrompt.localState;
-    setState(local);
-    lastSavedJson.current = JSON.stringify(local);
-    setMigrationPrompt(null);
-    setLoaded(true);
-    window.RPGLifeSync.saveState(user.uid, local).then(() => {
-      remoteUpdatedAt.current = Date.now();
-      startSync();
-    });
-  }
-
-  function declineMigration() {
-    const fresh = buildInitialState();
-    setState(fresh);
-    lastSavedJson.current = JSON.stringify(fresh);
-    setMigrationPrompt(null);
-    setLoaded(true);
-    window.RPGLifeSync.saveState(user.uid, fresh).then(() => {
-      remoteUpdatedAt.current = Date.now();
-      startSync();
-    });
-  }
-
   function showToast(msg) {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
-  }
-
-  if (migrationPrompt) {
-    return h(MigrationPrompt, {
-      onAccept: acceptMigration,
-      onDecline: declineMigration,
-    });
   }
 
   if (!loaded || !state) {
@@ -443,7 +437,7 @@ function RPGLife({ user, onSignOut }) {
 
   const domainComputed = {};
   DOMAIN_KEYS.forEach(k => {
-    domainComputed[k] = computeProgression(state.domains[k].totalXp, state.bossCompletions, k);
+    domainComputed[k] = computeProgression(state.domains[k].totalXp, state.bossCompletions, k, activeBossLevelsFor(state, k));
   });
 
   function checkStreaks(next, dayLog) {
@@ -582,12 +576,70 @@ function RPGLife({ user, onSignOut }) {
     setBossModal(null);
   }
 
-  function spendGold(reward) {
+  function buyTicket(reward) {
     setState(prev => {
       if (prev.gold < reward.cost) return prev;
-      return { ...prev, gold: prev.gold - reward.cost };
+      const ticket = {
+        id: uid('tkt'),
+        rewardId: reward.id,
+        name: reward.name,
+        desc: reward.desc || '',
+        cost: reward.cost,
+        purchasedAt: Date.now(),
+        usedAt: null,
+      };
+      return {
+        ...prev,
+        gold: prev.gold - reward.cost,
+        tickets: [...(prev.tickets || []), ticket],
+      };
     });
-    showToast(`Redeemed: ${reward.name}`);
+    showToast(`Bought ticket: ${reward.name}`);
+  }
+
+  function useTicket(id) {
+    setState(prev => {
+      const tickets = (prev.tickets || []).map(t => t.id === id && !t.usedAt ? { ...t, usedAt: Date.now() } : t);
+      return { ...prev, tickets };
+    });
+    showToast('Ticket used. Enjoy.');
+  }
+
+  function sellTicket(id) {
+    setState(prev => {
+      const t = (prev.tickets || []).find(x => x.id === id);
+      if (!t || t.usedAt) return prev;
+      const refund = Math.floor(t.cost * SELL_REFUND_RATIO);
+      const goldHistory = { ...(prev.goldHistory || {}) };
+      // Sales don't count as "earned" gold for estimates — skip goldHistory
+      return {
+        ...prev,
+        gold: prev.gold + refund,
+        tickets: (prev.tickets || []).filter(x => x.id !== id),
+      };
+    });
+    showToast('Ticket sold at 50% refund');
+  }
+
+  function deleteTicket(id) {
+    setState(prev => ({ ...prev, tickets: (prev.tickets || []).filter(t => t.id !== id) }));
+  }
+
+  function toggleBossGate(domain, level) {
+    setState(prev => {
+      const current = activeBossLevelsFor(prev, domain);
+      const set = new Set(current);
+      if (set.has(level)) {
+        // Can't disable a gate that's already been completed (would remove a real achievement)
+        // Allow disabling regardless — the completion record stays in bossCompletions; if user re-enables, they keep credit.
+        set.delete(level);
+      } else {
+        set.add(level);
+      }
+      const next = Array.from(set).sort((a, b) => a - b);
+      const enabledBosses = { ...(prev.enabledBosses || {}), [domain]: next };
+      return { ...prev, enabledBosses };
+    });
   }
 
   function saveReward(rewardData) {
@@ -691,7 +743,7 @@ function RPGLife({ user, onSignOut }) {
         { id: 'dashboard', label: 'Adventure log', icon: 'scroll' },
         { id: 'activities', label: 'Activities', icon: 'zap' },
         { id: 'quests', label: 'Quests', icon: 'target' },
-        { id: 'character', label: 'Character', icon: 'shield' },
+        { id: 'character', label: 'Level', icon: 'shield' },
         { id: 'rewards', label: 'Rewards', icon: 'gift' },
         { id: 'settings', label: 'Settings', icon: 'settings' },
       ].map(tab =>
@@ -717,14 +769,30 @@ function RPGLife({ user, onSignOut }) {
       }),
       activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onDelete: deleteQuest }),
       activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat }),
-      activeTab === 'rewards' && h(RewardsView, { state, onSpend: spendGold, onAdd: () => setShowRewardForm(true), onEdit: (r) => setShowRewardForm(r), onDelete: deleteReward }),
+      activeTab === 'rewards' && h(RewardsView, {
+        state,
+        onBuy: (r) => setBuyConfirm(r),
+        onAdd: () => setShowRewardForm(true),
+        onEdit: (r) => setShowRewardForm(r),
+        onDelete: deleteReward,
+        onUseTicket: useTicket,
+        onSellTicket: sellTicket,
+        onDeleteTicket: deleteTicket,
+      }),
       activeTab === 'settings' && h(SettingsView, {
         state,
         onResetDomain: (k) => setResetPrompt(k),
         onResetAll: () => setResetPrompt('all'),
         onEditBoss: (domain, level) => setBossEditor({ domain, level }),
+        onToggleGate: toggleBossGate,
       })
     ),
+    buyConfirm && h(BuyConfirmModal, {
+      reward: buyConfirm,
+      canAfford: state.gold >= buyConfirm.cost,
+      onConfirm: () => { buyTicket(buyConfirm); setBuyConfirm(null); },
+      onCancel: () => setBuyConfirm(null),
+    }),
     // Floating "+" button — only when not on auth screens
     h(FAB, { onClick: () => setShowQuickLog(true) }),
     showQuickLog && h(QuickLogSheet, {
@@ -863,7 +931,8 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
   const availableBosses = [];
   DOMAIN_KEYS.forEach(k => {
     const comp = domainComputed[k];
-    BOSS_LEVELS.forEach(bl => {
+    const gates = activeBossLevelsFor(state, k);
+    gates.forEach(bl => {
       const key = `${k}-${bl}`;
       if (comp.potentialRank > bl && comp.rank <= bl && !state.bossCompletions[key]) {
         availableBosses.push({ domain: k, level: bl });
@@ -877,59 +946,35 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
 
     h('section', null,
       h(SectionLabel, { text: "Today's progress" }),
-      h('div', { style: styles.metersGrid },
+      h('div', { style: styles.bigMetersGrid },
         DOMAIN_KEYS.map(k => {
           const d = DOMAINS[k];
           const earned = todayLog[k] || 0;
           const pct = Math.round((earned / DAILY_GOAL) * 100);
           const overflow = Math.max(0, earned - DAILY_GOAL);
           const isOverflow = overflow > 0;
-          return h('div', { key: k, style: styles.meterCard },
-            h('div', { style: styles.meterTop },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-                h(Icon, { name: d.icon, size: 16, color: d.color }),
-                h('span', { style: styles.meterName }, d.name)
+          return h('div', { key: k, style: styles.bigMeterCard },
+            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                h('div', { style: { ...styles.bigMeterIcon, background: hexToRgba(d.color, 0.14) } }, h(Icon, { name: d.icon, size: 20, color: d.color })),
+                h('div', null,
+                  h('div', { style: styles.bigMeterName }, d.name),
+                  h('div', { style: styles.bigMeterSubName },
+                    earned >= CONSISTENCY_MIN
+                      ? h('span', { style: { color: '#86efac' } }, isOverflow ? 'Overachieving today' : 'Minimum met')
+                      : h('span', null, `${CONSISTENCY_MIN - earned} XP to minimum`)
+                  )
+                )
               ),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-                h('span', { style: { ...styles.meterValue, color: d.color } }, `${earned}/${DAILY_GOAL}`),
-                isOverflow && h('span', { style: { ...styles.overflowBadge, color: d.color, borderColor: hexToRgba(d.color, 0.45), background: hexToRgba(d.color, 0.12) } }, `+${overflow}`)
+              h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
+                h('span', { style: { ...styles.bigMeterValue, color: d.color } }, earned),
+                h('span', { style: { fontSize: 13, color: '#7c7c8a', fontWeight: 600 } }, `/ ${DAILY_GOAL}`),
+                isOverflow && h('span', { style: { ...styles.overflowBadge, color: d.color, borderColor: hexToRgba(d.color, 0.45), background: hexToRgba(d.color, 0.12), marginLeft: 4 } }, `+${overflow}`)
               )
             ),
-            h('div', { style: { ...styles.meterTrack, boxShadow: isOverflow ? `0 0 0 1px ${hexToRgba(d.color, 0.5)}, 0 0 12px ${hexToRgba(d.color, 0.35)}` : 'none', transition: 'box-shadow 0.4s ease' } },
+            h('div', { style: { ...styles.meterTrack, height: 10, boxShadow: isOverflow ? `0 0 0 1px ${hexToRgba(d.color, 0.5)}, 0 0 14px ${hexToRgba(d.color, 0.4)}` : 'none', transition: 'box-shadow 0.4s ease' } },
               h('div', { style: { ...styles.meterFill, width: `${Math.min(pct,100)}%`, background: d.color, animation: 'barFill 0.6s ease-out' } }),
               h('div', { style: { position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.15)' } })
-            ),
-            h('div', { style: styles.meterSub },
-              earned >= CONSISTENCY_MIN
-                ? h('span', { style: { color: '#86efac' } }, h(Icon, { name: 'check', size: 11, style: { verticalAlign: -1, marginRight: 4 } }), isOverflow ? 'Overachieving today' : 'Minimum met')
-                : h('span', { style: { color: '#9ca3af' } }, `${CONSISTENCY_MIN - earned} XP to minimum`)
-            )
-          );
-        })
-      )
-    ),
-
-    h('section', null,
-      h(SectionLabel, { text: 'Current levels' }),
-      h('div', { style: styles.metersGrid },
-        DOMAIN_KEYS.map(k => {
-          const d = DOMAINS[k];
-          const comp = domainComputed[k];
-          const pct = Math.round((comp.currentLevelXp / comp.currentLevelReq) * 100);
-          return h('div', { key: k, style: styles.levelCard },
-            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-                h(Icon, { name: d.icon, size: 16, color: d.color }),
-                h('span', { style: styles.meterName }, d.name)
-              ),
-              h('span', { style: { fontSize: 18, fontWeight: 700, color: d.color } }, `Lv ${comp.rank}`)
-            ),
-            h('div', { style: styles.meterTrack },
-              h('div', { style: { ...styles.meterFill, width: `${pct}%`, background: d.color } })
-            ),
-            h('div', { style: styles.meterSub },
-              `${comp.currentLevelXp} / ${comp.currentLevelReq} XP to level ${comp.rank + 1}`,
-              comp.potentialRank > comp.rank && h('span', { style: { color: '#fbbf24', marginLeft: 6 } }, `· Rank ${comp.potentialRank} locked`)
             )
           );
         })
@@ -1176,7 +1221,7 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat }) {
           h('div', { style: { marginTop: 12 } },
             h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 6 } }, 'Boss gates'),
             h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
-              BOSS_LEVELS.map(bl => {
+              activeBossLevelsFor(state, k).map(bl => {
                 const key = `${k}-${bl}`;
                 const completed = state.bossCompletions[key];
                 const reached = comp.potentialRank > bl;
@@ -1231,9 +1276,13 @@ function AddSubcatButton({ domain, onAdd, color }) {
 
 // ---------- Rewards View ----------
 
-function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
+function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSellTicket, onDeleteTicket }) {
   const avgPerDay = computeDailyGoldAverage(state);
   const haveEstimate = avgPerDay > 0;
+
+  const allTickets = state.tickets || [];
+  const activeTickets = allTickets.filter(t => !t.usedAt);
+  const usedTickets = allTickets.filter(t => t.usedAt);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: styles.goldBanner },
@@ -1249,8 +1298,9 @@ function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
           : h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, 'No earning history yet — estimates will appear after you earn some gold.')
       )
     ),
+
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 12px' } },
-      h(SectionLabel, { text: 'Redeem rewards' }),
+      h(SectionLabel, { text: 'Reward catalog' }),
       h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New reward')
     ),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
@@ -1262,7 +1312,7 @@ function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
             h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, r.name),
             r.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, r.desc),
             estimate && !canAfford && h('div', { style: { fontSize: 11.5, color: '#a78bfa', marginTop: 4 } }, `Est. ${estimate}`),
-            canAfford && h('div', { style: { fontSize: 11.5, color: '#86efac', marginTop: 4 } }, '✓ Ready to redeem')
+            canAfford && h('div', { style: { fontSize: 11.5, color: '#86efac', marginTop: 4 } }, '✓ Affordable')
           ),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
             h('span', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
@@ -1272,13 +1322,64 @@ function RewardsView({ state, onSpend, onAdd, onEdit, onDelete }) {
               className: 'rpg-btn',
               style: { ...styles.primaryBtn, opacity: !canAfford ? 0.4 : 1, cursor: !canAfford ? 'not-allowed' : 'pointer' },
               disabled: !canAfford,
-              onClick: () => onSpend(r),
-            }, 'Redeem'),
+              onClick: () => onBuy(r),
+            }, 'Buy ticket'),
             h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(r) }, h(Icon, { name: 'edit2', size: 12 })),
             h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(r.id) }, h(Icon, { name: 'trash2', size: 12 }))
           )
         );
       })
+    ),
+
+    // Purchased tickets section — active tickets first, used tickets below faded
+    (allTickets.length > 0) && h('div', { style: { marginTop: 24 } },
+      h(SectionLabel, { text: `Purchased tickets (${activeTickets.length})`, icon: 'gift', accent: '#a78bfa' }),
+      activeTickets.length === 0
+        ? h(EmptyState, { text: "No active tickets right now. Buy one from the catalog above when you've earned enough." })
+        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+            activeTickets.map(t => {
+              const refund = Math.floor(t.cost * SELL_REFUND_RATIO);
+              return h('div', { key: t.id, style: styles.ticketCard },
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                    h(Icon, { name: 'gift', size: 13, color: '#a78bfa' }),
+                    h('span', { style: { fontWeight: 700, fontSize: 13.5, color: '#f4f1ea' } }, t.name)
+                  ),
+                  t.desc && h('div', { style: { fontSize: 11.5, color: '#9ca3af', marginTop: 2 } }, t.desc),
+                  h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, `Paid ${t.cost} · sell for ${refund}`)
+                ),
+                h('div', { style: { display: 'flex', gap: 6 } },
+                  h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, padding: '6px 12px' }, onClick: () => onUseTicket(t.id) },
+                    h(Icon, { name: 'check', size: 13 }), ' Use'
+                  ),
+                  h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, padding: '6px 12px' }, onClick: () => onSellTicket(t.id), title: `Refunds ${refund} gold (50%)` },
+                    h(Icon, { name: 'coins', size: 13 }), ' Sell'
+                  )
+                )
+              );
+            })
+          ),
+
+      usedTickets.length > 0 && h('div', { style: { marginTop: 20 } },
+        h(SectionLabel, { text: `Used (${usedTickets.length})` }),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+          usedTickets.slice().sort((a,b) => b.usedAt - a.usedAt).map(t => {
+            const usedDate = new Date(t.usedAt).toLocaleDateString();
+            return h('div', { key: t.id, style: { ...styles.ticketCard, opacity: 0.55 } },
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                  h(Icon, { name: 'check', size: 12, color: '#86efac' }),
+                  h('span', { style: { fontWeight: 600, fontSize: 13, color: '#d1d5db', textDecoration: 'line-through' } }, t.name)
+                ),
+                h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 3 } }, `Used ${usedDate} · cost ${t.cost} gold`)
+              ),
+              h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDeleteTicket(t.id), title: 'Delete from history' },
+                h(Icon, { name: 'trash2', size: 12 })
+              )
+            );
+          })
+        )
+      )
     )
   );
 }
@@ -1739,23 +1840,56 @@ function BossEditorModal({ domain, level, existing, onSave, onClose }) {
 
 // ---------- Settings view ----------
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss }) {
+function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
+  return h(ModalShell, { title: 'Buy ticket?', onClose: onCancel, width: 380 },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 } },
+      h('div', { style: { ...styles.bossIcon, background: 'rgba(167,139,250,0.15)', borderColor: 'rgba(167,139,250,0.35)', width: 40, height: 40 } }, h(Icon, { name: 'gift', size: 18, color: '#a78bfa' })),
+      h('div', { style: { flex: 1, minWidth: 0 } },
+        h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, reward.name),
+        reward.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, reward.desc)
+      )
+    ),
+    h('div', { style: { fontSize: 13, color: '#d1d5db', lineHeight: 1.6, marginBottom: 14 } },
+      `Buy a ticket for `, h('span', { style: { fontWeight: 700, color: '#fbbf24' } }, `${reward.cost} gold`),
+      `? You can use the ticket whenever you're ready, or sell it later for `, h('span', { style: { fontWeight: 700, color: '#fbbf24' } }, `${Math.floor(reward.cost * SELL_REFUND_RATIO)} gold`),
+      ` (50% refund — pick wisely).`
+    ),
+    !canAfford && h('div', { style: { fontSize: 12, color: '#f09595', background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 12 } },
+      'Not enough gold yet.'
+    ),
+    h('div', { style: { display: 'flex', gap: 8 } },
+      h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: onCancel }, 'Cancel'),
+      h('button', {
+        className: 'rpg-btn',
+        disabled: !canAfford,
+        style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0', opacity: canAfford ? 1 : 0.4, cursor: canAfford ? 'pointer' : 'not-allowed' },
+        onClick: () => canAfford && onConfirm(),
+      }, h(Icon, { name: 'check', size: 14 }), ' Confirm buy')
+    )
+  );
+}
+
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
 
     h('section', { style: { marginBottom: 24 } },
-      h(SectionLabel, { text: 'Custom boss battles' }),
+      h(SectionLabel, { text: 'Level gates & boss battles' }),
       h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
-        'Replace the suggested challenges with your own for each 10-level milestone. Up to 3 challenges per gate.'
+        'Boss gates lock your rank advancement every 10 levels by default. You can enable the in-between gates (5, 15, 25, 35, 45) to create tighter challenges.'
       ),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
         DOMAIN_KEYS.map(k => {
           const d = DOMAINS[k];
           const isOpen = expandedDomain === k;
           const customCount = state.customBosses && state.customBosses[k]
-            ? Object.keys(state.customBosses[k]).length
+            ? Object.keys(state.customBosses[k]).filter(lvl => {
+                const ch = state.customBosses[k][lvl];
+                return ch && ch.filter(c => c && c.trim()).length > 0;
+              }).length
             : 0;
+          const enabled = activeBossLevelsFor(state, k);
           return h('div', { key: k, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, overflow: 'hidden' } },
             h('button', {
               className: 'rpg-btn',
@@ -1765,27 +1899,46 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss }) {
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                 h(Icon, { name: d.icon, size: 16, color: d.color }),
                 h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, d.name),
-                customCount > 0 && h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, `· ${customCount} customized`)
+                h('span', { style: { fontSize: 11, color: '#7c7c8a' } },
+                  `· ${enabled.length} gate${enabled.length === 1 ? '' : 's'} active`,
+                  customCount > 0 ? `, ${customCount} customized` : ''
+                )
               ),
               h('div', { style: { transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' } },
                 h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' })
               )
             ),
             isOpen && h('div', { style: { padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 6 } },
-              BOSS_LEVELS.map(bl => {
+              BOSS_LEVELS_ALL.map(bl => {
+                const isDefault = BOSS_LEVELS_DEFAULT.indexOf(bl) >= 0; // mults of 10
+                const isEnabled = enabled.indexOf(bl) >= 0;
                 const custom = state.customBosses && state.customBosses[k] && state.customBosses[k][bl];
                 const isCustom = custom && custom.filter(c => c && c.trim()).length > 0;
-                return h('button', {
-                  key: bl,
-                  className: 'rpg-btn',
-                  onClick: () => onEditBoss(k, bl),
-                  style: { ...styles.bossLevelRow, borderColor: isCustom ? hexToRgba(d.color, 0.3) : '#2a2a35' },
-                },
-                  h('span', { style: { fontSize: 13, color: '#e5e7eb' } }, `Level ${bl} gate`),
-                  isCustom
-                    ? h('span', { style: { fontSize: 11, color: d.color } }, 'Custom')
-                    : h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, 'Default'),
-                  h(Icon, { name: 'edit2', size: 12, color: '#9ca3af' })
+                return h('div', { key: bl, style: { ...styles.bossLevelRow, borderColor: isEnabled ? (isCustom ? hexToRgba(d.color, 0.3) : '#2a2a35') : '#22222e', opacity: isEnabled ? 1 : 0.55 } },
+                  h('div', { style: { flex: 1, display: 'flex', alignItems: 'center', gap: 8 } },
+                    h('span', { style: { fontSize: 13, color: '#e5e7eb', fontWeight: 600 } }, `Level ${bl}`),
+                    isDefault
+                      ? h('span', { style: { fontSize: 10, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Default')
+                      : h('span', { style: { fontSize: 10, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Optional'),
+                    isCustom && h('span', { style: { fontSize: 10, color: d.color, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Custom')
+                  ),
+                  // Toggle: default gates can be turned off too (user choice).
+                  h('button', {
+                    className: 'rpg-btn',
+                    onClick: () => onToggleGate(k, bl),
+                    style: { ...styles.toggleSwitch, background: isEnabled ? d.color : '#2a2a35' },
+                    title: isEnabled ? 'Disable this gate' : 'Enable this gate',
+                  },
+                    h('span', { style: { ...styles.toggleKnob, left: isEnabled ? 18 : 2 } })
+                  ),
+                  h('button', {
+                    className: 'rpg-btn',
+                    onClick: () => onEditBoss(k, bl),
+                    style: { ...styles.iconBtn, opacity: isEnabled ? 1 : 0.5 },
+                    title: 'Edit challenges',
+                  },
+                    h(Icon, { name: 'edit2', size: 12 })
+                  )
                 );
               })
             )
@@ -1933,29 +2086,6 @@ function LoginScreen({ onSignedIn }) {
   );
 }
 
-function MigrationPrompt({ onAccept, onDecline }) {
-  return h('div', { style: styles.authScreen },
-    h('div', { style: styles.authCard },
-      h('div', { style: { ...styles.logoMark, marginBottom: 14 } }, h(Icon, { name: 'scroll', size: 22, color: '#a78bfa' })),
-      h('div', { style: styles.authTitle }, 'Existing progress found'),
-      h('div', { style: { ...styles.authSubtitle, marginBottom: 18 } },
-        'You have RPG Life data saved locally on this device from before signing in. Would you like to import it into your account?'
-      ),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        h('button', { className: 'rpg-btn', onClick: onAccept, style: { ...styles.primaryBtn, justifyContent: 'center', padding: '11px 0' } },
-          h(Icon, { name: 'check', size: 14 }), ' Import my progress'
-        ),
-        h('button', { className: 'rpg-btn', onClick: onDecline, style: { ...styles.secondaryBtn, justifyContent: 'center', padding: '11px 0' } },
-          'Start fresh'
-        )
-      ),
-      h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginTop: 12, textAlign: 'center' } },
-        'You can only do this once. Choose carefully.'
-      )
-    )
-  );
-}
-
 function AuthGate() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
   const [ready, setReady] = useState(false);
@@ -2067,6 +2197,17 @@ const styles = {
   main: { padding: '18px 20px 28px', maxWidth: 900, margin: '0 auto' },
   sectionLabel: { fontSize: 11.5, fontWeight: 700, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.8 },
   metersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 },
+  bigMetersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 },
+  bigMeterCard: {
+    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 14, padding: '16px 18px',
+  },
+  bigMeterIcon: {
+    width: 38, height: 38, borderRadius: 10,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  bigMeterName: { fontSize: 15, fontWeight: 700, color: '#f4f1ea' },
+  bigMeterSubName: { fontSize: 11.5, color: '#9ca3af', marginTop: 2 },
+  bigMeterValue: { fontSize: 30, fontWeight: 700, lineHeight: 1 },
   meterCard: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' },
   levelCard: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' },
   meterTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -2163,6 +2304,21 @@ const styles = {
   rewardCard: {
     display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
     background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10,
+  },
+  ticketCard: {
+    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+    background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 10,
+    transition: 'opacity 0.2s ease',
+  },
+  toggleSwitch: {
+    width: 36, height: 20, borderRadius: 999, position: 'relative',
+    border: 'none', cursor: 'pointer', transition: 'background 0.2s ease',
+    flexShrink: 0,
+  },
+  toggleKnob: {
+    position: 'absolute', top: 2, width: 16, height: 16, borderRadius: '50%',
+    background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+    transition: 'left 0.2s ease',
   },
   modalOverlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex',
