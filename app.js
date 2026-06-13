@@ -71,6 +71,9 @@ const BOSS_LEVELS = BOSS_LEVELS_ALL; // back-compat alias for existing UI refere
 
 const SELL_REFUND_RATIO = 0.5; // tickets sell back for 50% of cost — hardcoded
 
+const STREAK_BONUS_CONSISTENCY = 10; // gold awarded every 10 days of consistency streak
+const STREAK_BONUS_POWER = 30;       // gold awarded every 10 days of power streak
+
 const DEFAULT_BOSSES = {
   health: {
     5: ['Walk daily for 1 week', 'Try a new healthy recipe', 'Sleep 7+ hours for 3 nights'],
@@ -193,6 +196,8 @@ function buildInitialState() {
     tickets: [],              // [{id, rewardId, name, desc, cost, purchasedAt, usedAt|null}]
     goldHistory: {},          // {[dateKey]: total gold earned that day}
     createdAt: Date.now(),    // for daily-average estimates
+    lastResetAt: 0,           // bumped whenever Settings > Reset is used; lets sync recognize intentional wipes
+    pendingBonuses: [],       // [{id, label, amount, at}] — queued streak-bonus notifications not yet shown
   };
 }
 
@@ -313,6 +318,60 @@ function dayStatus(log) {
   return 'partial';
 }
 
+// Produce a small "fingerprint" of a state's data volume, used to detect when
+// an incoming sync snapshot would silently erase work — e.g. a backgrounded
+// device waking up and re-saving its stale copy with a fresher timestamp.
+// Higher numbers = "richer" data. We only use this to catch big regressions
+// (a device with substantially LESS data overwriting one with substantially
+// MORE), not to do real merging.
+function dataFingerprint(state) {
+  if (!state) return { activities: 0, quests: 0, tickets: 0, activityLog: 0, totalXp: 0, gold: 0 };
+  const totalXp = DOMAIN_KEYS.reduce((sum, k) => sum + ((state.domains && state.domains[k] && state.domains[k].totalXp) || 0), 0);
+  return {
+    activities: (state.activities || []).length,
+    quests: (state.quests || []).length,
+    tickets: (state.tickets || []).length,
+    activityLog: (state.activityLog || []).length,
+    totalXp,
+    gold: state.gold || 0,
+  };
+}
+
+// Returns true if `incoming` looks like it would erase meaningful data that
+// `current` has AND it's not the result of an intentional reset. A small/zero
+// difference (a single deletion, a spent reward, etc.) is normal and allowed
+// — this only flags LARGE regressions that are far more likely to be a stale
+// snapshot than an intentional bulk-delete.
+function looksLikeDataLoss(current, incoming) {
+  // An intentional reset (Settings > Reset) bumps lastResetAt. If the
+  // incoming snapshot's reset happened more recently than anything we know
+  // about, it's a deliberate wipe from another device — accept it.
+  const currentResetAt = (current && current.lastResetAt) || 0;
+  const incomingResetAt = (incoming && incoming.lastResetAt) || 0;
+  if (incomingResetAt > currentResetAt) return false;
+
+  const a = dataFingerprint(current);
+  const b = dataFingerprint(incoming);
+
+  // Total XP and activity log should basically never go DOWN by a lot —
+  // XP is cumulative and the log only grows (capped at 30, but a big drop
+  // in count combined with lower XP is a strong signal).
+  const xpDropRatio = a.totalXp > 0 ? (a.totalXp - b.totalXp) / a.totalXp : 0;
+  const bigXpDrop = a.totalXp >= 50 && xpDropRatio > 0.15; // lost >15% of meaningful XP
+
+  // Activities dropping by more than a couple at once is unusual for normal
+  // usage (one delete at a time) but exactly what a stale-snapshot overwrite
+  // looks like after a multi-item editing session.
+  const bigActivityDrop = (a.activities - b.activities) >= 3;
+  // Quests are never removed by completion (only by explicit delete), so a
+  // drop here is always a deliberate user action — use a higher threshold
+  // so a deliberate cleanup of a few old quests doesn't false-positive.
+  const bigQuestDrop = (a.quests - b.quests) >= 3;
+  const bigLogDrop = (a.activityLog - b.activityLog) >= 5;
+
+  return bigXpDrop || bigActivityDrop || bigQuestDrop || bigLogDrop;
+}
+
 // ---------- Main Component ----------
 
 function RPGLife({ user, onSignOut }) {
@@ -336,6 +395,10 @@ function RPGLife({ user, onSignOut }) {
   const saveTimer = useRef(null);
   const lastSavedJson = useRef(null);
   const remoteUpdatedAt = useRef(0);
+  const latestStateRef = useRef(null);   // always holds the most recent state, for flush-on-close
+  const userRef = useRef(null);          // always holds the current user, for flush-on-close
+  const intentionalChangeUntil = useRef(0); // timestamp; while in the future, suppress the data-loss guard
+                                              // (set after Reset, so other devices' old data doesn't bounce back)
 
   // Load: subscribe to Firestore for this user. The first snapshot gives us
   // the initial state; subsequent snapshots are realtime updates from other
@@ -346,12 +409,32 @@ function RPGLife({ user, onSignOut }) {
     let unsub = null;
 
     (async () => {
-      const remote = await window.RPGLifeSync.loadState(user.uid);
+      const { state: remote, updatedAt: remoteTs } = await window.RPGLifeSync.loadState(user.uid);
       if (cancelled) return;
 
-      if (remote) {
+      // Recovery check: if this device has a local backup newer than what
+      // Firestore has, it means a previous save didn't complete before the
+      // page closed (see flush handlers below). Recover the newer local
+      // version instead of silently reverting to the older Firestore copy.
+      let recovered = null;
+      try {
+        const backupRaw = localStorage.getItem(`rpglife-backup-${user.uid}`);
+        const backupTs = parseInt(localStorage.getItem(`rpglife-backup-${user.uid}-ts`) || '0', 10);
+        if (backupRaw && backupTs > remoteTs) {
+          recovered = JSON.parse(backupRaw);
+        }
+      } catch (e) {}
+
+      if (recovered) {
+        setState(recovered);
+        lastSavedJson.current = JSON.stringify(recovered);
+        await window.RPGLifeSync.saveState(user.uid, recovered);
+        remoteUpdatedAt.current = Date.now();
+        showToast('Recovered your last changes');
+      } else if (remote) {
         setState(remote);
         lastSavedJson.current = JSON.stringify(remote);
+        remoteUpdatedAt.current = remoteTs;
       } else {
         // Brand new account — always start with a pristine state.
         // We intentionally do NOT import any localStorage data; new users get zero.
@@ -367,9 +450,47 @@ function RPGLife({ user, onSignOut }) {
       unsub = window.RPGLifeSync.subscribeToState(user.uid, (snapState, updatedAt) => {
         if (!snapState) return;
         if (updatedAt <= remoteUpdatedAt.current) return;
-        remoteUpdatedAt.current = updatedAt;
+
         const snapJson = JSON.stringify(snapState);
-        if (snapJson === lastSavedJson.current) return;
+        if (snapJson === lastSavedJson.current) {
+          remoteUpdatedAt.current = updatedAt;
+          return;
+        }
+
+        const localState = latestStateRef.current;
+
+        // If we just made an intentional change (e.g. a reset) on this device,
+        // hold our ground for a window — don't let any incoming snapshot from
+        // another (possibly stale) device overwrite it in either direction.
+        if (Date.now() < intentionalChangeUntil.current && localState) {
+          remoteUpdatedAt.current = updatedAt;
+          if (snapJson !== lastSavedJson.current) {
+            lastSavedJson.current = null;
+            window.RPGLifeSync.saveState(user.uid, localState).then(() => {
+              remoteUpdatedAt.current = Date.now();
+              lastSavedJson.current = JSON.stringify(localState);
+            });
+          }
+          return;
+        }
+
+        // Guard against a stale/backgrounded device overwriting richer local
+        // data just because its write landed with a newer timestamp. If the
+        // incoming snapshot looks like it would erase a meaningful amount of
+        // data compared to what we currently have, refuse it and re-push our
+        // local copy instead — don't silently adopt the smaller dataset.
+        if (localState && looksLikeDataLoss(localState, snapState)) {
+          showToast('Kept your local data — another device tried to sync an older copy');
+          // Re-assert our local state as the source of truth.
+          lastSavedJson.current = null; // force the save effect to re-write even if content matches
+          window.RPGLifeSync.saveState(user.uid, localState).then(() => {
+            remoteUpdatedAt.current = Date.now();
+            lastSavedJson.current = JSON.stringify(localState);
+          });
+          return;
+        }
+
+        remoteUpdatedAt.current = updatedAt;
         lastSavedJson.current = snapJson;
         setState(snapState);
       });
@@ -385,38 +506,140 @@ function RPGLife({ user, onSignOut }) {
   // (where lastSavedJson already matches).
   useEffect(() => {
     if (!loaded || !state || !user) return;
+    latestStateRef.current = state;
+    userRef.current = user;
+
     const json = JSON.stringify(state);
     if (json === lastSavedJson.current) return;
     lastSavedJson.current = json;
     setSyncStatus('syncing');
 
+    // Synchronous local backup — written immediately, every change, no debounce.
+    // This is a last-resort recovery copy: if Firestore's write doesn't complete
+    // before the page closes, this localStorage snapshot lets us detect and
+    // recover newer local edits on next load (see recovery check in load effect).
+    try {
+      localStorage.setItem(`rpglife-backup-${user.uid}`, json);
+      localStorage.setItem(`rpglife-backup-${user.uid}-ts`, String(Date.now()));
+    } catch (e) {}
+
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const ok = await window.RPGLifeSync.saveState(user.uid, state);
+      saveTimer.current = null;
+      const result = await window.RPGLifeSync.saveState(user.uid, state);
       remoteUpdatedAt.current = Date.now();
-      setSyncStatus(ok ? 'idle' : 'offline');
-    }, 800);
+      setSyncStatus(result.ok ? 'idle' : 'offline');
+      if (!result.ok && result.error) {
+        showToast(`Save failed: ${result.error}`);
+      }
+    }, 400);
   }, [state, loaded, user]);
 
-  // helper: start the realtime sync subscription for cross-device updates
-  const subscribeRef = useRef(null);
-  function startSync() {
-    if (subscribeRef.current) return; // already subscribed
-    subscribeRef.current = window.RPGLifeSync.subscribeToState(user.uid, (snapState, updatedAt) => {
-      if (!snapState) return;
-      if (updatedAt <= remoteUpdatedAt.current) return;
-      remoteUpdatedAt.current = updatedAt;
-      const snapJson = JSON.stringify(snapState);
-      if (snapJson === lastSavedJson.current) return;
-      lastSavedJson.current = snapJson;
-      setState(snapState);
+  // Retry mechanism: if a save failed and we're stuck on 'offline', don't
+  // require the user to restart the app. Retry the most recent state
+  // periodically (backoff), and immediately when the browser regains
+  // connectivity. Without this, a single transient write failure (e.g. a
+  // brief disconnect, or a Firestore lock contention from another tab/device)
+  // would silently block ALL future saves until restart — every edit after
+  // that point would be lost.
+  const retryTimer = useRef(null);
+  const retryAttempt = useRef(0);
+
+  function attemptResync() {
+    if (!user || !latestStateRef.current || !window.RPGLifeSync) return;
+    if (saveTimer.current) return; // a regular save is already pending/in-flight
+    setSyncStatus('syncing');
+    window.RPGLifeSync.saveState(user.uid, latestStateRef.current).then((result) => {
+      remoteUpdatedAt.current = Date.now();
+      if (result.ok) {
+        retryAttempt.current = 0;
+        lastSavedJson.current = JSON.stringify(latestStateRef.current);
+        setSyncStatus('idle');
+      } else {
+        setSyncStatus('offline');
+      }
     });
   }
+
+  useEffect(() => {
+    if (syncStatus !== 'offline') {
+      retryAttempt.current = 0;
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
+      return;
+    }
+    // Backoff: 5s, 10s, 20s, 40s, capped at 60s
+    const delay = Math.min(60000, 5000 * Math.pow(2, retryAttempt.current));
+    retryTimer.current = setTimeout(() => {
+      retryAttempt.current += 1;
+      attemptResync();
+    }, delay);
+    return () => {
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+      }
+    };
+  }, [syncStatus]);
+
+  // Retry immediately when the OS/browser reports we're back online,
+  // regardless of backoff timing.
+  useEffect(() => {
+    function handleOnline() {
+      if (syncStatus === 'offline') {
+        retryAttempt.current = 0;
+        attemptResync();
+      }
+    }
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [syncStatus, user]);
+
+  // Flush any pending save immediately if the page is closing, backgrounded,
+  // or losing visibility — debounced setTimeout callbacks don't reliably run
+  // once a tab is closed or a mobile browser is suspended, which previously
+  // caused recent edits to be lost (the last *completed* save would win on
+  // next load, silently reverting newer local changes).
+  useEffect(() => {
+    function flush() {
+      if (!saveTimer.current) return; // nothing pending
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      const st = latestStateRef.current;
+      const u = userRef.current;
+      if (!st || !u || !window.RPGLifeSync) return;
+      // Fire-and-forget — browsers give very little time during unload,
+      // but Firestore's SDK queues this and the persistent local cache
+      // also picks it up so it syncs as soon as possible even if the
+      // network call itself doesn't complete in time.
+      window.RPGLifeSync.saveState(u.uid, st);
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') flush();
+    }
+
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   function showToast(msg) {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }
+
+  function dismissBonus(id) {
+    setState(prev => ({ ...prev, pendingBonuses: (prev.pendingBonuses || []).filter(b => b.id !== id) }));
   }
 
   if (!loaded || !state) {
@@ -444,6 +667,8 @@ function RPGLife({ user, onSignOut }) {
     const allMinMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= CONSISTENCY_MIN);
     const allFullMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= DAILY_GOAL);
 
+    const bonuses = []; // { label, amount }
+
     if (allMinMet && next.lastConsistencyDate !== today) {
       if (next.lastConsistencyDate === yesterdayKey()) {
         next.consistencyStreak = next.consistencyStreak + 1;
@@ -453,6 +678,10 @@ function RPGLife({ user, onSignOut }) {
         next.consistencyStreak = 1;
       }
       next.lastConsistencyDate = today;
+
+      if (next.consistencyStreak > 0 && next.consistencyStreak % 10 === 0) {
+        bonuses.push({ label: `${next.consistencyStreak}-day streak`, amount: STREAK_BONUS_CONSISTENCY });
+      }
     }
 
     if (allFullMet && next.lastPowerDate !== today) {
@@ -462,6 +691,20 @@ function RPGLife({ user, onSignOut }) {
         next.powerStreak = 1;
       }
       next.lastPowerDate = today;
+
+      if (next.powerStreak > 0 && next.powerStreak % 10 === 0) {
+        bonuses.push({ label: `${next.powerStreak}-day power streak`, amount: STREAK_BONUS_POWER });
+      }
+    }
+
+    if (bonuses.length > 0) {
+      const totalBonus = bonuses.reduce((sum, b) => sum + b.amount, 0);
+      next.gold = (next.gold || 0) + totalBonus;
+      next.goldHistory = { ...(next.goldHistory || {}) };
+      next.goldHistory[today] = (next.goldHistory[today] || 0) + totalBonus;
+      // Queue for the coin notification UI — picked up by an effect that shows
+      // the popup and lets the user click through to watch the count animate up.
+      next.pendingBonuses = [...(next.pendingBonuses || []), ...bonuses.map(b => ({ ...b, id: uid('bonus'), at: Date.now() }))];
     }
 
     return next;
@@ -540,22 +783,51 @@ function RPGLife({ user, onSignOut }) {
     setShowQuestForm(false);
   }
 
+  // Shared completion-reward logic: called whenever a quest's progress
+  // transitions to 100%, whether via the manual slider or via checkpoints.
+  function applyQuestCompletionReward(next, oldQuest, quest) {
+    if (quest && quest.progress === 100 && oldQuest.progress < 100) {
+      const goldGain = Math.round(quest.xpReward / 3);
+      next.domains = { ...next.domains };
+      next.domains[quest.domain] = { ...next.domains[quest.domain], totalXp: next.domains[quest.domain].totalXp + quest.xpReward };
+      next.gold = next.gold + goldGain;
+      next.goldHistory = { ...(next.goldHistory || {}) };
+      next.goldHistory[today] = (next.goldHistory[today] || 0) + goldGain;
+      showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold`);
+    }
+    return next;
+  }
+
   function updateQuestProgress(id, progress) {
     setState(prev => {
       const quests = prev.quests.map(q => q.id === id ? { ...q, progress: Math.max(0, Math.min(100, progress)) } : q);
       let next = { ...prev, quests };
       const oldQuest = prev.quests.find(q=>q.id===id);
       const quest = quests.find(q => q.id === id);
-      if (quest && quest.progress === 100 && oldQuest.progress < 100) {
-        const goldGain = Math.round(quest.xpReward / 3);
-        next.domains = { ...next.domains };
-        next.domains[quest.domain] = { ...next.domains[quest.domain], totalXp: next.domains[quest.domain].totalXp + quest.xpReward };
-        next.gold = next.gold + goldGain;
-        next.goldHistory = { ...(prev.goldHistory || {}) };
-        next.goldHistory[today] = (next.goldHistory[today] || 0) + goldGain;
-        showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold`);
-      }
-      return next;
+      return applyQuestCompletionReward(next, oldQuest, quest);
+    });
+  }
+
+  // Toggle a single checkpoint's done state, then recompute the quest's
+  // overall progress as (checked / total) * 100. Manual slider edits are
+  // disabled for quests that have checkpoints — checkmarks are the source
+  // of truth, since manual percentages tend to be guesswork.
+  function toggleCheckpoint(questId, checkpointId) {
+    setState(prev => {
+      const oldQuest = prev.quests.find(q => q.id === questId);
+      if (!oldQuest) return prev;
+
+      const checkpoints = (oldQuest.checkpoints || []).map(c =>
+        c.id === checkpointId ? { ...c, done: !c.done } : c
+      );
+      const total = checkpoints.length;
+      const doneCount = checkpoints.filter(c => c.done).length;
+      const progress = total > 0 ? Math.round((doneCount / total) * 100) : oldQuest.progress;
+
+      const updatedQuest = { ...oldQuest, checkpoints, progress };
+      const quests = prev.quests.map(q => q.id === questId ? updatedQuest : q);
+      let next = { ...prev, quests };
+      return applyQuestCompletionReward(next, oldQuest, updatedQuest);
     });
   }
 
@@ -669,6 +941,7 @@ function RPGLife({ user, onSignOut }) {
   }
 
   function resetDomain(domainKey) {
+    intentionalChangeUntil.current = Date.now() + 60000; // 60s window — other devices' old data shouldn't bounce back
     setState(prev => {
       const domains = { ...prev.domains };
       domains[domainKey] = { totalXp: 0, level: 0, rank: 0, potentialRank: 0 };
@@ -684,13 +957,14 @@ function RPGLife({ user, onSignOut }) {
       Object.keys(bossCompletions).forEach(k => {
         if (k.startsWith(`${domainKey}-`)) delete bossCompletions[k];
       });
-      return { ...prev, domains, dailyLogs, bossCompletions };
+      return { ...prev, domains, dailyLogs, bossCompletions, lastResetAt: Date.now() };
     });
     setResetPrompt(null);
     showToast(`${DOMAINS[domainKey].name} reset`);
   }
 
   function resetAll() {
+    intentionalChangeUntil.current = Date.now() + 60000; // 60s window — other devices' old data shouldn't bounce back
     setState(prev => {
       const fresh = buildInitialState();
       // Preserve activity & reward templates and custom config (not progress)
@@ -698,6 +972,7 @@ function RPGLife({ user, onSignOut }) {
       fresh.rewards = prev.rewards;
       fresh.customSubcats = prev.customSubcats;
       fresh.customBosses = prev.customBosses;
+      fresh.lastResetAt = Date.now();
       return fresh;
     });
     setResetPrompt(null);
@@ -737,6 +1012,9 @@ function RPGLife({ user, onSignOut }) {
       user, onSignOut, syncStatus,
       onGoldClick: () => setActiveTab('rewards'),
       onStreakClick: (mode) => setStreakCalendar(mode),
+      pendingBonuses: state.pendingBonuses || [],
+      onDismissBonus: dismissBonus,
+      onRetrySync: attemptResync,
     }),
     h('nav', { style: styles.nav },
       [
@@ -767,7 +1045,7 @@ function RPGLife({ user, onSignOut }) {
         onDelete: deleteActivity,
         onAdd: () => { setEditingActivity(null); setShowActivityForm(true); },
       }),
-      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onDelete: deleteQuest }),
+      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest }),
       activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat }),
       activeTab === 'rewards' && h(RewardsView, {
         state,
@@ -847,37 +1125,60 @@ function RPGLife({ user, onSignOut }) {
 
 // ---------- Header ----------
 
-function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncStatus, onGoldClick, onStreakClick }) {
+function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncStatus, onGoldClick, onStreakClick, pendingBonuses, onDismissBonus, onRetrySync }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [bonusOpen, setBonusOpen] = useState(false);
 
-  // Close menu on outside click
+  // Close menus on outside click
   useEffect(() => {
-    if (!menuOpen) return;
-    const handler = () => setMenuOpen(false);
+    if (!menuOpen && !bonusOpen) return;
+    const handler = () => { setMenuOpen(false); setBonusOpen(false); };
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
-  }, [menuOpen]);
+  }, [menuOpen, bonusOpen]);
 
   const syncDot = syncStatus === 'syncing'
     ? { color: '#fbbf24', label: 'Syncing…' }
     : syncStatus === 'offline'
-      ? { color: '#9ca3af', label: 'Offline — will sync later' }
+      ? { color: '#9ca3af', label: 'Offline — tap to retry' }
       : { color: '#86efac', label: 'Synced' };
 
   const initial = (user && user.email ? user.email[0] : '?').toUpperCase();
+  const hasBonuses = pendingBonuses && pendingBonuses.length > 0;
 
   return h('header', { style: styles.header },
     h('div', { style: styles.headerLeft },
       h('div', { style: styles.logoMark }, h(Icon, { name: 'sword', size: 20, color: '#a78bfa' })),
       h('div', null,
         h('div', { style: styles.title }, 'Adventure log'),
-        h('div', { style: { ...styles.subtitle, display: 'flex', alignItems: 'center', gap: 6 } },
-          h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: syncDot.color, display: 'inline-block' }, title: syncDot.label }),
-          h('span', null, syncDot.label)
-        )
+        syncStatus === 'offline'
+          ? h('button', {
+              className: 'rpg-btn',
+              onClick: onRetrySync,
+              style: { ...styles.subtitle, display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#9ca3af' },
+            },
+              h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: syncDot.color, display: 'inline-block' } }),
+              h('span', { style: { textDecoration: 'underline' } }, syncDot.label)
+            )
+          : h('div', { style: { ...styles.subtitle, display: 'flex', alignItems: 'center', gap: 6 } },
+              h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: syncDot.color, display: 'inline-block' }, title: syncDot.label }),
+              h('span', null, syncDot.label)
+            )
       )
     ),
     h('div', { style: styles.headerRight },
+      hasBonuses && h('div', { style: { position: 'relative' }, onClick: (e) => e.stopPropagation() },
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => setBonusOpen(v => !v),
+          style: styles.bonusBell,
+          title: 'Streak bonus earned!',
+        },
+          h(Icon, { name: 'coins', size: 16, color: '#fbbf24' }),
+          h('span', { style: styles.bonusBadge }, pendingBonuses.length)
+        ),
+        bonusOpen && h(BonusPopover, { bonuses: pendingBonuses, onDismiss: onDismissBonus })
+      ),
       h('button', {
         className: 'rpg-btn',
         onClick: () => onStreakClick && onStreakClick('consistency'),
@@ -921,6 +1222,50 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
           )
         )
       )
+    )
+  );
+}
+
+// ---------- Bonus notification popover ----------
+
+function BonusPopover({ bonuses, onDismiss }) {
+  return h('div', { style: styles.bonusPopover, onClick: (e) => e.stopPropagation() },
+    h('div', { style: { fontSize: 12, fontWeight: 700, color: '#f4f1ea', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 } },
+      h(Icon, { name: 'flame', size: 13, color: '#fb923c' }), ' Streak bonus!'
+    ),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+      bonuses.map(b => h(BonusRow, { key: b.id, bonus: b, onDismiss: () => onDismiss(b.id) }))
+    )
+  );
+}
+
+function BonusRow({ bonus, onDismiss }) {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    let raf;
+    const duration = 700;
+    const start = performance.now();
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      setDisplay(Math.round(bonus.amount * t));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => raf && cancelAnimationFrame(raf);
+  }, [bonus.amount]);
+
+  return h('div', { style: styles.bonusRow },
+    h('div', { style: { flex: 1 } },
+      h('div', { style: { fontSize: 12.5, fontWeight: 600, color: '#e5e7eb' } }, bonus.label),
+      h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 2 } }, 'Keep it up!')
+    ),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, color: '#fbbf24', fontWeight: 700, fontSize: 15 } },
+      h(Icon, { name: 'coins', size: 14, color: '#fbbf24' }),
+      h('span', null, `+${display}`)
+    ),
+    h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, width: 24, height: 24, marginLeft: 4 }, onClick: onDismiss, title: 'Dismiss' },
+      h(Icon, { name: 'x', size: 11 })
     )
   );
 }
@@ -1116,7 +1461,7 @@ function FilterChip({ label, active, onClick, color }) {
 
 // ---------- Quests View ----------
 
-function QuestsView({ state, onAdd, onUpdateProgress, onDelete }) {
+function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDelete }) {
   const active = state.quests.filter(q => q.progress < 100);
   const completed = state.quests.filter(q => q.progress >= 100);
 
@@ -1128,12 +1473,12 @@ function QuestsView({ state, onAdd, onUpdateProgress, onDelete }) {
     active.length === 0
       ? h(EmptyState, { text: 'No active quests. Create a time-bound quest to chart a longer journey.' })
       : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          active.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onDelete }))
+          active.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete }))
         ),
     completed.length > 0 && h('div', { style: { marginTop: 24 } },
       h(SectionLabel, { text: `Completed (${completed.length})`, icon: 'trophy', accent: '#fbbf24' }),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        completed.map(q => h(QuestRow, { key: q.id, quest: q, onDelete, compact: true }))
+        completed.map(q => h(QuestRow, { key: q.id, quest: q, onToggleCheckpoint, onDelete, compact: true }))
       )
     )
   );
@@ -1521,12 +1866,15 @@ function QuestFormModal({ onClose, onSave }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [domain, setDomain] = useState('health');
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState('30');
   const [xpReward, setXpReward] = useState(100);
 
+  const daysNum = parseInt(days, 10);
+  const daysValid = !isNaN(daysNum) && daysNum >= 1;
+
   function handleSave() {
-    if (!name.trim()) return;
-    onSave({ name: name.trim(), desc: desc.trim(), domain, days, xpReward });
+    if (!name.trim() || !daysValid) return;
+    onSave({ name: name.trim(), desc: desc.trim(), domain, days: daysNum, xpReward });
   }
 
   return h(ModalShell, { title: 'New quest', onClose },
@@ -1548,14 +1896,25 @@ function QuestFormModal({ onClose, onSave }) {
         ),
         h('div', { style: { flex: 1 } },
           h('label', { style: styles.label }, 'Deadline (days)'),
-          h('input', { type: 'number', value: days, min: 1, onChange: e => setDays(parseInt(e.target.value)||1), style: styles.input })
+          h('input', {
+            type: 'number', value: days, min: 1,
+            onChange: e => setDays(e.target.value),
+            style: { ...styles.input, ...(daysValid ? {} : { borderColor: 'rgba(226,75,74,0.5)' }) },
+            placeholder: 'e.g. 30',
+          }),
+          !daysValid && h('div', { style: { fontSize: 11, color: '#f09595', marginTop: 4 } }, 'Enter at least 1 day')
         )
       ),
       h('div', null,
         h('label', { style: styles.label }, 'XP reward on completion'),
         h('input', { type: 'number', value: xpReward, min: 0, onChange: e => setXpReward(parseInt(e.target.value)||0), style: styles.input })
       ),
-      h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave }, h(Icon, { name: 'check', size: 14 }), ' Create quest')
+      h('button', {
+        className: 'rpg-btn',
+        disabled: !name.trim() || !daysValid,
+        style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0', opacity: (!name.trim() || !daysValid) ? 0.5 : 1, cursor: (!name.trim() || !daysValid) ? 'not-allowed' : 'pointer' },
+        onClick: handleSave,
+      }, h(Icon, { name: 'check', size: 14 }), ' Create quest')
     )
   );
 }
@@ -2359,6 +2718,31 @@ const styles = {
     width: '100%', textAlign: 'left', padding: '10px 14px',
     background: 'transparent', border: 'none', color: '#e5e7eb', fontSize: 13,
     cursor: 'pointer',
+  },
+  bonusBell: {
+    position: 'relative',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 34, height: 34, borderRadius: '50%',
+    background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)',
+    animation: 'pulseGlow 1.6s infinite',
+  },
+  bonusBadge: {
+    position: 'absolute', top: -4, right: -4,
+    background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 700,
+    minWidth: 16, height: 16, borderRadius: 999,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '0 3px',
+  },
+  bonusPopover: {
+    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+    background: '#1f1f2b', border: '1px solid #2e2e3a', borderRadius: 12,
+    minWidth: 240, zIndex: 95, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+    padding: '12px 14px',
+  },
+  bonusRow: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '8px 10px', background: 'rgba(251,191,36,0.06)',
+    border: '1px solid rgba(251,191,36,0.2)', borderRadius: 8,
   },
   authScreen: {
     minHeight: '100vh', minHeight: '100dvh',
