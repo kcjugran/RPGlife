@@ -395,14 +395,18 @@ function RPGLife({ user, onSignOut }) {
   const saveTimer = useRef(null);
   const lastSavedJson = useRef(null);
   const remoteUpdatedAt = useRef(0);
-  const latestStateRef = useRef(null);   // always holds the most recent state, for flush-on-close
-  const userRef = useRef(null);          // always holds the current user, for flush-on-close
-  const intentionalChangeUntil = useRef(0); // timestamp; while in the future, suppress the data-loss guard
-                                              // (set after Reset, so other devices' old data doesn't bounce back)
+  const latestStateRef = useRef(null);
+  const userRef = useRef(null);
+  const intentionalChangeUntil = useRef(0);
+  // KEY FIX: track when WE are writing so we can ignore the echo snapshot
+  // that Firestore sends back after every write. Without this, our own write
+  // echoes back as a snapshot, passes the timestamp guard (because it arrives
+  // before remoteUpdatedAt is updated), and overwrites whatever changed between
+  // when we started the write and when the echo arrived.
+  const writeInFlight = useRef(false);
+  const writeSettleTimer = useRef(null);
 
-  // Load: subscribe to Firestore for this user. The first snapshot gives us
-  // the initial state; subsequent snapshots are realtime updates from other
-  // devices.
+  // Load: get initial state from Firestore, then subscribe to real-time changes
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -412,84 +416,53 @@ function RPGLife({ user, onSignOut }) {
       const { state: remote, updatedAt: remoteTs } = await window.RPGLifeSync.loadState(user.uid);
       if (cancelled) return;
 
-      // Recovery check: if this device has a local backup newer than what
-      // Firestore has, it means a previous save didn't complete before the
-      // page closed (see flush handlers below). Recover the newer local
-      // version instead of silently reverting to the older Firestore copy.
-      let recovered = null;
-      try {
-        const backupRaw = localStorage.getItem(`rpglife-backup-${user.uid}`);
-        const backupTs = parseInt(localStorage.getItem(`rpglife-backup-${user.uid}-ts`) || '0', 10);
-        if (backupRaw && backupTs > remoteTs) {
-          recovered = JSON.parse(backupRaw);
-        }
-      } catch (e) {}
-
-      if (recovered) {
-        setState(recovered);
-        lastSavedJson.current = JSON.stringify(recovered);
-        await window.RPGLifeSync.saveState(user.uid, recovered);
-        remoteUpdatedAt.current = Date.now();
-        showToast('Recovered your last changes');
-      } else if (remote) {
+      if (remote) {
         setState(remote);
         lastSavedJson.current = JSON.stringify(remote);
         remoteUpdatedAt.current = remoteTs;
       } else {
-        // Brand new account — always start with a pristine state.
-        // We intentionally do NOT import any localStorage data; new users get zero.
         const fresh = buildInitialState();
         setState(fresh);
         lastSavedJson.current = JSON.stringify(fresh);
-        await window.RPGLifeSync.saveState(user.uid, fresh);
-        remoteUpdatedAt.current = Date.now();
+        const result = await window.RPGLifeSync.saveState(user.uid, fresh);
+        if (result.ok) remoteUpdatedAt.current = Date.now();
       }
       setLoaded(true);
 
-      // Subscribe to ongoing changes from other devices.
+      // Real-time subscription for changes from OTHER devices.
       unsub = window.RPGLifeSync.subscribeToState(user.uid, (snapState, updatedAt) => {
         if (!snapState) return;
+
+        // Ignore echoes of our own writes. We set writeInFlight=true before
+        // writing and clear it a short time after — any snapshot that arrives
+        // during that window is almost certainly our own echo.
+        if (writeInFlight.current) return;
+
+        // Ignore snapshots that aren't newer than what we loaded/last-saw
         if (updatedAt <= remoteUpdatedAt.current) return;
 
         const snapJson = JSON.stringify(snapState);
+
+        // If this matches what we last wrote, it's definitely our own echo
+        // (write flight window may have already cleared). Accept silently.
         if (snapJson === lastSavedJson.current) {
           remoteUpdatedAt.current = updatedAt;
           return;
         }
 
-        const localState = latestStateRef.current;
-
-        // If we just made an intentional change (e.g. a reset) on this device,
-        // hold our ground for a window — don't let any incoming snapshot from
-        // another (possibly stale) device overwrite it in either direction.
-        if (Date.now() < intentionalChangeUntil.current && localState) {
+        // Check for intentional reset window
+        if (Date.now() < intentionalChangeUntil.current && latestStateRef.current) {
           remoteUpdatedAt.current = updatedAt;
-          if (snapJson !== lastSavedJson.current) {
-            lastSavedJson.current = null;
-            window.RPGLifeSync.saveState(user.uid, localState).then(() => {
+          window.RPGLifeSync.saveState(user.uid, latestStateRef.current).then((r) => {
+            if (r.ok) {
               remoteUpdatedAt.current = Date.now();
-              lastSavedJson.current = JSON.stringify(localState);
-            });
-          }
-          return;
-        }
-
-        // Guard against a stale/backgrounded device overwriting richer local
-        // data just because its write landed with a newer timestamp. If the
-        // incoming snapshot looks like it would erase a meaningful amount of
-        // data compared to what we currently have, refuse it and re-push our
-        // local copy instead — don't silently adopt the smaller dataset.
-        if (localState && looksLikeDataLoss(localState, snapState)) {
-          showToast('Kept your local data — another device tried to sync an older copy');
-          // Re-assert our local state as the source of truth.
-          lastSavedJson.current = null; // force the save effect to re-write even if content matches
-          window.RPGLifeSync.saveState(user.uid, localState).then(() => {
-            remoteUpdatedAt.current = Date.now();
-            lastSavedJson.current = JSON.stringify(localState);
+              lastSavedJson.current = JSON.stringify(latestStateRef.current);
+            }
           });
           return;
         }
 
+        // Accept incoming state from another device
         remoteUpdatedAt.current = updatedAt;
         lastSavedJson.current = snapJson;
         setState(snapState);
@@ -502,8 +475,7 @@ function RPGLife({ user, onSignOut }) {
     };
   }, [user]);
 
-  // Save: debounced write to Firestore on state change. Skip the initial set
-  // (where lastSavedJson already matches).
+  // Save effect: debounced Firestore write on every state change
   useEffect(() => {
     if (!loaded || !state || !user) return;
     latestStateRef.current = state;
@@ -511,26 +483,33 @@ function RPGLife({ user, onSignOut }) {
 
     const json = JSON.stringify(state);
     if (json === lastSavedJson.current) return;
+    // Update lastSavedJson immediately so any snapshot that arrives before
+    // the async write completes is recognised as "our own echo" via content match
     lastSavedJson.current = json;
     setSyncStatus('syncing');
-
-    // Synchronous local backup — written immediately, every change, no debounce.
-    // This is a last-resort recovery copy: if Firestore's write doesn't complete
-    // before the page closes, this localStorage snapshot lets us detect and
-    // recover newer local edits on next load (see recovery check in load effect).
-    try {
-      localStorage.setItem(`rpglife-backup-${user.uid}`, json);
-      localStorage.setItem(`rpglife-backup-${user.uid}-ts`, String(Date.now()));
-    } catch (e) {}
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       saveTimer.current = null;
-      const result = await window.RPGLifeSync.saveState(user.uid, state);
+      const currentJson = JSON.stringify(latestStateRef.current);
+      // Mark our write as in-flight BEFORE the async call
+      writeInFlight.current = true;
+      if (writeSettleTimer.current) clearTimeout(writeSettleTimer.current);
+
+      const result = await window.RPGLifeSync.saveState(user.uid, latestStateRef.current);
       remoteUpdatedAt.current = Date.now();
-      setSyncStatus(result.ok ? 'idle' : 'offline');
-      if (!result.ok && result.error) {
-        showToast(`Save failed: ${result.error}`);
+      // Keep the in-flight flag active for 3 seconds after the write resolves
+      // to cover the round-trip time for the echo snapshot to arrive
+      writeSettleTimer.current = setTimeout(() => {
+        writeInFlight.current = false;
+      }, 3000);
+
+      if (result.ok) {
+        lastSavedJson.current = currentJson;
+        setSyncStatus('idle');
+      } else {
+        setSyncStatus('offline');
+        if (result.error) showToast(`Save failed: ${result.error}`);
       }
     }, 400);
   }, [state, loaded, user]);
