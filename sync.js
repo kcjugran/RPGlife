@@ -91,24 +91,42 @@ const RPGLifeSync = {
       const snap = await getDoc(doc(db, 'users', uid));
       if (snap.exists()) {
         const data = snap.data();
-        return data.state || null;
+        return { state: data.state || null, updatedAt: data.updatedAt || 0 };
       }
-      return null;
+      return { state: null, updatedAt: 0 };
     } catch (e) {
       console.error('loadState failed:', e);
-      return null;
+      return { state: null, updatedAt: 0 };
     }
   },
   async saveState(uid, state) {
-    try {
+    // Inner function so we can retry once on transient errors (e.g. tab
+    // manager negotiation briefly blocking writes when multiple clients open)
+    async function attempt() {
       await setDoc(doc(db, 'users', uid), {
         state,
         updatedAt: Date.now(),
       }, { merge: true });
-      return true;
+    }
+    try {
+      await attempt();
+      return { ok: true };
     } catch (e) {
+      const code = e && e.code;
+      // Retry once on errors that are typically transient (not permission errors)
+      const isTransient = !code || code === 'unavailable' || code === 'deadline-exceeded' || code === 'resource-exhausted';
+      if (isTransient) {
+        try {
+          await new Promise(r => setTimeout(r, 1000)); // brief wait
+          await attempt();
+          return { ok: true };
+        } catch (e2) {
+          console.error('saveState failed after retry:', e2);
+          return { ok: false, error: String((e2 && e2.message) || e2) };
+        }
+      }
       console.error('saveState failed:', e);
-      return false;
+      return { ok: false, error: String((e && e.message) || e) };
     }
   },
   subscribeToState(uid, callback) {
