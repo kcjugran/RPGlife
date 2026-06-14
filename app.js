@@ -483,23 +483,32 @@ function RPGLife({ user, onSignOut }) {
 
     const json = JSON.stringify(state);
     if (json === lastSavedJson.current) return;
-    // Update lastSavedJson immediately so any snapshot that arrives before
-    // the async write completes is recognised as "our own echo" via content match
+
     lastSavedJson.current = json;
     setSyncStatus('syncing');
+
+    // Mark in-flight IMMEDIATELY when state changes — not inside the 400ms
+    // timer. Echo snapshots from Firestore arrive ~300-800ms after a write,
+    // which falls squarely inside the debounce window. If we only set
+    // writeInFlight inside the setTimeout, those echoes aren't blocked and
+    // can overwrite the very change we're trying to save.
+    writeInFlight.current = true;
+    if (writeSettleTimer.current) {
+      clearTimeout(writeSettleTimer.current);
+      writeSettleTimer.current = null;
+    }
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       saveTimer.current = null;
-      const currentJson = JSON.stringify(latestStateRef.current);
-      // Mark our write as in-flight BEFORE the async call
-      writeInFlight.current = true;
-      if (writeSettleTimer.current) clearTimeout(writeSettleTimer.current);
+      const stateToSave = latestStateRef.current;
+      const currentJson = JSON.stringify(stateToSave);
 
-      const result = await window.RPGLifeSync.saveState(user.uid, latestStateRef.current);
+      const result = await window.RPGLifeSync.saveState(user.uid, stateToSave);
       remoteUpdatedAt.current = Date.now();
-      // Keep the in-flight flag active for 3 seconds after the write resolves
-      // to cover the round-trip time for the echo snapshot to arrive
+
+      // Keep in-flight active for 3s after the write resolves — Firestore
+      // echo snapshots can arrive after the write Promise resolves.
       writeSettleTimer.current = setTimeout(() => {
         writeInFlight.current = false;
       }, 3000);
@@ -509,7 +518,7 @@ function RPGLife({ user, onSignOut }) {
         setSyncStatus('idle');
       } else {
         setSyncStatus('offline');
-        if (result.error) showToast(`Save failed: ${result.error}`);
+        if (result.error) showToast(`Sync error: ${result.error}`);
       }
     }, 400);
   }, [state, loaded, user]);
