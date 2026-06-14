@@ -657,6 +657,42 @@ function RPGLife({ user, onSignOut }) {
     setState(prev => ({ ...prev, pendingBonuses: (prev.pendingBonuses || []).filter(b => b.id !== id) }));
   }
 
+  // Check and roll daily challenge on day open (run once per day per client)
+  // Hook must be declared here (before early return) to satisfy Rules of Hooks
+  const lastChallengeCheckRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !state) return;
+    const currentToday = todayKey();
+    if (lastChallengeCheckRef.current === currentToday) return;
+    lastChallengeCheckRef.current = currentToday;
+
+    // Expire yesterday's unfinished challenge
+    if (state.activeChallenge && state.activeChallenge.date !== currentToday && !state.activeChallenge.completedAt) {
+      setState(prev => ({ ...prev, activeChallenge: null }));
+      return;
+    }
+
+    // Roll for new challenge only if no active challenge today
+    if (!state.activeChallenge || state.activeChallenge.date !== currentToday) {
+      const library = state.challengeLibrary || [];
+      if (library.length === 0) return;
+      const chance = state.challengeSpawnChance || 0;
+      if (Math.random() * 100 < chance) {
+        const pick = library[Math.floor(Math.random() * library.length)];
+        const xpMin = eco(state, 'challengeXpMin');
+        const xpMax = eco(state, 'challengeXpMax');
+        const coinMin = eco(state, 'challengeCoinMin');
+        const coinMax = eco(state, 'challengeCoinMax');
+        const xp = Math.floor(Math.random() * (xpMax - xpMin + 1)) + xpMin;
+        const coins = Math.floor(Math.random() * (coinMax - coinMin + 1)) + coinMin;
+        setState(prev => ({
+          ...prev,
+          activeChallenge: { id: uid('ch'), libraryId: pick.id, name: pick.name, desc: pick.desc, domain: pick.domain, xp, coins, date: currentToday, completedAt: null, revealed: false },
+        }));
+      }
+    }
+  }, [loaded, state]);
+
   if (!loaded || !state) {
     return h('div', { style: styles.loadingScreen },
       h('div', { style: styles.loadingText }, 'Loading character data...'),
@@ -1065,40 +1101,6 @@ function RPGLife({ user, onSignOut }) {
   function dismissChallenge() {
     setState(prev => ({ ...prev, activeChallenge: null }));
   }
-
-  // Check and roll daily challenge on day open (run once per day per client)
-  const lastChallengeCheckRef = useRef(null);
-  useEffect(() => {
-    if (!loaded || !state) return;
-    if (lastChallengeCheckRef.current === today) return;
-    lastChallengeCheckRef.current = today;
-
-    // Expire yesterday's unfinished challenge
-    if (state.activeChallenge && state.activeChallenge.date !== today && !state.activeChallenge.completedAt) {
-      setState(prev => ({ ...prev, activeChallenge: null }));
-      return;
-    }
-
-    // Roll for new challenge only if no active challenge today
-    if (!state.activeChallenge || state.activeChallenge.date !== today) {
-      const library = state.challengeLibrary || [];
-      if (library.length === 0) return;
-      const chance = state.challengeSpawnChance || 0;
-      if (Math.random() * 100 < chance) {
-        const pick = library[Math.floor(Math.random() * library.length)];
-        const xpMin = eco(state, 'challengeXpMin');
-        const xpMax = eco(state, 'challengeXpMax');
-        const coinMin = eco(state, 'challengeCoinMin');
-        const coinMax = eco(state, 'challengeCoinMax');
-        const xp = Math.floor(Math.random() * (xpMax - xpMin + 1)) + xpMin;
-        const coins = Math.floor(Math.random() * (coinMax - coinMin + 1)) + coinMin;
-        setState(prev => ({
-          ...prev,
-          activeChallenge: { id: uid('ch'), libraryId: pick.id, name: pick.name, desc: pick.desc, domain: pick.domain, xp, coins, date: today, completedAt: null, revealed: false },
-        }));
-      }
-    }
-  }, [loaded, today]);
 
   return h('div', { style: styles.app },
     h('style', null, `
@@ -3359,12 +3361,32 @@ const styles = {
 // initialising and dispatched 'rpglife-sync-ready'. If it already fired
 // (unlikely but possible), RPGLifeSync will already be on window.
 function startApp() {
-  const root = ReactDOM.createRoot(document.getElementById('root'));
-  root.render(h(AuthGate));
+  try {
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(h(AuthGate));
+  } catch (e) {
+    console.error('startApp failed:', e);
+    document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f09595;font-family:sans-serif;"><h2>Something went wrong</h2><p>' + (e.message || e) + '</p><p>Try: F12 → Application → Service Workers → Unregister, then reload.</p></div>';
+  }
 }
 
 if (window.RPGLifeSync) {
   startApp();
 } else {
-  window.addEventListener('rpglife-sync-ready', startApp, { once: true });
+  // Wait for sync.js to signal ready
+  window.addEventListener('rpglife-sync-ready', function onReady() {
+    window.removeEventListener('rpglife-sync-ready', onReady);
+    startApp();
+  });
+  // Safety: if sync.js never fires (CDN blocked, network error, etc.),
+  // start anyway after 5 seconds so the user sees an error screen, not darkness.
+  setTimeout(function() {
+    if (!window.__rpglife_started__) {
+      window.__rpglife_started__ = true;
+      console.warn('sync.js did not signal ready within 5s — starting app anyway');
+      startApp();
+    }
+  }, 5000);
+  // Mark as started when the event fires to prevent the timeout from double-starting
+  window.addEventListener('rpglife-sync-ready', function() { window.__rpglife_started__ = true; }, { once: true });
 }
