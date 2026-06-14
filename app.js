@@ -62,17 +62,38 @@ const DOMAINS = {
 
 const DOMAIN_KEYS = Object.keys(DOMAINS);
 
-const DAILY_GOAL = 100;
-const CONSISTENCY_MIN = 50;
+const DAILY_GOAL = 100;       // default — overridden per-user by state.economy.dailyGoal
+const CONSISTENCY_MIN = 50;   // default — overridden per-user by state.economy.consistencyMin
+const SELL_REFUND_RATIO = 0.5; // tickets sell back for 50% of cost — hardcoded, never changes
 
+// Default economy config — all values editable in Settings > Economy
+const DEFAULT_ECONOMY = {
+  dailyGoal: 100,
+  consistencyMin: 50,
+  streakCoinsEvery: 10,
+  streakCoinsAmount: 10,
+  powerStreakCoinsEvery: 10,
+  powerStreakCoinsAmount: 30,
+  questCoinRatio: 0.33,
+  bossCoinBase: 75,
+  miniGateCoinBase: 40,
+  gateTierMultipliers: { B: 1.0, A: 1.5, S: 2.0 },
+  miniGateTierMultipliers: { C: 0.75, B: 1.0, A: 1.5 },
+  challengeXpMin: 30,
+  challengeXpMax: 70,
+  challengeCoinMin: 10,
+  challengeCoinMax: 100,
+};
+
+// Helper: get economy value from state, falling back to defaults
+function eco(state, key) {
+  return (state && state.economy && state.economy[key] !== undefined)
+    ? state.economy[key]
+    : DEFAULT_ECONOMY[key];
+}
 const BOSS_LEVELS_ALL = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
 const BOSS_LEVELS_DEFAULT = [10, 20, 30, 40, 50];
-const BOSS_LEVELS = BOSS_LEVELS_ALL; // back-compat alias for existing UI references
-
-const SELL_REFUND_RATIO = 0.5; // tickets sell back for 50% of cost — hardcoded
-
-const STREAK_BONUS_CONSISTENCY = 10; // gold awarded every 10 days of consistency streak
-const STREAK_BONUS_POWER = 30;       // gold awarded every 10 days of power streak
+const BOSS_LEVELS = BOSS_LEVELS_ALL; // back-compat alias
 
 const DEFAULT_BOSSES = {
   health: {
@@ -196,8 +217,12 @@ function buildInitialState() {
     tickets: [],              // [{id, rewardId, name, desc, cost, purchasedAt, usedAt|null}]
     goldHistory: {},          // {[dateKey]: total gold earned that day}
     createdAt: Date.now(),    // for daily-average estimates
-    lastResetAt: 0,           // bumped whenever Settings > Reset is used; lets sync recognize intentional wipes
-    pendingBonuses: [],       // [{id, label, amount, at}] — queued streak-bonus notifications not yet shown
+    lastResetAt: 0,
+    pendingBonuses: [],
+    economy: { ...DEFAULT_ECONOMY },
+    challengeLibrary: [],
+    challengeSpawnChance: 10,
+    activeChallenge: null,
   };
 }
 
@@ -307,12 +332,14 @@ function formatEstimate(cost, avgPerDay) {
 
 // Inspect a daily log to determine streak status for that day.
 // Returns: 'power' | 'consistency' | 'partial' | 'none'
-function dayStatus(log) {
+function dayStatus(log, dailyGoal, consistencyMin) {
+  const dg = dailyGoal || DAILY_GOAL;
+  const cm = consistencyMin || CONSISTENCY_MIN;
   if (!log) return 'none';
   const hasAny = DOMAIN_KEYS.some(k => (log[k] || 0) > 0);
   if (!hasAny) return 'none';
-  const allMin = DOMAIN_KEYS.every(k => (log[k] || 0) >= CONSISTENCY_MIN);
-  const allFull = DOMAIN_KEYS.every(k => (log[k] || 0) >= DAILY_GOAL);
+  const allMin = DOMAIN_KEYS.every(k => (log[k] || 0) >= cm);
+  const allFull = DOMAIN_KEYS.every(k => (log[k] || 0) >= dg);
   if (allFull) return 'power';
   if (allMin) return 'consistency';
   return 'partial';
@@ -651,11 +678,19 @@ function RPGLife({ user, onSignOut }) {
     domainComputed[k] = computeProgression(state.domains[k].totalXp, state.bossCompletions, k, activeBossLevelsFor(state, k));
   });
 
-  function checkStreaks(next, dayLog) {
-    const allMinMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= CONSISTENCY_MIN);
-    const allFullMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= DAILY_GOAL);
+  function checkStreaks(next, dayLog, prev) {
+    const stateForEco = prev || next;
+    const consistencyMin = eco(stateForEco, 'consistencyMin');
+    const dailyGoal = eco(stateForEco, 'dailyGoal');
+    const streakEvery = eco(stateForEco, 'streakCoinsEvery') || 10;
+    const streakAmount = eco(stateForEco, 'streakCoinsAmount');
+    const powerEvery = eco(stateForEco, 'powerStreakCoinsEvery') || 10;
+    const powerAmount = eco(stateForEco, 'powerStreakCoinsAmount');
 
-    const bonuses = []; // { label, amount }
+    const allMinMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= consistencyMin);
+    const allFullMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= dailyGoal);
+
+    const bonuses = [];
 
     if (allMinMet && next.lastConsistencyDate !== today) {
       if (next.lastConsistencyDate === yesterdayKey()) {
@@ -667,8 +702,8 @@ function RPGLife({ user, onSignOut }) {
       }
       next.lastConsistencyDate = today;
 
-      if (next.consistencyStreak > 0 && next.consistencyStreak % 10 === 0) {
-        bonuses.push({ label: `${next.consistencyStreak}-day streak`, amount: STREAK_BONUS_CONSISTENCY });
+      if (next.consistencyStreak > 0 && next.consistencyStreak % streakEvery === 0) {
+        bonuses.push({ label: `${next.consistencyStreak}-day streak`, amount: streakAmount, type: 'streak' });
       }
     }
 
@@ -680,8 +715,8 @@ function RPGLife({ user, onSignOut }) {
       }
       next.lastPowerDate = today;
 
-      if (next.powerStreak > 0 && next.powerStreak % 10 === 0) {
-        bonuses.push({ label: `${next.powerStreak}-day power streak`, amount: STREAK_BONUS_POWER });
+      if (next.powerStreak > 0 && next.powerStreak % powerEvery === 0) {
+        bonuses.push({ label: `${next.powerStreak}-day power streak`, amount: powerAmount, type: 'power' });
       }
     }
 
@@ -690,8 +725,6 @@ function RPGLife({ user, onSignOut }) {
       next.gold = (next.gold || 0) + totalBonus;
       next.goldHistory = { ...(next.goldHistory || {}) };
       next.goldHistory[today] = (next.goldHistory[today] || 0) + totalBonus;
-      // Queue for the coin notification UI — picked up by an effect that shows
-      // the popup and lets the user click through to watch the count animate up.
       next.pendingBonuses = [...(next.pendingBonuses || []), ...bonuses.map(b => ({ ...b, id: uid('bonus'), at: Date.now() }))];
     }
 
@@ -709,17 +742,17 @@ function RPGLife({ user, onSignOut }) {
     }
 
     setState(prev => {
+      const dailyGoal = eco(prev, 'dailyGoal');
       const oldDayLog = (prev.dailyLogs[today] && prev.dailyLogs[today][activity.domain]) || 0;
-      // Only the portion of xpGain that keeps the daily meter ≤ DAILY_GOAL counts toward total/levels.
-      // The rest is "overflow" — visible in the meter as e.g. 127/100 but not stored as total XP.
-      const xpToTotal = Math.max(0, Math.min(xpGain, DAILY_GOAL - oldDayLog));
-      const xpOverflow = xpGain - xpToTotal;
+      // ALL XP counts toward total/levels — no cap. The daily meter is purely visual.
+      // xpOverflow is displayed on the meter (e.g. 127/100) but XP is never discarded.
+      const xpOverflow = Math.max(0, (oldDayLog + xpGain) - dailyGoal);
 
       const next = { ...prev };
       next.domains = { ...prev.domains };
       next.domains[activity.domain] = {
         ...next.domains[activity.domain],
-        totalXp: next.domains[activity.domain].totalXp + xpToTotal,
+        totalXp: next.domains[activity.domain].totalXp + xpGain,
       };
 
       next.dailyLogs = { ...prev.dailyLogs };
@@ -732,7 +765,7 @@ function RPGLife({ user, onSignOut }) {
         ...prev.activityLog,
       ].slice(0, 30);
 
-      return checkStreaks(next, dayLog);
+      return checkStreaks(next, dayLog, prev);
     });
 
     showToast(`+${xpGain} XP — ${activity.name}`);
@@ -823,16 +856,20 @@ function RPGLife({ user, onSignOut }) {
     setState(prev => ({ ...prev, quests: prev.quests.filter(q => q.id !== id) }));
   }
 
-  function completeBoss(domainKey, level) {
+  function completeBoss(domainKey, level, tier) {
     setState(prev => {
       const key = `${domainKey}-${level}`;
-      const bossCompletions = { ...prev.bossCompletions, [key]: true };
-      const gold = prev.gold + 75;
+      const bossCompletions = { ...prev.bossCompletions, [key]: { tier, completedAt: Date.now() } };
+      const isMiniGate = level % 10 !== 0;
+      const base = isMiniGate ? eco(prev, 'miniGateCoinBase') : eco(prev, 'bossCoinBase');
+      const multipliers = isMiniGate ? eco(prev, 'miniGateTierMultipliers') : eco(prev, 'gateTierMultipliers');
+      const mult = (multipliers && multipliers[tier]) || 1.0;
+      const goldGain = Math.round(base * mult);
       const goldHistory = { ...(prev.goldHistory || {}) };
-      goldHistory[today] = (goldHistory[today] || 0) + 75;
-      return { ...prev, bossCompletions, gold, goldHistory };
+      goldHistory[today] = (goldHistory[today] || 0) + goldGain;
+      return { ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory };
     });
-    showToast(`Boss defeated! Rank unlocked. +75 gold`);
+    showToast(`Boss defeated! Rank unlocked.`);
     setBossModal(null);
   }
 
@@ -929,23 +966,38 @@ function RPGLife({ user, onSignOut }) {
   }
 
   function resetDomain(domainKey) {
-    intentionalChangeUntil.current = Date.now() + 60000; // 60s window — other devices' old data shouldn't bounce back
+    intentionalChangeUntil.current = Date.now() + 60000;
     setState(prev => {
+      // Clear domain XP and level
       const domains = { ...prev.domains };
       domains[domainKey] = { totalXp: 0, level: 0, rank: 0, potentialRank: 0 };
-      // Clear today's daily log for this domain too, so the meter reads 0
-      const dailyLogs = { ...prev.dailyLogs };
-      if (dailyLogs[today]) {
-        const day = { ...dailyLogs[today] };
-        delete day[domainKey];
-        dailyLogs[today] = day;
-      }
+
+      // Clear ALL daily log entries for this domain (not just today)
+      const dailyLogs = {};
+      Object.entries(prev.dailyLogs).forEach(([dateKey, log]) => {
+        const newLog = { ...log };
+        delete newLog[domainKey];
+        if (Object.keys(newLog).length > 0) dailyLogs[dateKey] = newLog;
+      });
+
+      // Remove all activity log entries belonging to this domain
+      const activityLog = (prev.activityLog || []).filter(e => e.domain !== domainKey);
+
       // Wipe boss completions for this domain
       const bossCompletions = { ...prev.bossCompletions };
       Object.keys(bossCompletions).forEach(k => {
         if (k.startsWith(`${domainKey}-`)) delete bossCompletions[k];
       });
-      return { ...prev, domains, dailyLogs, bossCompletions, lastResetAt: Date.now() };
+
+      // Clear custom bosses for this domain
+      const customBosses = { ...(prev.customBosses || {}) };
+      delete customBosses[domainKey];
+
+      // Clear enabled boss gates for this domain (resets to default)
+      const enabledBosses = { ...(prev.enabledBosses || {}) };
+      delete enabledBosses[domainKey];
+
+      return { ...prev, domains, dailyLogs, activityLog, bossCompletions, customBosses, enabledBosses, lastResetAt: Date.now() };
     });
     setResetPrompt(null);
     showToast(`${DOMAINS[domainKey].name} reset`);
@@ -977,6 +1029,76 @@ function RPGLife({ user, onSignOut }) {
     setBossEditor(null);
     showToast('Boss challenges saved');
   }
+
+  function saveEconomy(newEconomy) {
+    setState(prev => ({ ...prev, economy: { ...(prev.economy || {}), ...newEconomy } }));
+    showToast('Economy settings saved');
+  }
+
+  // Quest benchmark actions
+  function saveChallengeLibrary(library) {
+    setState(prev => ({ ...prev, challengeLibrary: library }));
+  }
+
+  function saveSpawnChance(chance) {
+    setState(prev => ({ ...prev, challengeSpawnChance: chance }));
+  }
+
+  function completeChallenge() {
+    setState(prev => {
+      if (!prev.activeChallenge) return prev;
+      const ch = prev.activeChallenge;
+      const xpGain = ch.xp || 0;
+      const coinGain = ch.coins || 0;
+      const next = { ...prev };
+      next.domains = { ...prev.domains };
+      next.domains[ch.domain] = { ...next.domains[ch.domain], totalXp: next.domains[ch.domain].totalXp + xpGain };
+      next.gold = next.gold + coinGain;
+      next.goldHistory = { ...(next.goldHistory || {}) };
+      next.goldHistory[today] = (next.goldHistory[today] || 0) + coinGain;
+      next.activeChallenge = { ...ch, completedAt: Date.now(), revealed: true };
+      showToast(`Challenge complete! +${xpGain} XP, +${coinGain} coins`);
+      return next;
+    });
+  }
+
+  function dismissChallenge() {
+    setState(prev => ({ ...prev, activeChallenge: null }));
+  }
+
+  // Check and roll daily challenge on day open (run once per day per client)
+  const lastChallengeCheckRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !state) return;
+    if (lastChallengeCheckRef.current === today) return;
+    lastChallengeCheckRef.current = today;
+
+    // Expire yesterday's unfinished challenge
+    if (state.activeChallenge && state.activeChallenge.date !== today && !state.activeChallenge.completedAt) {
+      setState(prev => ({ ...prev, activeChallenge: null }));
+      return;
+    }
+
+    // Roll for new challenge only if no active challenge today
+    if (!state.activeChallenge || state.activeChallenge.date !== today) {
+      const library = state.challengeLibrary || [];
+      if (library.length === 0) return;
+      const chance = state.challengeSpawnChance || 0;
+      if (Math.random() * 100 < chance) {
+        const pick = library[Math.floor(Math.random() * library.length)];
+        const xpMin = eco(state, 'challengeXpMin');
+        const xpMax = eco(state, 'challengeXpMax');
+        const coinMin = eco(state, 'challengeCoinMin');
+        const coinMax = eco(state, 'challengeCoinMax');
+        const xp = Math.floor(Math.random() * (xpMax - xpMin + 1)) + xpMin;
+        const coins = Math.floor(Math.random() * (coinMax - coinMin + 1)) + coinMin;
+        setState(prev => ({
+          ...prev,
+          activeChallenge: { id: uid('ch'), libraryId: pick.id, name: pick.name, desc: pick.desc, domain: pick.domain, xp, coins, date: today, completedAt: null, revealed: false },
+        }));
+      }
+    }
+  }, [loaded, today]);
 
   return h('div', { style: styles.app },
     h('style', null, `
@@ -1025,7 +1147,7 @@ function RPGLife({ user, onSignOut }) {
       )
     ),
     h('main', { style: styles.main },
-      activeTab === 'dashboard' && h(Dashboard, { state, domainProgress, domainComputed, today, todayLog, onLogClick: setLogModal, onBossClick: setBossModal }),
+      activeTab === 'dashboard' && h(Dashboard, { state, domainProgress, domainComputed, today, todayLog, onLogClick: setLogModal, onBossClick: setBossModal, economy: state.economy, onCompleteChallenge: completeChallenge, onDismissChallenge: dismissChallenge }),
       activeTab === 'activities' && h(ActivitiesView, {
         state,
         onLog: setLogModal,
@@ -1051,6 +1173,9 @@ function RPGLife({ user, onSignOut }) {
         onResetAll: () => setResetPrompt('all'),
         onEditBoss: (domain, level) => setBossEditor({ domain, level }),
         onToggleGate: toggleBossGate,
+        onSaveEconomy: saveEconomy,
+        onSaveChallengeLibrary: saveChallengeLibrary,
+        onSaveSpawnChance: saveSpawnChance,
       })
     ),
     buyConfirm && h(BuyConfirmModal, {
@@ -1069,6 +1194,7 @@ function RPGLife({ user, onSignOut }) {
     streakCalendar && h(StreakCalendarModal, {
       mode: streakCalendar,
       dailyLogs: state.dailyLogs,
+      economy: state.economy,
       onClose: () => setStreakCalendar(null),
     }),
     resetPrompt && h(ResetConfirmModal, {
@@ -1105,8 +1231,9 @@ function RPGLife({ user, onSignOut }) {
       domainKey: bossModal.domain,
       level: bossModal.level,
       customBosses: state.customBosses,
+      economy: state.economy,
       onClose: () => setBossModal(null),
-      onComplete: () => completeBoss(bossModal.domain, bossModal.level),
+      onComplete: (tier) => completeBoss(bossModal.domain, bossModal.level, tier),
     })
   );
 }
@@ -1260,7 +1387,9 @@ function BonusRow({ bonus, onDismiss }) {
 
 // ---------- Dashboard ----------
 
-function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick }) {
+function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge }) {
+  const dailyGoal = eco({ economy }, 'dailyGoal');
+  const consistencyMin = eco({ economy }, 'consistencyMin');
   const availableBosses = [];
   DOMAIN_KEYS.forEach(k => {
     const comp = domainComputed[k];
@@ -1283,8 +1412,8 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
         DOMAIN_KEYS.map(k => {
           const d = DOMAINS[k];
           const earned = todayLog[k] || 0;
-          const pct = Math.round((earned / DAILY_GOAL) * 100);
-          const overflow = Math.max(0, earned - DAILY_GOAL);
+          const pct = Math.round((earned / dailyGoal) * 100);
+          const overflow = Math.max(0, earned - dailyGoal);
           const isOverflow = overflow > 0;
           return h('div', { key: k, style: styles.bigMeterCard },
             h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
@@ -1293,15 +1422,15 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
                 h('div', null,
                   h('div', { style: styles.bigMeterName }, d.name),
                   h('div', { style: styles.bigMeterSubName },
-                    earned >= CONSISTENCY_MIN
+                    earned >= consistencyMin
                       ? h('span', { style: { color: '#86efac' } }, isOverflow ? 'Overachieving today' : 'Minimum met')
-                      : h('span', null, `${CONSISTENCY_MIN - earned} XP to minimum`)
+                      : h('span', null, `${consistencyMin - earned} XP to minimum`)
                   )
                 )
               ),
               h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
                 h('span', { style: { ...styles.bigMeterValue, color: d.color } }, earned),
-                h('span', { style: { fontSize: 13, color: '#7c7c8a', fontWeight: 600 } }, `/ ${DAILY_GOAL}`),
+                h('span', { style: { fontSize: 13, color: '#7c7c8a', fontWeight: 600 } }, `/ ${dailyGoal}`),
                 isOverflow && h('span', { style: { ...styles.overflowBadge, color: d.color, borderColor: hexToRgba(d.color, 0.45), background: hexToRgba(d.color, 0.12), marginLeft: 4 } }, `+${overflow}`)
               )
             ),
@@ -1333,6 +1462,13 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
         )
       )
     ),
+
+    // Active random challenge (#10)
+    state.activeChallenge && h(ActiveChallengeCard, {
+      challenge: state.activeChallenge,
+      onComplete: onCompleteChallenge,
+      onDismiss: onDismissChallenge,
+    }),
 
     h('section', null,
       h(SectionLabel, { text: 'Quick log' }),
@@ -1472,10 +1608,12 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
   );
 }
 
-function QuestRow({ quest, onUpdateProgress, onDelete, compact }) {
+function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, compact }) {
   const d = DOMAINS[quest.domain];
   const daysLeft = quest.days - Math.floor((Date.now() - quest.createdAt) / (1000*60*60*24));
   const isComplete = quest.progress >= 100;
+  const checkpoints = quest.checkpoints || [];
+  const hasCheckpoints = checkpoints.length > 0;
 
   return h('div', { style: styles.questCard },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 } },
@@ -1499,7 +1637,38 @@ function QuestRow({ quest, onUpdateProgress, onDelete, compact }) {
     h('div', { style: { ...styles.meterTrack, marginTop: 8 } },
       h('div', { style: { ...styles.meterFill, width: `${quest.progress}%`, background: isComplete ? '#fbbf24' : d.color } })
     ),
-    onUpdateProgress && !isComplete && h('input', {
+    // Checkpoints — primary progress method when present
+    !compact && hasCheckpoints && h('div', { style: { marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 } },
+      checkpoints.map(cp =>
+        h('button', {
+          key: cp.id,
+          className: 'rpg-btn',
+          onClick: () => onToggleCheckpoint && !isComplete && onToggleCheckpoint(quest.id, cp.id),
+          style: {
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'transparent', border: 'none', padding: '4px 0',
+            cursor: isComplete ? 'default' : 'pointer', textAlign: 'left',
+          },
+        },
+          h('div', { style: {
+            width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+            border: `2px solid ${cp.done ? d.color : '#3a3a4a'}`,
+            background: cp.done ? hexToRgba(d.color, 0.2) : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }},
+            cp.done && h(Icon, { name: 'check', size: 11, color: d.color })
+          ),
+          h('span', { style: { fontSize: 13, color: cp.done ? '#7c7c8a' : '#e5e7eb', textDecoration: cp.done ? 'line-through' : 'none' } },
+            cp.name
+          ),
+          cp.estimatedDays && h('span', { style: { fontSize: 11, color: '#5e5e6b', marginLeft: 'auto' } },
+            `~${cp.estimatedDays}d`
+          )
+        )
+      )
+    ),
+    // Manual slider — only shown when no checkpoints
+    !compact && !hasCheckpoints && onUpdateProgress && !isComplete && h('input', {
       type: 'range', min: 0, max: 100, value: quest.progress,
       onChange: (e) => onUpdateProgress(quest.id, parseInt(e.target.value)),
       style: { width: '100%', marginTop: 8, accentColor: d.color },
@@ -1856,20 +2025,47 @@ function QuestFormModal({ onClose, onSave }) {
   const [domain, setDomain] = useState('health');
   const [days, setDays] = useState('30');
   const [xpReward, setXpReward] = useState(100);
+  const [checkpoints, setCheckpoints] = useState([]);
+  const [newCpName, setNewCpName] = useState('');
+  const [newCpDays, setNewCpDays] = useState('');
 
   const daysNum = parseInt(days, 10);
   const daysValid = !isNaN(daysNum) && daysNum >= 1;
+  const canSave = name.trim() && daysValid;
 
-  function handleSave() {
-    if (!name.trim() || !daysValid) return;
-    onSave({ name: name.trim(), desc: desc.trim(), domain, days: daysNum, xpReward });
+  function addCheckpoint() {
+    if (!newCpName.trim()) return;
+    setCheckpoints(prev => [...prev, {
+      id: `cp_${Date.now()}`,
+      name: newCpName.trim(),
+      estimatedDays: parseInt(newCpDays) || null,
+      done: false,
+    }]);
+    setNewCpName('');
+    setNewCpDays('');
   }
 
-  return h(ModalShell, { title: 'New quest', onClose },
+  function removeCheckpoint(id) {
+    setCheckpoints(prev => prev.filter(c => c.id !== id));
+  }
+
+  function handleSave() {
+    if (!canSave) return;
+    onSave({
+      name: name.trim(),
+      desc: desc.trim(),
+      domain,
+      days: daysNum,
+      xpReward,
+      checkpoints: checkpoints.length > 0 ? checkpoints : [],
+    });
+  }
+
+  return h(ModalShell, { title: 'New quest', onClose, width: 480 },
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
       h('div', null,
         h('label', { style: styles.label }, 'Quest name'),
-        h('input', { value: name, onChange: e => setName(e.target.value), style: styles.input, placeholder: 'e.g. Finish anatomy course' })
+        h('input', { value: name, onChange: e => setName(e.target.value), style: styles.input, placeholder: 'e.g. Finish RPG Maker course' })
       ),
       h('div', null,
         h('label', { style: styles.label }, 'Description'),
@@ -1885,22 +2081,61 @@ function QuestFormModal({ onClose, onSave }) {
         h('div', { style: { flex: 1 } },
           h('label', { style: styles.label }, 'Deadline (days)'),
           h('input', {
-            type: 'number', value: days, min: 1,
-            onChange: e => setDays(e.target.value),
-            style: { ...styles.input, ...(daysValid ? {} : { borderColor: 'rgba(226,75,74,0.5)' }) },
+            // #2 fix: text input + inputMode so backspace works naturally on mobile
+            type: 'text',
+            inputMode: 'numeric',
+            value: days,
+            onChange: e => setDays(e.target.value.replace(/[^0-9]/g, '')),
+            style: { ...styles.input, ...(days !== '' && !daysValid ? { borderColor: 'rgba(226,75,74,0.5)' } : {}) },
             placeholder: 'e.g. 30',
           }),
-          !daysValid && h('div', { style: { fontSize: 11, color: '#f09595', marginTop: 4 } }, 'Enter at least 1 day')
+          days !== '' && !daysValid && h('div', { style: { fontSize: 11, color: '#f09595', marginTop: 4 } }, 'Enter at least 1 day')
         )
       ),
       h('div', null,
         h('label', { style: styles.label }, 'XP reward on completion'),
         h('input', { type: 'number', value: xpReward, min: 0, onChange: e => setXpReward(parseInt(e.target.value)||0), style: styles.input })
       ),
+
+      // Checkpoints (#5/#6) — optional; if none are added, manual slider is used
+      h('div', null,
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+          h('label', { style: styles.label }, `Milestones / checkpoints (optional)`),
+          checkpoints.length > 0 && h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, 'Progress driven by checkmarks')
+        ),
+        checkpoints.length === 0 && h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginBottom: 8 } },
+          'Add checkpoints for structured quests. Leave empty to use a manual % slider.'
+        ),
+        checkpoints.length > 0 && h('div', { style: { display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 } },
+          checkpoints.map((cp, i) =>
+            h('div', { key: cp.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#0e0e14', borderRadius: 8 } },
+              h('span', { style: { fontSize: 12.5, color: '#d1d5db', flex: 1 } }, cp.name),
+              cp.estimatedDays && h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, `~${cp.estimatedDays}d`),
+              h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeCheckpoint(cp.id) }, h(Icon, { name: 'x', size: 11 }))
+            )
+          )
+        ),
+        h('div', { style: { display: 'flex', gap: 6 } },
+          h('input', {
+            value: newCpName, onChange: e => setNewCpName(e.target.value),
+            onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addCheckpoint(); } },
+            style: { ...styles.input, flex: 2 }, placeholder: 'Checkpoint name',
+          }),
+          h('input', {
+            value: newCpDays, onChange: e => setNewCpDays(e.target.value.replace(/[^0-9]/g, '')),
+            style: { ...styles.input, flex: 1 }, placeholder: 'Days',
+            inputMode: 'numeric', type: 'text',
+          }),
+          h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, flexShrink: 0 }, onClick: addCheckpoint, title: 'Add checkpoint' },
+            h(Icon, { name: 'plus', size: 14 })
+          )
+        )
+      ),
+
       h('button', {
         className: 'rpg-btn',
-        disabled: !name.trim() || !daysValid,
-        style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0', opacity: (!name.trim() || !daysValid) ? 0.5 : 1, cursor: (!name.trim() || !daysValid) ? 'not-allowed' : 'pointer' },
+        disabled: !canSave,
+        style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0', opacity: !canSave ? 0.5 : 1, cursor: !canSave ? 'not-allowed' : 'pointer' },
         onClick: handleSave,
       }, h(Icon, { name: 'check', size: 14 }), ' Create quest')
     )
@@ -1936,30 +2171,140 @@ function RewardFormModal({ reward, onClose, onSave }) {
   );
 }
 
-function BossModal({ domainKey, level, customBosses, onClose, onComplete }) {
+function BossModal({ domainKey, level, customBosses, economy, onClose, onComplete }) {
   const d = DOMAINS[domainKey];
   const custom = customBosses && customBosses[domainKey] && customBosses[domainKey][level];
   const bosses = (custom && custom.filter(c => c && c.trim()).length > 0)
     ? custom.filter(c => c && c.trim())
     : ((DEFAULT_BOSSES[domainKey] && DEFAULT_BOSSES[domainKey][level]) || ['Complete a milestone challenge']);
 
-  return h(ModalShell, { title: `${d.name} — boss battle: level ${level}`, onClose, width: 440 },
+  const isMiniGate = level % 10 !== 0;
+  const tiers = isMiniGate
+    ? [
+        { id: 'C', label: 'C Tier', desc: 'Completed with difficulty', mult: (economy && economy.miniGateTierMultipliers && economy.miniGateTierMultipliers.C) || 0.75 },
+        { id: 'B', label: 'B Tier', desc: 'Solid completion', mult: (economy && economy.miniGateTierMultipliers && economy.miniGateTierMultipliers.B) || 1.0 },
+        { id: 'A', label: 'A Tier', desc: 'Excellent execution', mult: (economy && economy.miniGateTierMultipliers && economy.miniGateTierMultipliers.A) || 1.5 },
+      ]
+    : [
+        { id: 'B', label: 'B Tier', desc: 'Completed the challenge', mult: (economy && economy.gateTierMultipliers && economy.gateTierMultipliers.B) || 1.0 },
+        { id: 'A', label: 'A Tier', desc: 'Went above and beyond', mult: (economy && economy.gateTierMultipliers && economy.gateTierMultipliers.A) || 1.5 },
+        { id: 'S', label: 'S Tier', desc: 'Exceptional — exceeded all expectations', mult: (economy && economy.gateTierMultipliers && economy.gateTierMultipliers.S) || 2.0 },
+      ];
+
+  const base = isMiniGate
+    ? eco({ economy }, 'miniGateCoinBase')
+    : eco({ economy }, 'bossCoinBase');
+
+  const [selectedTier, setSelectedTier] = useState(null);
+  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
+
+  return h(ModalShell, { title: `${d.name} — ${isMiniGate ? 'mini gate' : 'boss battle'}: level ${level}`, onClose, width: 460 },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
-      h('div', { style: { ...styles.bossIcon, background: d.dark900, borderColor: d.dark600, width: 40, height: 40 } }, h(Icon, { name: 'trophy', size: 20, color: '#fbbf24' })),
-      h('div', { style: { fontSize: 13, color: '#9ca3af' } }, "Your XP is high enough for the next rank, but it's gated until you defeat one of these challenges.")
+      h('div', { style: { ...styles.bossIcon, background: d.dark900, borderColor: d.dark600, width: 40, height: 40 } },
+        h(Icon, { name: 'trophy', size: 20, color: '#fbbf24' })
+      ),
+      h('div', { style: { fontSize: 13, color: '#9ca3af' } },
+        "Complete one of these challenges, then rate how well you did to determine your coin reward."
+      )
     ),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 } },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 } },
       bosses.map((b,i) => h('div', { key: i, style: styles.bossChallenge },
         h(Icon, { name: 'target', size: 14, color: d.color }),
         h('span', { style: { fontSize: 13, color: '#d1d5db' } }, b)
       ))
     ),
-    custom && h('div', { style: { fontSize: 11, color: '#7c7c8a', marginBottom: 10, textAlign: 'center' } }, 'Your custom challenges'),
+    h('div', null,
+      h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginBottom: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 } },
+        'Rate your completion'
+      ),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 } },
+        tiers.map(t => {
+          const coinReward = Math.round(base * t.mult);
+          const isSelected = selectedTier === t.id;
+          const color = tierColors[t.id] || '#9ca3af';
+          return h('button', {
+            key: t.id,
+            className: 'rpg-btn',
+            onClick: () => setSelectedTier(t.id),
+            style: {
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+              background: isSelected ? hexToRgba(color, 0.12) : '#0e0e14',
+              border: `2px solid ${isSelected ? color : '#2a2a35'}`,
+              borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
+            },
+          },
+            h('div', { style: { fontWeight: 800, fontSize: 16, color, minWidth: 28 } }, t.id),
+            h('div', { style: { flex: 1, textAlign: 'left' } },
+              h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, t.label),
+              h('div', { style: { fontSize: 11.5, color: '#9ca3af' } }, t.desc)
+            ),
+            h('div', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
+              h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }), ` ${coinReward}`
+            )
+          );
+        })
+      )
+    ),
     h('button', {
       className: 'rpg-btn',
-      style: { ...styles.primaryBtn, width: '100%', justifyContent: 'center', padding: '10px 0', background: 'rgba(251,191,36,0.15)', borderColor: '#fbbf24', color: '#fbbf24' },
-      onClick: onComplete,
-    }, h(Icon, { name: 'trophy', size: 14 }), ' Mark boss defeated')
+      disabled: !selectedTier,
+      style: {
+        ...styles.primaryBtn, width: '100%', justifyContent: 'center', padding: '11px 0',
+        background: selectedTier ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.04)',
+        borderColor: selectedTier ? '#fbbf24' : '#2a2a35',
+        color: selectedTier ? '#fbbf24' : '#5e5e6b',
+        cursor: selectedTier ? 'pointer' : 'not-allowed',
+        opacity: selectedTier ? 1 : 0.6,
+      },
+      onClick: () => selectedTier && onComplete(selectedTier),
+    }, h(Icon, { name: 'trophy', size: 14 }), selectedTier ? ` Confirm ${selectedTier} completion` : ' Select a tier first')
+  );
+}
+
+// ---------- Active Challenge Card (#10) ----------
+
+function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
+  const d = DOMAINS[challenge.domain] || DOMAINS.health;
+  const isCompleted = !!challenge.completedAt;
+  const isRevealed = !!challenge.revealed;
+
+  return h('section', null,
+    h('div', { style: {
+      background: `linear-gradient(135deg, ${hexToRgba(d.color, 0.12)}, ${hexToRgba(d.color, 0.04)})`,
+      border: `1px solid ${hexToRgba(d.color, 0.35)}`,
+      borderRadius: 12, padding: '14px 16px', position: 'relative',
+    }},
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
+        h(Icon, { name: 'zap', size: 14, color: d.color }),
+        h('span', { style: { fontSize: 11, fontWeight: 700, color: d.color, textTransform: 'uppercase', letterSpacing: 1 } },
+          isCompleted ? 'Challenge complete!' : 'Daily challenge'
+        ),
+        !isCompleted && h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, position: 'absolute', top: 12, right: 12, width: 24, height: 24 }, onClick: onDismiss, title: 'Dismiss' },
+          h(Icon, { name: 'x', size: 11 })
+        )
+      ),
+      h('div', { style: { fontSize: 15, fontWeight: 700, color: '#f4f1ea', marginBottom: 4 } }, challenge.name),
+      challenge.desc && h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 10 } }, challenge.desc),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+        isCompleted && isRevealed
+          ? h('div', { style: { display: 'flex', gap: 16 } },
+              h('div', { style: { fontSize: 13, fontWeight: 700, color: d.color } }, `+${challenge.xp} XP`),
+              h('div', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
+                h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }), ` +${challenge.coins}`
+              ),
+              h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: onDismiss, title: 'Dismiss' },
+                h(Icon, { name: 'x', size: 12 })
+              )
+            )
+          : h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+              h('div', { style: { fontSize: 12, color: '#7c7c8a' } }, 'Reward: '),
+              h('div', { style: { fontSize: 13, fontWeight: 700, color: '#7c7c8a' } }, '??? XP + ??? coins'),
+              h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, marginLeft: 'auto', padding: '6px 14px', background: hexToRgba(d.color, 0.15), borderColor: d.color, color: d.color }, onClick: onComplete },
+                h(Icon, { name: 'check', size: 13 }), ' Complete'
+              )
+            )
+      )
+    )
   );
 }
 
@@ -2010,7 +2355,7 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
 
 // ---------- Streak calendar ----------
 
-function StreakCalendarModal({ mode, dailyLogs, onClose }) {
+function StreakCalendarModal({ mode, dailyLogs, economy, onClose }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const now = new Date();
   const viewDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
@@ -2026,7 +2371,7 @@ function StreakCalendarModal({ mode, dailyLogs, onClose }) {
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const log = dailyLogs[key];
-    const status = dayStatus(log);
+    const status = dayStatus(log, eco({ economy }, 'dailyGoal'), eco({ economy }, 'consistencyMin'));
     cells.push({ day: d, status, key, isToday: key === todayKeyStr });
   }
 
@@ -2216,7 +2561,7 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
   );
 }
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate }) {
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
@@ -2327,6 +2672,208 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
         style: { ...styles.dangerBtn, width: '100%', justifyContent: 'center', padding: '12px 0', fontSize: 13 },
         onClick: onResetAll,
       }, h(Icon, { name: 'trash2', size: 14 }), ' Reset entire character')
+    ),
+
+    h(EconomySettingsSection, { state, onSave: onSaveEconomy }),
+    h(ChallengeLibrarySection, { state, onSaveLibrary: onSaveChallengeLibrary, onSaveSpawnChance })
+  );
+}
+
+// ---------- Economy Settings (#7) ----------
+
+function EconomySettingsSection({ state, onSave }) {
+  const e = state.economy || DEFAULT_ECONOMY;
+  const [vals, setVals] = useState({ ...DEFAULT_ECONOMY, ...e });
+  const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  function set(key, val) { setVals(v => ({ ...v, [key]: val })); setSaved(false); }
+  function setMult(tier, group, val) {
+    setVals(v => ({ ...v, [group]: { ...(v[group] || {}), [tier]: parseFloat(val) || 0 } }));
+    setSaved(false);
+  }
+  function setNum(key, val) { set(key, parseFloat(val) || 0); }
+
+  function handleSave() {
+    onSave(vals);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return h('section', { style: { marginBottom: 24 } },
+    h('button', {
+      className: 'rpg-btn',
+      onClick: () => setOpen(o => !o),
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb' },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h(Icon, { name: 'coins', size: 16, color: '#fbbf24' }),
+        h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, 'Economy & rewards config')
+      ),
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' }))
+    ),
+    open && h('div', { style: { background: '#1a1a24', border: '1px solid #2a2a35', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
+
+      h(EcoGroup, { label: 'Daily progression' },
+        h(EcoField, { label: 'Daily XP goal per domain', value: vals.dailyGoal, onChange: v => setNum('dailyGoal', v) }),
+        h(EcoField, { label: 'Consistency minimum XP', value: vals.consistencyMin, onChange: v => setNum('consistencyMin', v) })
+      ),
+
+      h(EcoGroup, { label: 'Streak bonuses' },
+        h(EcoField, { label: 'Award coins every N consistency days', value: vals.streakCoinsEvery, onChange: v => setNum('streakCoinsEvery', v) }),
+        h(EcoField, { label: 'Coins per consistency milestone', value: vals.streakCoinsAmount, onChange: v => setNum('streakCoinsAmount', v) }),
+        h(EcoField, { label: 'Award coins every N power days', value: vals.powerStreakCoinsEvery, onChange: v => setNum('powerStreakCoinsEvery', v) }),
+        h(EcoField, { label: 'Coins per power streak milestone', value: vals.powerStreakCoinsAmount, onChange: v => setNum('powerStreakCoinsAmount', v) })
+      ),
+
+      h(EcoGroup, { label: 'Quest & boss rewards' },
+        h(EcoField, { label: 'Quest coin ratio (coins = XP × ratio)', value: vals.questCoinRatio, onChange: v => setNum('questCoinRatio', v), step: 0.01 }),
+        h(EcoField, { label: 'Normal gate base coins (×10, 20, 30…)', value: vals.bossCoinBase, onChange: v => setNum('bossCoinBase', v) }),
+        h(EcoField, { label: 'Mini gate base coins (×5, 15, 25…)', value: vals.miniGateCoinBase, onChange: v => setNum('miniGateCoinBase', v) })
+      ),
+
+      h(EcoGroup, { label: 'Normal gate tier multipliers (B / A / S)' },
+        h('div', { style: { display: 'flex', gap: 8 } },
+          ['B', 'A', 'S'].map(t =>
+            h('div', { key: t, style: { flex: 1 } },
+              h('label', { style: { ...styles.label, color: { B: '#60a5fa', A: '#34d399', S: '#fbbf24' }[t] } }, `${t} ×`),
+              h('input', { type: 'number', step: 0.1, value: (vals.gateTierMultipliers || {})[t] || '', onChange: e => setMult(t, 'gateTierMultipliers', e.target.value), style: styles.input })
+            )
+          )
+        )
+      ),
+
+      h(EcoGroup, { label: 'Mini gate tier multipliers (C / B / A)' },
+        h('div', { style: { display: 'flex', gap: 8 } },
+          ['C', 'B', 'A'].map(t =>
+            h('div', { key: t, style: { flex: 1 } },
+              h('label', { style: { ...styles.label, color: { C: '#9ca3af', B: '#60a5fa', A: '#34d399' }[t] } }, `${t} ×`),
+              h('input', { type: 'number', step: 0.1, value: (vals.miniGateTierMultipliers || {})[t] || '', onChange: e => setMult(t, 'miniGateTierMultipliers', e.target.value), style: styles.input })
+            )
+          )
+        )
+      ),
+
+      h(EcoGroup, { label: 'Random challenge reward ranges' },
+        h('div', { style: { display: 'flex', gap: 8 } },
+          h('div', { style: { flex: 1 } },
+            h('label', { style: styles.label }, 'XP min'),
+            h('input', { type: 'number', value: vals.challengeXpMin, onChange: e => setNum('challengeXpMin', e.target.value), style: styles.input })
+          ),
+          h('div', { style: { flex: 1 } },
+            h('label', { style: styles.label }, 'XP max'),
+            h('input', { type: 'number', value: vals.challengeXpMax, onChange: e => setNum('challengeXpMax', e.target.value), style: styles.input })
+          ),
+          h('div', { style: { flex: 1 } },
+            h('label', { style: styles.label }, 'Coin min'),
+            h('input', { type: 'number', value: vals.challengeCoinMin, onChange: e => setNum('challengeCoinMin', e.target.value), style: styles.input })
+          ),
+          h('div', { style: { flex: 1 } },
+            h('label', { style: styles.label }, 'Coin max'),
+            h('input', { type: 'number', value: vals.challengeCoinMax, onChange: e => setNum('challengeCoinMax', e.target.value), style: styles.input })
+          )
+        )
+      ),
+
+      h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave },
+        h(Icon, { name: 'check', size: 14 }), saved ? ' Saved!' : ' Save economy settings'
+      )
+    )
+  );
+}
+
+function EcoGroup({ label, children }) {
+  return h('div', null,
+    h('div', { style: { fontSize: 11.5, color: '#7c7c8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 } }, label),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }, children)
+  );
+}
+
+function EcoField({ label, value, onChange, step }) {
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+    h('label', { style: { ...styles.label, flex: 1, margin: 0, color: '#9ca3af' } }, label),
+    h('input', { type: 'number', step: step || 1, value, onChange: e => onChange(e.target.value), style: { ...styles.input, width: 80, flex: 'none', textAlign: 'right' } })
+  );
+}
+
+// ---------- Challenge Library (#10) ----------
+
+function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
+  const [open, setOpen] = useState(false);
+  const [library, setLibrary] = useState(state.challengeLibrary || []);
+  const [spawnChance, setSpawnChance] = useState(state.challengeSpawnChance || 10);
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newDomain, setNewDomain] = useState('health');
+
+  function addChallenge() {
+    if (!newName.trim()) return;
+    const updated = [...library, { id: uid('chal'), name: newName.trim(), desc: newDesc.trim(), domain: newDomain }];
+    setLibrary(updated);
+    onSaveLibrary(updated);
+    setNewName(''); setNewDesc('');
+  }
+
+  function removeChallenge(id) {
+    const updated = library.filter(c => c.id !== id);
+    setLibrary(updated);
+    onSaveLibrary(updated);
+  }
+
+  return h('section', { style: { marginBottom: 24 } },
+    h('button', {
+      className: 'rpg-btn',
+      onClick: () => setOpen(o => !o),
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb' },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h(Icon, { name: 'zap', size: 16, color: '#a78bfa' }),
+        h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, 'Random challenges'),
+        h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, `· ${library.length} in library`)
+      ),
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' }))
+    ),
+    open && h('div', { style: { background: '#1a1a24', border: '1px solid #2a2a35', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
+
+      h('div', null,
+        h('label', { style: styles.label }, 'Daily spawn chance'),
+        h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+          [1, 5, 10, 25, 50].map(pct =>
+            h('button', { key: pct, className: 'rpg-btn', onClick: () => { setSpawnChance(pct); onSaveSpawnChance(pct); },
+              style: { ...styles.filterChip, ...(spawnChance === pct ? { background: 'rgba(167,139,250,0.18)', borderColor: '#a78bfa', color: '#c4b5fd' } : {}) }
+            }, `${pct}%`)
+          )
+        )
+      ),
+
+      h('div', null,
+        h('div', { style: { ...styles.label, marginBottom: 8 } }, `Challenge library (${library.length})`),
+        library.length === 0
+          ? h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 8 } }, 'No challenges yet. Add some below.')
+          : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 } },
+              library.map(c => {
+                const d = DOMAINS[c.domain];
+                return h('div', { key: c.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#0e0e14', borderRadius: 8 } },
+                  h(Icon, { name: d.icon, size: 13, color: d.color }),
+                  h('div', { style: { flex: 1 } },
+                    h('div', { style: { fontSize: 13, color: '#e5e7eb' } }, c.name),
+                    c.desc && h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, c.desc)
+                  ),
+                  h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeChallenge(c.id) }, h(Icon, { name: 'trash2', size: 12 }))
+                );
+              })
+            ),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, padding: '10px', background: '#0e0e14', borderRadius: 8 } },
+          h('input', { value: newName, onChange: e => setNewName(e.target.value), style: styles.input, placeholder: 'Challenge name (e.g. Call an old friend)' }),
+          h('textarea', { value: newDesc, onChange: e => setNewDesc(e.target.value), style: { ...styles.input, minHeight: 44, resize: 'vertical' }, placeholder: 'Description (optional)' }),
+          h('select', { value: newDomain, onChange: e => setNewDomain(e.target.value), style: styles.input },
+            DOMAIN_KEYS.map(k => h('option', { key: k, value: k }, DOMAINS[k].name))
+          ),
+          h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '8px 0' }, onClick: addChallenge },
+            h(Icon, { name: 'plus', size: 14 }), ' Add challenge'
+          )
+        )
+      )
     )
   );
 }
