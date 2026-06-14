@@ -52,6 +52,45 @@ function friendlyError(err) {
   return (err && err.message) || 'Something went wrong.';
 }
 
+// Firestore does not support nested arrays (arrays-of-arrays).
+// Duration XP curves are stored as [[minutes, xp], ...] in app memory,
+// which Firestore rejects. We convert to/from [{m, x}, ...] at the
+// Firestore boundary — transparently, so the rest of the app is unchanged.
+
+function encodeState(state) {
+  if (!state || !state.activities) return state;
+  return {
+    ...state,
+    activities: state.activities.map(act => {
+      if (act.type !== 'duration' || !Array.isArray(act.curve)) return act;
+      return {
+        ...act,
+        curve: act.curve.map(point =>
+          Array.isArray(point) ? { m: point[0], x: point[1] } : point
+        ),
+      };
+    }),
+  };
+}
+
+function decodeState(state) {
+  if (!state || !state.activities) return state;
+  return {
+    ...state,
+    activities: state.activities.map(act => {
+      if (act.type !== 'duration' || !Array.isArray(act.curve)) return act;
+      return {
+        ...act,
+        curve: act.curve.map(point =>
+          (point && typeof point === 'object' && 'm' in point)
+            ? [point.m, point.x]
+            : point
+        ),
+      };
+    }),
+  };
+}
+
 const RPGLifeSync = {
   isConfigured() {
     return !window.__RPGLIFE_NEEDS_CONFIG__ && !window.__RPGLIFE_INIT_ERROR__;
@@ -91,7 +130,7 @@ const RPGLifeSync = {
       const snap = await getDoc(doc(db, 'users', uid));
       if (snap.exists()) {
         const data = snap.data();
-        return { state: data.state || null, updatedAt: data.updatedAt || 0 };
+        return { state: decodeState(data.state) || null, updatedAt: data.updatedAt || 0 };
       }
       return { state: null, updatedAt: 0 };
     } catch (e) {
@@ -100,11 +139,10 @@ const RPGLifeSync = {
     }
   },
   async saveState(uid, state) {
-    // Inner function so we can retry once on transient errors (e.g. tab
-    // manager negotiation briefly blocking writes when multiple clients open)
+    const encoded = encodeState(state);
     async function attempt() {
       await setDoc(doc(db, 'users', uid), {
-        state,
+        state: encoded,
         updatedAt: Date.now(),
       }, { merge: true });
     }
@@ -135,7 +173,7 @@ const RPGLifeSync = {
     return onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        callback(data.state || null, data.updatedAt || 0);
+        callback(decodeState(data.state) || null, data.updatedAt || 0);
       } else {
         callback(null, 0);
       }
