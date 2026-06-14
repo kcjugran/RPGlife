@@ -3354,5 +3354,17 @@ const styles = {
 
 // ---------- Render ----------
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(h(AuthGate));
+// sync.js loads as an ES module (deferred) while app.js is a classic script
+// (runs immediately). We must not call createRoot until sync.js has finished
+// initialising and dispatched 'rpglife-sync-ready'. If it already fired
+// (unlikely but possible), RPGLifeSync will already be on window.
+function startApp() {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(h(AuthGate));
+}
+
+if (window.RPGLifeSync) {
+  startApp();
+} else {
+  window.addEventListener('rpglife-sync-ready', startApp, { once: true });
+}
