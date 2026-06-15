@@ -2173,32 +2173,45 @@ function RewardFormModal({ reward, onClose, onSave }) {
   );
 }
 
+// Helper: normalize challenges to [{name, tier}] format. Handles:
+// - Old format: ['string', 'string', 'string'] → assigns default tiers
+// - New format: [{name, tier}, ...] → passes through
+// - DEFAULT_BOSSES (string arrays) → assigns default tiers
+function normalizeChallenges(raw, isMiniGate) {
+  const defaultTiers = isMiniGate ? ['C', 'B', 'A'] : ['B', 'A', 'S'];
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw.map((c, i) => {
+    if (typeof c === 'string') {
+      return { name: c, tier: defaultTiers[i] || defaultTiers[defaultTiers.length - 1] };
+    }
+    if (c && typeof c === 'object' && c.name) {
+      return { name: c.name, tier: c.tier || defaultTiers[i] || 'B' };
+    }
+    return { name: '', tier: defaultTiers[i] || 'B' };
+  }).filter(c => c.name && c.name.trim());
+}
+
 function BossModal({ domainKey, level, customBosses, economy, onClose, onComplete }) {
   const d = DOMAINS[domainKey];
-  const custom = customBosses && customBosses[domainKey] && customBosses[domainKey][level];
-  const bosses = (custom && custom.filter(c => c && c.trim()).length > 0)
-    ? custom.filter(c => c && c.trim())
-    : ((DEFAULT_BOSSES[domainKey] && DEFAULT_BOSSES[domainKey][level]) || ['Complete a milestone challenge']);
-
   const isMiniGate = level % 10 !== 0;
-  const tiers = isMiniGate
-    ? [
-        { id: 'C', label: 'C Tier', desc: 'Completed with difficulty', mult: (economy && economy.miniGateTierMultipliers && economy.miniGateTierMultipliers.C) || 0.75 },
-        { id: 'B', label: 'B Tier', desc: 'Solid completion', mult: (economy && economy.miniGateTierMultipliers && economy.miniGateTierMultipliers.B) || 1.0 },
-        { id: 'A', label: 'A Tier', desc: 'Excellent execution', mult: (economy && economy.miniGateTierMultipliers && economy.miniGateTierMultipliers.A) || 1.5 },
-      ]
-    : [
-        { id: 'B', label: 'B Tier', desc: 'Completed the challenge', mult: (economy && economy.gateTierMultipliers && economy.gateTierMultipliers.B) || 1.0 },
-        { id: 'A', label: 'A Tier', desc: 'Went above and beyond', mult: (economy && economy.gateTierMultipliers && economy.gateTierMultipliers.A) || 1.5 },
-        { id: 'S', label: 'S Tier', desc: 'Exceptional — exceeded all expectations', mult: (economy && economy.gateTierMultipliers && economy.gateTierMultipliers.S) || 2.0 },
-      ];
+
+  // Get custom or default challenges, normalized to [{name, tier}]
+  const custom = customBosses && customBosses[domainKey] && customBosses[domainKey][level];
+  const defaultRaw = (DEFAULT_BOSSES[domainKey] && DEFAULT_BOSSES[domainKey][level]) || ['Complete a milestone challenge'];
+  const challenges = custom && custom.length > 0
+    ? normalizeChallenges(custom, isMiniGate)
+    : normalizeChallenges(defaultRaw, isMiniGate);
 
   const base = isMiniGate
     ? eco({ economy }, 'miniGateCoinBase')
     : eco({ economy }, 'bossCoinBase');
 
-  const [selectedTier, setSelectedTier] = useState(null);
+  const multipliers = isMiniGate
+    ? (economy && economy.miniGateTierMultipliers) || DEFAULT_ECONOMY.miniGateTierMultipliers
+    : (economy && economy.gateTierMultipliers) || DEFAULT_ECONOMY.gateTierMultipliers;
+
   const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
+  const [selectedIdx, setSelectedIdx] = useState(null);
 
   return h(ModalShell, { title: `${d.name} — ${isMiniGate ? 'mini gate' : 'boss battle'}: level ${level}`, onClose, width: 460 },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
@@ -2206,60 +2219,63 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
         h(Icon, { name: 'trophy', size: 20, color: '#fbbf24' })
       ),
       h('div', { style: { fontSize: 13, color: '#9ca3af' } },
-        "Complete one of these challenges, then rate how well you did to determine your coin reward."
+        'Pick which challenge you completed. The tier and coin reward are shown on each.'
       )
     ),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 } },
-      bosses.map((b,i) => h('div', { key: i, style: styles.bossChallenge },
-        h(Icon, { name: 'target', size: 14, color: d.color }),
-        h('span', { style: { fontSize: 13, color: '#d1d5db' } }, b)
-      ))
-    ),
-    h('div', null,
-      h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginBottom: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 } },
-        'Rate your completion'
-      ),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 } },
-        tiers.map(t => {
-          const coinReward = Math.round(base * t.mult);
-          const isSelected = selectedTier === t.id;
-          const color = tierColors[t.id] || '#9ca3af';
-          return h('button', {
-            key: t.id,
-            className: 'rpg-btn',
-            onClick: () => setSelectedTier(t.id),
-            style: {
-              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-              background: isSelected ? hexToRgba(color, 0.12) : '#0e0e14',
-              border: `2px solid ${isSelected ? color : '#2a2a35'}`,
-              borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
-            },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 } },
+      challenges.map((ch, i) => {
+        const mult = (multipliers && multipliers[ch.tier]) || 1.0;
+        const coinReward = Math.round(base * mult);
+        const color = tierColors[ch.tier] || '#9ca3af';
+        const isSelected = selectedIdx === i;
+        return h('button', {
+          key: i,
+          className: 'rpg-btn',
+          onClick: () => setSelectedIdx(i),
+          style: {
+            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+            background: isSelected ? hexToRgba(color, 0.12) : '#0e0e14',
+            border: `2px solid ${isSelected ? color : '#2a2a35'}`,
+            borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
+            textAlign: 'left',
           },
-            h('div', { style: { fontWeight: 800, fontSize: 16, color, minWidth: 28 } }, t.id),
-            h('div', { style: { flex: 1, textAlign: 'left' } },
-              h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, t.label),
-              h('div', { style: { fontSize: 11.5, color: '#9ca3af' } }, t.desc)
-            ),
-            h('div', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
-              h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }), ` ${coinReward}`
-            )
-          );
-        })
-      )
+        },
+          h('div', { style: {
+            fontWeight: 800, fontSize: 15, color, minWidth: 28,
+            background: hexToRgba(color, 0.15), borderRadius: 6, padding: '4px 8px', textAlign: 'center',
+          }}, ch.tier),
+          h('div', { style: { flex: 1 } },
+            h('div', { style: { fontSize: 13.5, fontWeight: 600, color: '#e5e7eb' } }, ch.name)
+          ),
+          h('div', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 } },
+            h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }),
+            ` ${coinReward}`
+          )
+        );
+      })
     ),
     h('button', {
       className: 'rpg-btn',
-      disabled: !selectedTier,
+      disabled: selectedIdx === null,
       style: {
         ...styles.primaryBtn, width: '100%', justifyContent: 'center', padding: '11px 0',
-        background: selectedTier ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.04)',
-        borderColor: selectedTier ? '#fbbf24' : '#2a2a35',
-        color: selectedTier ? '#fbbf24' : '#5e5e6b',
-        cursor: selectedTier ? 'pointer' : 'not-allowed',
-        opacity: selectedTier ? 1 : 0.6,
+        background: selectedIdx !== null ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.04)',
+        borderColor: selectedIdx !== null ? '#fbbf24' : '#2a2a35',
+        color: selectedIdx !== null ? '#fbbf24' : '#5e5e6b',
+        cursor: selectedIdx !== null ? 'pointer' : 'not-allowed',
+        opacity: selectedIdx !== null ? 1 : 0.6,
       },
-      onClick: () => selectedTier && onComplete(selectedTier),
-    }, h(Icon, { name: 'trophy', size: 14 }), selectedTier ? ` Confirm ${selectedTier} completion` : ' Select a tier first')
+      onClick: () => {
+        if (selectedIdx !== null) {
+          onComplete(challenges[selectedIdx].tier);
+        }
+      },
+    },
+      h(Icon, { name: 'trophy', size: 14 }),
+      selectedIdx !== null
+        ? ` Complete — ${challenges[selectedIdx].tier} tier`
+        : ' Select a challenge first'
+    )
   );
 }
 
@@ -2496,35 +2512,81 @@ function ResetConfirmModal({ target, onConfirm, onCancel }) {
 
 function BossEditorModal({ domain, level, existing, onSave, onClose }) {
   const d = DOMAINS[domain];
-  const defaults = (DEFAULT_BOSSES[domain] && DEFAULT_BOSSES[domain][level]) || ['', '', ''];
-  const initial = existing && existing.length === 3 ? existing : [defaults[0] || '', defaults[1] || '', defaults[2] || ''];
-  const [challenges, setChallenges] = useState(initial);
+  const isMiniGate = level % 10 !== 0;
+  const allTiers = ['C', 'B', 'A', 'S'];
+  const defaultTiers = isMiniGate ? ['C', 'B', 'A'] : ['B', 'A', 'S'];
+  const defaultNames = (DEFAULT_BOSSES[domain] && DEFAULT_BOSSES[domain][level]) || ['', '', ''];
+  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
 
-  function updateChallenge(i, val) {
-    setChallenges(c => c.map((x, idx) => idx === i ? val : x));
+  // Parse existing data — handle both old string[] and new {name, tier}[] formats
+  function parseInitial() {
+    if (!existing || !Array.isArray(existing) || existing.length === 0) {
+      return [0, 1, 2].map(i => ({ name: defaultNames[i] || '', tier: defaultTiers[i] || 'B' }));
+    }
+    return [0, 1, 2].map(i => {
+      const item = existing[i];
+      if (!item) return { name: defaultNames[i] || '', tier: defaultTiers[i] || 'B' };
+      if (typeof item === 'string') return { name: item, tier: defaultTiers[i] || 'B' };
+      return { name: item.name || '', tier: item.tier || defaultTiers[i] || 'B' };
+    });
+  }
+
+  const [challenges, setChallenges] = useState(parseInitial);
+
+  function updateName(i, val) {
+    setChallenges(c => c.map((x, idx) => idx === i ? { ...x, name: val } : x));
+  }
+
+  function updateTier(i, tier) {
+    setChallenges(c => c.map((x, idx) => idx === i ? { ...x, tier } : x));
   }
 
   function resetToDefaults() {
-    setChallenges([defaults[0] || '', defaults[1] || '', defaults[2] || '']);
+    setChallenges([0, 1, 2].map(i => ({ name: defaultNames[i] || '', tier: defaultTiers[i] || 'B' })));
   }
 
-  return h(ModalShell, { title: `${d.name} — Level ${level} boss`, onClose, width: 460 },
+  return h(ModalShell, { title: `${d.name} — Level ${level} boss`, onClose, width: 500 },
     h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 14 } },
-      'Define the 3 challenges you can choose from at this boss gate. Leave blank to skip a slot.'
+      'Define up to 3 challenges for this gate. Each challenge has its own tier — the tier determines the coin reward when that challenge is completed.'
     ),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 } },
-      challenges.map((c, i) => h('div', { key: i },
-        h('label', { style: styles.label }, `Challenge ${i + 1}`),
-        h('input', {
-          value: c,
-          onChange: e => updateChallenge(i, e.target.value),
-          style: styles.input,
-          placeholder: defaults[i] || 'Enter a challenge…',
-        })
-      ))
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 } },
+      challenges.map((ch, i) => {
+        const color = tierColors[ch.tier] || '#9ca3af';
+        return h('div', { key: i, style: { background: '#0e0e14', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+            h('label', { style: { ...styles.label, margin: 0 } }, `Challenge ${i + 1}`),
+            h('div', { style: { display: 'flex', gap: 4 } },
+              allTiers.map(t => {
+                const tc = tierColors[t];
+                const isActive = ch.tier === t;
+                return h('button', {
+                  key: t,
+                  className: 'rpg-btn',
+                  onClick: () => updateTier(i, t),
+                  style: {
+                    width: 32, height: 28, borderRadius: 6,
+                    fontSize: 12, fontWeight: 800,
+                    border: `2px solid ${isActive ? tc : '#2a2a35'}`,
+                    background: isActive ? hexToRgba(tc, 0.18) : 'transparent',
+                    color: isActive ? tc : '#5e5e6b',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  },
+                }, t);
+              })
+            )
+          ),
+          h('input', {
+            value: ch.name,
+            onChange: e => updateName(i, e.target.value),
+            style: styles.input,
+            placeholder: defaultNames[i] || 'Enter a challenge…',
+          })
+        );
+      })
     ),
     h('div', { style: { display: 'flex', gap: 8 } },
-      h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: resetToDefaults }, 'Reset to suggested'),
+      h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: resetToDefaults }, 'Reset to defaults'),
       h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: () => onSave(challenges) },
         h(Icon, { name: 'check', size: 14 }), ' Save'
       )
