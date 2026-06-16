@@ -199,7 +199,7 @@ function buildInitialState() {
   });
 
   return {
-    activities: STARTER_ACTIVITIES,
+    activities: [],
     quests: [],
     dailyLogs: {},
     activityLog: [],
