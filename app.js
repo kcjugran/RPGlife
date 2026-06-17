@@ -74,6 +74,7 @@ const DEFAULT_ECONOMY = {
   streakCoinsAmount: 10,
   powerStreakCoinsEvery: 10,
   powerStreakCoinsAmount: 30,
+  powerStreakUnlockDays: 15,
   questCoinRatio: 0.33,
   bossCoinBase: 75,
   miniGateCoinBase: 40,
@@ -228,6 +229,10 @@ function buildInitialState() {
       { name: '', symbol: '' },
       { name: '', symbol: '' },
     ],
+    dayMode: 'standard',          // 'standard' | 'quest' — active mode for the CURRENT day only
+    dailyQuestLockEnabled: false, // setting: lock mission list after first completion
+    dailyQuestPlans: {},          // keyed by date: { activityIds, completedIds, locked, countsForStreak }
+    dailyQuestHistory: [],        // snapshot written at each daily reset
   };
 }
 
@@ -307,6 +312,15 @@ function yesterdayKey() {
 
 function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Given any 'YYYY-MM-DD' date string, returns the key for the day before it.
+// Used to credit a consistency streak day for a date other than "today"
+// (e.g. finalizing yesterday's Daily Quest at today's rollover).
+function yesterdayKeyFor(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() - 1);
+  return dateKey(d);
 }
 
 function computeDailyGoldAverage(state) {
@@ -702,6 +716,48 @@ function RPGLife({ user, onSignOut }) {
     }
   }, [loaded, state]);
 
+  // Finalize yesterday's Daily Quest mission (if yesterday was in quest mode
+  // and had a plan). Must run BEFORE the streak-rollover check below, since
+  // a 100%-complete quest day should credit the consistency streak and
+  // prevent that day from being treated as "missed".
+  const lastQuestFinalizeRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !state) return;
+    const currentToday = todayKey();
+    if (lastQuestFinalizeRef.current === currentToday) return;
+    lastQuestFinalizeRef.current = currentToday;
+
+    const yKey = yesterdayKey();
+    const yPlan = state.dailyQuestPlans && state.dailyQuestPlans[yKey];
+    if (yPlan && !yPlan.finalized) {
+      finalizeDailyQuest(yKey);
+    }
+  }, [loaded, state]);
+
+  // Active streak-rollover check: if a day was missed (lastConsistencyDate is
+  // neither today nor yesterday), reset both streaks to 0 immediately on
+  // load/day-open rather than waiting for the next qualifying day to lazily
+  // overwrite the stale count. Runs once per day per client, same pattern as
+  // the challenge check above.
+  const lastStreakCheckRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || !state) return;
+    const currentToday = todayKey();
+    if (lastStreakCheckRef.current === currentToday) return;
+    // Wait until quest finalization (above) has had a chance to run and
+    // potentially update lastConsistencyDate before evaluating "missed".
+    const yKey = yesterdayKey();
+    const yPlan = state.dailyQuestPlans && state.dailyQuestPlans[yKey];
+    if (yPlan && !yPlan.finalized) return; // finalization pending, re-check next render
+    lastStreakCheckRef.current = currentToday;
+
+    const last = state.lastConsistencyDate;
+    const wasMissed = last !== null && last !== currentToday && last !== yesterdayKey();
+    if (wasMissed && (state.consistencyStreak > 0 || state.powerStreak > 0)) {
+      setState(prev => ({ ...prev, consistencyStreak: 0, powerStreak: 0 }));
+    }
+  }, [loaded, state]);
+
   if (!loaded || !state) {
     return h('div', { style: styles.loadingScreen },
       h('div', { style: styles.loadingText }, 'Loading character data...'),
@@ -723,45 +779,45 @@ function RPGLife({ user, onSignOut }) {
     domainComputed[k] = computeProgression(state.domains[k].totalXp, state.bossCompletions, k, activeBossLevelsFor(state, k));
   });
 
-  function checkStreaks(next, dayLog, prev) {
-    const stateForEco = prev || next;
-    const consistencyMin = eco(stateForEco, 'consistencyMin');
-    const dailyGoal = eco(stateForEco, 'dailyGoal');
-    const streakEvery = eco(stateForEco, 'streakCoinsEvery') || 10;
-    const streakAmount = eco(stateForEco, 'streakCoinsAmount');
-    const powerEvery = eco(stateForEco, 'powerStreakCoinsEvery') || 10;
-    const powerAmount = eco(stateForEco, 'powerStreakCoinsAmount');
-
-    const allMinMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= consistencyMin);
-    const allFullMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= dailyGoal);
-
+  // Shared streak-crediting logic: marks `dateStr` as a qualifying consistency
+  // day, increments Consistency Streak (and derived Power Streak), and queues
+  // any milestone bonuses. Used both by the live domain-XP check (Standard
+  // Mode) and by finalizeDailyQuest() (Quest Mode, decided at next rollover).
+  function creditConsistencyDay(next, dateStr, prevDateStr) {
+    const streakEvery = eco(next, 'streakCoinsEvery') || 10;
+    const streakAmount = eco(next, 'streakCoinsAmount');
+    const powerEvery = eco(next, 'powerStreakCoinsEvery') || 10;
+    const powerAmount = eco(next, 'powerStreakCoinsAmount');
+    const unlockDays = eco(next, 'powerStreakUnlockDays') || 15;
     const bonuses = [];
 
-    if (allMinMet && next.lastConsistencyDate !== today) {
-      if (next.lastConsistencyDate === yesterdayKey()) {
+    if (next.lastConsistencyDate !== dateStr) {
+      if (next.lastConsistencyDate === prevDateStr) {
         next.consistencyStreak = next.consistencyStreak + 1;
       } else if (next.lastConsistencyDate === null) {
         next.consistencyStreak = next.consistencyStreak === 0 ? 1 : next.consistencyStreak;
       } else {
         next.consistencyStreak = 1;
       }
-      next.lastConsistencyDate = today;
+      next.lastConsistencyDate = dateStr;
 
       if (next.consistencyStreak > 0 && next.consistencyStreak % streakEvery === 0) {
         bonuses.push({ label: `${next.consistencyStreak}-day streak`, amount: streakAmount, type: 'streak' });
       }
-    }
 
-    if (allFullMet && next.lastPowerDate !== today) {
-      if (next.lastPowerDate === yesterdayKey()) {
-        next.powerStreak = next.powerStreak + 1;
+      // Power Streak: gated behind Consistency Streak reaching the unlock
+      // threshold. Day `unlockDays` itself only unlocks eligibility (Power
+      // Streak stays 0); from `unlockDays + 1` onward, Power Streak climbs
+      // 1:1 alongside Consistency Streak. Any break in Consistency Streak
+      // drops Power Streak back to 0, and it must wait for Consistency to
+      // hit the threshold again.
+      if (next.consistencyStreak > unlockDays) {
+        next.powerStreak = next.consistencyStreak - unlockDays;
+        if (next.powerStreak > 0 && next.powerStreak % powerEvery === 0) {
+          bonuses.push({ label: `${next.powerStreak}-day power streak`, amount: powerAmount, type: 'power' });
+        }
       } else {
-        next.powerStreak = 1;
-      }
-      next.lastPowerDate = today;
-
-      if (next.powerStreak > 0 && next.powerStreak % powerEvery === 0) {
-        bonuses.push({ label: `${next.powerStreak}-day power streak`, amount: powerAmount, type: 'power' });
+        next.powerStreak = 0;
       }
     }
 
@@ -769,11 +825,25 @@ function RPGLife({ user, onSignOut }) {
       const totalBonus = bonuses.reduce((sum, b) => sum + b.amount, 0);
       next.gold = (next.gold || 0) + totalBonus;
       next.goldHistory = { ...(next.goldHistory || {}) };
-      next.goldHistory[today] = (next.goldHistory[today] || 0) + totalBonus;
+      next.goldHistory[dateStr] = (next.goldHistory[dateStr] || 0) + totalBonus;
       next.pendingBonuses = [...(next.pendingBonuses || []), ...bonuses.map(b => ({ ...b, id: uid('bonus'), at: Date.now() }))];
     }
 
     return next;
+  }
+
+  function checkStreaks(next, dayLog, prev) {
+    // In Daily Quest Mode, today's consistency credit is decided at the next
+    // day's rollover (based on final mission completion %), not by domain XP
+    // minimums as logged in real time. Skip the live domain-based check here;
+    // finalizeDailyQuest() handles crediting the day if the mission hit 100%.
+    if ((prev || next).dayMode === 'quest') return next;
+
+    const consistencyMin = eco(prev || next, 'consistencyMin');
+    const allMinMet = DOMAIN_KEYS.every(k => (dayLog[k] || 0) >= consistencyMin);
+    if (!allMinMet) return next;
+
+    return creditConsistencyDay(next, today, yesterdayKey());
   }
 
   function logActivity(activity, value) {
@@ -814,6 +884,99 @@ function RPGLife({ user, onSignOut }) {
     });
 
     showToast(`+${xpGain} XP — ${activity.name}`);
+  }
+
+  // ---------- Daily Quest Mode actions ----------
+
+  function getTodayQuestPlan(state) {
+    return (state.dailyQuestPlans && state.dailyQuestPlans[today]) || { activityIds: [], completedIds: [], locked: false };
+  }
+
+  function switchDayMode(newMode) {
+    setState(prev => {
+      const next = { ...prev, dayMode: newMode };
+      // Starting fresh in the new mode for today — discard today's plan if
+      // switching INTO quest mode after already having one (rare, but keeps
+      // "today's mission" unambiguous). Switching to standard mode doesn't
+      // need to touch dailyQuestPlans; today's entry (if any) simply stops
+      // being the active view until quest mode is chosen again.
+      if (newMode === 'quest') {
+        next.dailyQuestPlans = { ...(prev.dailyQuestPlans || {}) };
+        next.dailyQuestPlans[today] = { activityIds: [], completedIds: [], locked: false };
+      }
+      return next;
+    });
+  }
+
+  function setTodayQuestActivities(activityIds) {
+    setState(prev => {
+      const plan = getTodayQuestPlan(prev);
+      if (plan.locked) return prev; // locked missions can't be edited
+      const dailyQuestPlans = { ...(prev.dailyQuestPlans || {}) };
+      // Dropping an activity also drops its completion mark
+      const completedIds = plan.completedIds.filter(id => activityIds.includes(id));
+      dailyQuestPlans[today] = { ...plan, activityIds, completedIds };
+      return { ...prev, dailyQuestPlans };
+    });
+  }
+
+  function toggleQuestActivityComplete(activityId) {
+    setState(prev => {
+      const plan = getTodayQuestPlan(prev);
+      if (plan.locked && !plan.completedIds.includes(activityId)) return prev; // can't add new completions once locked... but unchecking is also a structural change
+      const wasComplete = plan.completedIds.includes(activityId);
+      const completedIds = wasComplete
+        ? plan.completedIds.filter(id => id !== activityId)
+        : [...plan.completedIds, activityId];
+
+      const dailyQuestPlans = { ...(prev.dailyQuestPlans || {}) };
+      const lockEnabled = !!prev.dailyQuestLockEnabled;
+      // Lock fires the moment the FIRST completion happens, if enabled
+      const locked = plan.locked || (lockEnabled && !wasComplete && completedIds.length > 0);
+      dailyQuestPlans[today] = { ...plan, completedIds, locked };
+      return { ...prev, dailyQuestPlans };
+    });
+  }
+
+  // Called once per day, on day-open, for the PREVIOUS day's quest plan (if
+  // that day was in quest mode). Decides whether the day counts as a
+  // qualifying consistency day, based on final mission completion %.
+  // Activities' XP/coins were already awarded live as they were logged
+  // (per design: completed work is never retroactively taken away) — this
+  // step only ever grants the consistency-streak credit, never revokes XP.
+  function finalizeDailyQuest(prevDateStr) {
+    setState(prev => {
+      const plan = prev.dailyQuestPlans && prev.dailyQuestPlans[prevDateStr];
+      if (!plan || plan.activityIds.length === 0) return prev; // no mission that day — nothing to finalize
+      if (plan.finalized) return prev; // already processed
+
+      const completionPct = Math.round((plan.completedIds.length / plan.activityIds.length) * 100);
+      const hit100 = completionPct >= 100;
+
+      let next = { ...prev };
+      next.dailyQuestPlans = { ...prev.dailyQuestPlans };
+      next.dailyQuestPlans[prevDateStr] = { ...plan, finalized: true, finalCompletionPct: completionPct };
+
+      if (hit100) {
+        next = creditConsistencyDay(next, prevDateStr, yesterdayKeyFor(prevDateStr));
+      }
+
+      // Write history snapshot
+      const historyEntry = {
+        date: prevDateStr,
+        activitiesPlanned: plan.activityIds.length,
+        activitiesCompleted: plan.completedIds.length,
+        completionPct,
+        countedForStreak: hit100,
+      };
+      next.dailyQuestHistory = [historyEntry, ...(prev.dailyQuestHistory || [])].slice(0, 90);
+
+      return next;
+    });
+  }
+
+  function setDailyQuestLockEnabled(enabled) {
+    setState(prev => ({ ...prev, dailyQuestLockEnabled: enabled }));
   }
 
   function saveActivity(activityData) {
@@ -1163,7 +1326,14 @@ function RPGLife({ user, onSignOut }) {
       )
     ),
     h('main', { style: styles.main },
-      activeTab === 'dashboard' && h(Dashboard, { state, domainProgress, domainComputed, today, todayLog, onLogClick: setLogModal, onBossClick: setBossModal, economy: state.economy, onCompleteChallenge: completeChallenge, onDismissChallenge: dismissChallenge }),
+      activeTab === 'dashboard' && h(Dashboard, {
+        state, domainProgress, domainComputed, today, todayLog,
+        onLogClick: setLogModal, onBossClick: setBossModal, economy: state.economy,
+        onCompleteChallenge: completeChallenge, onDismissChallenge: dismissChallenge,
+        onSwitchDayMode: switchDayMode,
+        onSetQuestActivities: setTodayQuestActivities,
+        onToggleQuestComplete: toggleQuestActivityComplete,
+      }),
       activeTab === 'activities' && h(ActivitiesView, {
         state,
         onLog: setLogModal,
@@ -1193,6 +1363,7 @@ function RPGLife({ user, onSignOut }) {
         onSaveChallengeLibrary: saveChallengeLibrary,
         onSaveSpawnChance: saveSpawnChance,
         onSavePowerValues: savePowerValues,
+        onSetDailyQuestLock: setDailyQuestLockEnabled,
       })
     ),
     buyConfirm && h(BuyConfirmModal, {
@@ -1415,9 +1586,127 @@ function BonusRow({ bonus, onDismiss }) {
 
 // ---------- Dashboard ----------
 
-function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge }) {
+// ---------- Mode switch confirmation ----------
+
+function ModeSwitchConfirmModal({ targetMode, onConfirm, onCancel }) {
+  const targetLabel = targetMode === 'quest' ? 'Daily Quest Mode' : 'Standard Mode';
+  return h(ModalShell, { title: 'Switch mode?', onClose: onCancel, width: 380 },
+    h('div', { style: { fontSize: 13.5, color: '#d1d5db', marginBottom: 18, lineHeight: 1.5 } },
+      `Switching to ${targetLabel} will reset today's progress in the current mode. Today's pending rewards in the current mode will be discarded. Historical data is not affected.`
+    ),
+    h('div', { style: { display: 'flex', gap: 8 } },
+      h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: onCancel }, 'Cancel'),
+      h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: onConfirm }, 'Continue')
+    )
+  );
+}
+
+// ---------- Daily Quest Panel ----------
+
+function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const plan = (state.dailyQuestPlans && state.dailyQuestPlans[today]) || { activityIds: [], completedIds: [], locked: false };
+  const allActivities = state.activities || [];
+  const missionActivities = plan.activityIds.map(id => allActivities.find(a => a.id === id)).filter(Boolean);
+  const availableToAdd = allActivities.filter(a => !plan.activityIds.includes(a.id));
+
+  const total = missionActivities.length;
+  const doneCount = plan.completedIds.length;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const isComplete = total > 0 && doneCount === total;
+
+  function addActivity(id) {
+    onSetActivities([...plan.activityIds, id]);
+  }
+  function removeActivity(id) {
+    onSetActivities(plan.activityIds.filter(x => x !== id));
+  }
+
+  return h('div', { style: styles.questPanelCard },
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 } },
+      h('div', null,
+        h('div', { style: { fontSize: 15, fontWeight: 700, color: '#f4f1ea' } }, "Today's mission"),
+        h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } },
+          total === 0 ? 'Add activities to build today\'s mission' : `${doneCount} of ${total} complete`
+        )
+      ),
+      h('div', { style: { textAlign: 'right' } },
+        h('div', { style: { fontSize: 22, fontWeight: 800, color: isComplete ? '#fbbf24' : '#a78bfa' } }, `${pct}%`),
+        isComplete && h('div', { style: { fontSize: 10.5, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Pending validation')
+      )
+    ),
+
+    h('div', { style: { ...styles.meterTrack, height: 10, marginBottom: 16 } },
+      h('div', { style: { ...styles.meterFill, width: `${pct}%`, background: isComplete ? '#fbbf24' : '#a78bfa' } })
+    ),
+
+    total === 0
+      ? h('div', { style: { fontSize: 12.5, color: '#7c7c8a', marginBottom: 14, textAlign: 'center', padding: '12px 0' } },
+          'No activities selected yet for today\'s mission.'
+        )
+      : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 } },
+          missionActivities.map(act => {
+            const d = DOMAINS[act.domain];
+            const isDone = plan.completedIds.includes(act.id);
+            return h('div', { key: act.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0e0e14', borderRadius: 8 } },
+              h('button', {
+                className: 'rpg-btn',
+                onClick: () => onToggleComplete(act.id),
+                style: {
+                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                  border: `2px solid ${isDone ? d.color : '#3a3a4a'}`,
+                  background: isDone ? hexToRgba(d.color, 0.2) : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                },
+              }, isDone && h(Icon, { name: 'check', size: 13, color: d.color })),
+              h(Icon, { name: d.icon, size: 13, color: d.color }),
+              h('span', { style: { flex: 1, fontSize: 13, color: isDone ? '#7c7c8a' : '#e5e7eb', textDecoration: isDone ? 'line-through' : 'none' } }, act.name),
+              !plan.locked && h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeActivity(act.id) }, h(Icon, { name: 'x', size: 11 }))
+            );
+          })
+        ),
+
+    plan.locked && h('div', { style: { fontSize: 11.5, color: '#fbbf24', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 } },
+      h(Icon, { name: 'lock', size: 12, color: '#fbbf24' }), 'Mission locked — list can\'t be changed once started'
+    ),
+
+    !plan.locked && h('div', { style: { position: 'relative' } },
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => setPickerOpen(v => !v),
+        style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '9px 0' },
+      }, h(Icon, { name: 'plus', size: 14 }), ' Add activity to mission'),
+      pickerOpen && h('div', { style: styles.questPickerDropdown },
+        availableToAdd.length === 0
+          ? h('div', { style: { fontSize: 12, color: '#7c7c8a', padding: '10px 12px' } }, 'All your activities are already in today\'s mission.')
+          : availableToAdd.map(act => {
+              const d = DOMAINS[act.domain];
+              return h('button', {
+                key: act.id, className: 'rpg-btn',
+                onClick: () => { addActivity(act.id); setPickerOpen(false); },
+                style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#e5e7eb', fontSize: 13 },
+              }, h(Icon, { name: d.icon, size: 13, color: d.color }), act.name);
+            })
+      )
+    )
+  );
+}
+
+function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete }) {
   const dailyGoal = eco({ economy }, 'dailyGoal');
   const consistencyMin = eco({ economy }, 'consistencyMin');
+  const dayMode = state.dayMode || 'standard';
+  const [switchConfirm, setSwitchConfirm] = useState(null); // holds the target mode while confirming
+
+  function requestModeSwitch(target) {
+    if (target === dayMode) return;
+    setSwitchConfirm(target);
+  }
+  function confirmModeSwitch() {
+    onSwitchDayMode(switchConfirm);
+    setSwitchConfirm(null);
+  }
+
   const availableBosses = [];
   DOMAIN_KEYS.forEach(k => {
     const comp = domainComputed[k];
@@ -1435,8 +1724,35 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 20, animation: 'fadeIn 0.3s ease' } },
 
     h('section', null,
-      h(SectionLabel, { text: "Today's progress" }),
-      h('div', { style: styles.bigMetersGrid },
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
+        h(SectionLabel, { text: "Today's progress" }),
+        h('div', { style: styles.modeToggle },
+          h('button', {
+            className: 'rpg-btn',
+            onClick: () => requestModeSwitch('standard'),
+            style: { ...styles.modeToggleBtn, ...(dayMode === 'standard' ? styles.modeToggleBtnActive : {}) },
+          }, 'Standard'),
+          h('button', {
+            className: 'rpg-btn',
+            onClick: () => requestModeSwitch('quest'),
+            style: { ...styles.modeToggleBtn, ...(dayMode === 'quest' ? styles.modeToggleBtnActive : {}) },
+          }, 'Daily Quest')
+        )
+      ),
+
+      switchConfirm && h(ModeSwitchConfirmModal, {
+        targetMode: switchConfirm,
+        onConfirm: confirmModeSwitch,
+        onCancel: () => setSwitchConfirm(null),
+      }),
+
+      dayMode === 'quest'
+        ? h(DailyQuestPanel, {
+            state, today,
+            onSetActivities: onSetQuestActivities,
+            onToggleComplete: onToggleQuestComplete,
+          })
+        : h('div', { style: styles.bigMetersGrid },
         DOMAIN_KEYS.map(k => {
           const d = DOMAINS[k];
           const earned = todayLog[k] || 0;
@@ -2659,7 +2975,7 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
   );
 }
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues }) {
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
@@ -2773,6 +3089,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
     ),
 
     h(PowerValuesSection, { state, onSave: onSavePowerValues }),
+    h(DailyQuestSettingsSection, { state, onSetLock: onSetDailyQuestLock }),
     h(EconomySettingsSection, { state, onSave: onSaveEconomy }),
     h(ChallengeLibrarySection, { state, onSaveLibrary: onSaveChallengeLibrary, onSaveSpawnChance })
   );
@@ -2850,6 +3167,66 @@ function PowerValuesSection({ state, onSave }) {
 
 // ---------- Economy Settings (#7) ----------
 
+// ---------- Daily Quest Mode settings ----------
+
+function DailyQuestSettingsSection({ state, onSetLock }) {
+  const [open, setOpen] = useState(false);
+  const lockEnabled = !!state.dailyQuestLockEnabled;
+  const history = (state.dailyQuestHistory || []).slice(0, 14);
+
+  return h('section', { style: { marginBottom: 24 } },
+    h('button', {
+      className: 'rpg-btn',
+      onClick: () => setOpen(o => !o),
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb' },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h(Icon, { name: 'target', size: 16, color: '#a78bfa' }),
+        h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, 'Daily Quest Mode')
+      ),
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' }))
+    ),
+    open && h('div', { style: { background: '#1a1a24', border: '1px solid #2a2a35', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
+
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+        h('div', null,
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, 'Lock mission after first completion'),
+          h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginTop: 2 } }, 'Once enabled, the activity list can\'t be changed once a day\'s mission starts')
+        ),
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => onSetLock(!lockEnabled),
+          style: {
+            width: 44, height: 26, borderRadius: 999, flexShrink: 0,
+            background: lockEnabled ? 'rgba(167,139,250,0.3)' : '#2a2a35',
+            border: `1px solid ${lockEnabled ? '#a78bfa' : '#3a3a4a'}`,
+            position: 'relative', cursor: 'pointer',
+          },
+        },
+          h('div', { style: {
+            width: 18, height: 18, borderRadius: '50%', background: lockEnabled ? '#c4b5fd' : '#7c7c8a',
+            position: 'absolute', top: 3, left: lockEnabled ? 23 : 3, transition: 'left 0.15s ease',
+          }})
+        )
+      ),
+
+      h('div', null,
+        h('div', { style: { ...styles.label, marginBottom: 8 } }, 'Recent mission history'),
+        history.length === 0
+          ? h('div', { style: { fontSize: 12, color: '#7c7c8a' } }, 'No completed Daily Quest missions yet.')
+          : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+              history.map(h_ => h('div', { key: h_.date, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0e0e14', borderRadius: 8 } },
+                h('div', { style: { fontSize: 12, color: '#9ca3af', minWidth: 78 } }, h_.date),
+                h('div', { style: { fontSize: 12, color: '#e5e7eb', flex: 1 } }, `${h_.activitiesCompleted}/${h_.activitiesPlanned} complete`),
+                h('div', { style: { fontSize: 12, fontWeight: 700, color: h_.completionPct >= 100 ? '#86efac' : '#9ca3af' } }, `${h_.completionPct}%`),
+                h_.countedForStreak && h(Icon, { name: 'flame', size: 13, color: '#fb923c' })
+              ))
+            )
+      )
+    )
+  );
+}
+
 function EconomySettingsSection({ state, onSave }) {
   const e = state.economy || DEFAULT_ECONOMY;
   const [vals, setVals] = useState({ ...DEFAULT_ECONOMY, ...e });
@@ -2891,6 +3268,7 @@ function EconomySettingsSection({ state, onSave }) {
       h(EcoGroup, { label: 'Streak bonuses' },
         h(EcoField, { label: 'Award coins every N consistency days', value: vals.streakCoinsEvery, onChange: v => setNum('streakCoinsEvery', v) }),
         h(EcoField, { label: 'Coins per consistency milestone', value: vals.streakCoinsAmount, onChange: v => setNum('streakCoinsAmount', v) }),
+        h(EcoField, { label: 'Consistency days to unlock Power Streak', value: vals.powerStreakUnlockDays, onChange: v => setNum('powerStreakUnlockDays', v) }),
         h(EcoField, { label: 'Award coins every N power days', value: vals.powerStreakCoinsEvery, onChange: v => setNum('powerStreakCoinsEvery', v) }),
         h(EcoField, { label: 'Coins per power streak milestone', value: vals.powerStreakCoinsAmount, onChange: v => setNum('powerStreakCoinsAmount', v) })
       ),
@@ -3330,6 +3708,25 @@ const styles = {
   sectionLabel: { fontSize: 11.5, fontWeight: 700, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.8 },
   metersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 },
   bigMetersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 },
+  modeToggle: {
+    display: 'flex', gap: 2, padding: 3, background: '#0e0e14',
+    border: '1px solid #2a2a35', borderRadius: 10,
+  },
+  modeToggleBtn: {
+    padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+    background: 'transparent', border: 'none', color: '#7c7c8a', cursor: 'pointer',
+  },
+  modeToggleBtnActive: {
+    background: 'rgba(167,139,250,0.15)', color: '#c4b5fd',
+  },
+  questPanelCard: {
+    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 14, padding: '18px 18px',
+  },
+  questPickerDropdown: {
+    position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 30,
+    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10,
+    maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+  },
   bigMeterCard: {
     background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 14, padding: '16px 18px',
   },
