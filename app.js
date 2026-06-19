@@ -437,6 +437,7 @@ function RPGLife({ user, onSignOut }) {
   const [resetPrompt, setResetPrompt] = useState(null); // 'all' | domainKey | null
   const [bossEditor, setBossEditor] = useState(null); // { domain, level } | null
   const [buyConfirm, setBuyConfirm] = useState(null); // reward object | null
+  const [tutorialStep, setTutorialStep] = useState(null); // null=closed, 0..N=active
   const toastTimer = useRef(null);
   const saveTimer = useRef(null);
   const lastSavedJson = useRef(null);
@@ -467,11 +468,13 @@ function RPGLife({ user, onSignOut }) {
         lastSavedJson.current = JSON.stringify(remote);
         remoteUpdatedAt.current = remoteTs;
       } else {
+        // Brand new account — always start fresh and show the tutorial
         const fresh = buildInitialState();
         setState(fresh);
         lastSavedJson.current = JSON.stringify(fresh);
         const result = await window.RPGLifeSync.saveState(user.uid, fresh);
         if (result.ok) remoteUpdatedAt.current = Date.now();
+        setTutorialStep(0); // show tutorial for new users
       }
       setLoaded(true);
 
@@ -1284,6 +1287,7 @@ function RPGLife({ user, onSignOut }) {
       @keyframes barFill { from { width: 0%; } }
       @keyframes toastSlide { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.08); } }
+      @keyframes tutorialPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0.6); opacity: 1; } 50% { box-shadow: 0 0 0 6px rgba(167,139,250,0); opacity: 0.85; } }
       .rpg-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
       .rpg-scroll::-webkit-scrollbar-thumb { background: #3a3a4a; border-radius: 3px; }
       .rpg-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -1304,6 +1308,7 @@ function RPGLife({ user, onSignOut }) {
       onDismissBonus: dismissBonus,
       onRetrySync: attemptResync,
       powerValues: state.powerValues || [],
+      onOpenTutorial: () => setTutorialStep(0),
     }),
     h('nav', { style: styles.nav },
       [
@@ -1319,6 +1324,7 @@ function RPGLife({ user, onSignOut }) {
           className: 'rpg-btn',
           onClick: () => setActiveTab(tab.id),
           style: { ...styles.navBtn, ...(activeTab === tab.id ? styles.navBtnActive : {}) },
+          'data-tutorial-id': `tab-${tab.id}`,
         },
           h(Icon, { name: tab.icon, size: 16 }),
           h('span', null, tab.label)
@@ -1364,6 +1370,7 @@ function RPGLife({ user, onSignOut }) {
         onSaveSpawnChance: saveSpawnChance,
         onSavePowerValues: savePowerValues,
         onSetDailyQuestLock: setDailyQuestLockEnabled,
+        onOpenTutorial: () => setTutorialStep(0),
       })
     ),
     buyConfirm && h(BuyConfirmModal, {
@@ -1422,13 +1429,342 @@ function RPGLife({ user, onSignOut }) {
       economy: state.economy,
       onClose: () => setBossModal(null),
       onComplete: (tier) => completeBoss(bossModal.domain, bossModal.level, tier),
+    }),
+    tutorialStep !== null && h(TutorialOverlay, {
+      step: tutorialStep,
+      onNext: (nextStep, tab) => {
+        if (tab) setActiveTab(tab);
+        setTutorialStep(nextStep);
+      },
+      onClose: () => setTutorialStep(null),
     })
+  );
+}
+
+// ==========================================================
+// FEATURE REGISTRY
+// ==========================================================
+// Every feature in this app is registered here. Adding a new
+// feature = adding one object to this array. The tutorial
+// system reads this registry automatically — no other changes
+// needed for the tutorial to include the new feature.
+//
+// Each entry:
+//   id         — unique string identifier
+//   category   — 'core' (shown in main walkthrough)
+//              | 'advanced' (shown in the "More" section after core)
+//   tab        — which tab to navigate to when this step is active
+//   highlight  — data-tutorial-id value of the element to spotlight,
+//                or null for a plain card with no spotlight
+//   icon / color — for the step card visual
+//   title / body — what to show the user
+// ==========================================================
+const FEATURE_REGISTRY = [
+  // ── CORE ──────────────────────────────────────────────
+  {
+    id: 'welcome',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'sword', color: '#a78bfa',
+    title: 'Welcome to Adventure Log',
+    body: 'Turn your real life into an RPG. Health, Relationships, Career, and Finance are your four domains — everything you do in them earns XP toward levels, ranks, and real rewards.',
+  },
+  {
+    id: 'activities-tab',
+    category: 'core',
+    tab: 'activities',
+    highlight: 'tab-activities',
+    icon: 'zap', color: '#fbbf24',
+    title: 'Activities — your XP sources',
+    body: 'Activities are the things you actually do — workouts, study sessions, journaling. Each one is tied to a domain and awards XP when you log it. Create your first activity here.',
+  },
+  {
+    id: 'quick-log',
+    category: 'core',
+    tab: 'activities',
+    highlight: 'quick-log-fab',
+    icon: 'plus', color: '#a78bfa',
+    title: 'Quick Log — tap the + button',
+    body: 'The purple + button lets you instantly log any activity from anywhere in the app. Select the activity, enter a value if needed, and your XP is awarded immediately.',
+  },
+  {
+    id: 'dashboard-progress',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: 'tab-dashboard',
+    icon: 'scroll', color: '#60a5fa',
+    title: 'Dashboard — today\'s progress',
+    body: 'Your dashboard shows today\'s XP for each domain. Hit the daily minimum in all four to grow your Consistency Streak. The domain meters reset each day — XP keeps going toward your level forever.',
+  },
+  {
+    id: 'streaks',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'flame', color: '#fb923c',
+    title: 'Streaks & Power Streak',
+    body: 'Your Consistency Streak grows every day you hit the minimum in all four domains. Keep it alive for 15+ days and a Power Streak unlocks on top — earning you bonus coins at milestones. One missed day resets both.',
+  },
+  {
+    id: 'level-tab',
+    category: 'core',
+    tab: 'character',
+    highlight: 'tab-character',
+    icon: 'shield', color: '#34d399',
+    title: 'Level & Boss Gates',
+    body: 'XP accumulates toward levels in each domain. Every few levels, a Boss Gate blocks you from advancing in rank until you complete a real-world challenge you set yourself. Defeating it earns coins based on how well you did.',
+  },
+  {
+    id: 'quests-tab',
+    category: 'core',
+    tab: 'quests',
+    highlight: 'tab-quests',
+    icon: 'target', color: '#818cf8',
+    title: 'Quests — longer-term goals',
+    body: 'Quests are goals with a deadline, like "Finish an online course in 30 days". Set an XP reward, track progress with a slider or checkpoints, and claim the reward when you complete it.',
+  },
+  {
+    id: 'rewards-tab',
+    category: 'core',
+    tab: 'rewards',
+    highlight: 'tab-rewards',
+    icon: 'gift', color: '#f472b6',
+    title: 'Rewards — spend your coins',
+    body: 'Create real rewards with prices you decide — a meal out, a gaming session, a new purchase. Spend the coins you earn from XP, streaks, and boss battles. Redeem a reward as a ticket and use it when you\'re ready.',
+  },
+  // ── ADVANCED ──────────────────────────────────────────
+  {
+    id: 'daily-quest-mode',
+    category: 'advanced',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'scroll', color: '#a78bfa',
+    title: 'Daily Quest Mode',
+    body: 'Switch the dashboard from domain meters to a mission-style view. Build a specific checklist of activities for the day. Hit 100% by midnight and it counts toward your streak — more structured than the standard mode.',
+  },
+  {
+    id: 'quest-benchmarks',
+    category: 'advanced',
+    tab: 'quests',
+    highlight: null,
+    icon: 'check', color: '#34d399',
+    title: 'Quest Benchmarks',
+    body: 'When creating a quest, add named checkpoints (e.g. "Finish Module 1 — 7 days"). Checking them off automatically drives the quest\'s progress percentage instead of using the manual slider.',
+  },
+  {
+    id: 'gate-tiers',
+    category: 'advanced',
+    tab: 'character',
+    highlight: null,
+    icon: 'trophy', color: '#fbbf24',
+    title: 'Gate Tiers — B / A / S',
+    body: 'When you defeat a boss gate, you rate how well you performed: B (completed), A (exceeded expectations), S (exceptional). Each tier multiplies the coin reward. You set the challenge descriptions yourself in Settings.',
+  },
+  {
+    id: 'mini-gates',
+    category: 'advanced',
+    tab: 'character',
+    highlight: null,
+    icon: 'shield', color: '#60a5fa',
+    title: 'Mini Gates — levels 5, 15, 25…',
+    body: 'In addition to the main boss gates every 10 levels, you can enable mini gates at the in-between levels (5, 15, 25…). They use C/B/A tiers with a smaller base reward — more frequent checkpoints for tighter progression.',
+  },
+  {
+    id: 'random-challenges',
+    category: 'advanced',
+    tab: 'settings',
+    highlight: null,
+    icon: 'zap', color: '#a78bfa',
+    title: 'Random Challenges',
+    body: 'Build a library of surprise side-challenges in Settings → Random Challenges. Each day has a configurable chance to spawn one on the dashboard. The reward stays hidden until you complete it — a blind incentive to do something unplanned.',
+  },
+  {
+    id: 'power-values',
+    category: 'advanced',
+    tab: 'settings',
+    highlight: null,
+    icon: 'star', color: '#fbbf24',
+    title: 'Power Values',
+    body: 'Set 3 personal values with a name and emoji symbol in Settings. Their symbols stay permanently visible in the app header as a constant reminder of what matters most to you — a subtle but persistent focus anchor.',
+  },
+  {
+    id: 'economy-config',
+    category: 'advanced',
+    tab: 'settings',
+    highlight: 'settings-tutorial-btn',
+    icon: 'coins', color: '#fbbf24',
+    title: 'Economy Config',
+    body: 'Every number behind the game is configurable in Settings → Economy: daily XP goals, consistency minimums, streak bonus amounts and intervals, gate base coins, tier multipliers, and challenge reward ranges. Nothing is hardcoded.',
+  },
+];
+
+const CORE_STEPS = FEATURE_REGISTRY.filter(f => f.category === 'core');
+const ADVANCED_STEPS = FEATURE_REGISTRY.filter(f => f.category === 'advanced');
+const ALL_STEPS = [...CORE_STEPS, ...ADVANCED_STEPS];
+
+// ==========================================================
+// TUTORIAL OVERLAY
+// ==========================================================
+
+function TutorialOverlay({ step, onNext, onClose }) {
+  const feature = ALL_STEPS[step];
+  const isLast = step >= ALL_STEPS.length - 1;
+  const isLastCore = step === CORE_STEPS.length - 1;
+  const isAdvanced = step >= CORE_STEPS.length;
+
+  // Spotlight position state
+  const [spotRect, setSpotRect] = useState(null);
+
+  useEffect(() => {
+    if (!feature || !feature.highlight) {
+      setSpotRect(null);
+      return;
+    }
+    function measureTarget() {
+      const el = document.querySelector(`[data-tutorial-id="${feature.highlight}"]`);
+      if (!el) { setSpotRect(null); return; }
+      const r = el.getBoundingClientRect();
+      setSpotRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    }
+    measureTarget();
+    // Re-measure after a short delay to let tab switch render settle
+    const t = setTimeout(measureTarget, 120);
+    return () => clearTimeout(t);
+  }, [step, feature && feature.highlight]);
+
+  if (!feature) { onClose(); return null; }
+
+  const PAD = 8; // spotlight padding around the element
+  const CARD_WIDTH = 320;
+
+  // Calculate the best position for the tooltip card:
+  // prefer below the spotlight, fall back to above if too close to bottom
+  function cardPosition() {
+    if (!spotRect) return { bottom: 100, left: '50%', transform: 'translateX(-50%)' };
+    const winH = window.innerHeight || 700;
+    const winW = window.innerWidth || 400;
+    const spotBottom = spotRect.top + spotRect.height + PAD;
+    const spaceBelow = winH - spotBottom;
+    const cardH = 200; // estimated
+    const top = spaceBelow > cardH + 20
+      ? spotBottom + 12
+      : spotRect.top - PAD - cardH - 12;
+    const centreX = spotRect.left + spotRect.width / 2;
+    const left = Math.max(12, Math.min(winW - CARD_WIDTH - 12, centreX - CARD_WIDTH / 2));
+    return { position: 'fixed', top: Math.max(12, top), left };
+  }
+
+  const progress = `${step + 1} / ${ALL_STEPS.length}`;
+
+  return h('div', { style: { position: 'fixed', inset: 0, zIndex: 1000, pointerEvents: 'none' } },
+    // Dark overlay — full screen minus the spotlight cutout
+    h('svg', {
+      style: { position: 'fixed', inset: 0, width: '100%', height: '100%', pointerEvents: 'auto' },
+      xmlns: 'http://www.w3.org/2000/svg',
+      onClick: onClose,
+    },
+      h('defs', null,
+        h('mask', { id: 'tutorial-mask' },
+          h('rect', { x: 0, y: 0, width: '100%', height: '100%', fill: 'white' }),
+          spotRect && h('rect', {
+            x: spotRect.left - PAD,
+            y: spotRect.top - PAD,
+            width: spotRect.width + PAD * 2,
+            height: spotRect.height + PAD * 2,
+            rx: 10,
+            fill: 'black',
+          })
+        )
+      ),
+      h('rect', {
+        x: 0, y: 0, width: '100%', height: '100%',
+        fill: 'rgba(0,0,0,0.72)',
+        mask: 'url(#tutorial-mask)',
+      })
+    ),
+
+    // Pulsing ring around the highlighted element
+    spotRect && h('div', { style: {
+      position: 'fixed',
+      top: spotRect.top - PAD,
+      left: spotRect.left - PAD,
+      width: spotRect.width + PAD * 2,
+      height: spotRect.height + PAD * 2,
+      borderRadius: 10,
+      border: '2px solid #a78bfa',
+      animation: 'tutorialPulse 1.4s ease-in-out infinite',
+      pointerEvents: 'none',
+      zIndex: 1001,
+    }}),
+
+    // Tooltip card
+    h('div', {
+      style: {
+        ...cardPosition(),
+        width: CARD_WIDTH,
+        background: '#1a1a2e',
+        border: '1px solid rgba(167,139,250,0.4)',
+        borderRadius: 14,
+        padding: '18px 18px 14px',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+        zIndex: 1002,
+        pointerEvents: 'auto',
+      },
+      onClick: e => e.stopPropagation(),
+    },
+      // Category badge
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
+        h('div', { style: {
+          fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1,
+          color: isAdvanced ? '#fbbf24' : '#a78bfa',
+          background: isAdvanced ? 'rgba(251,191,36,0.12)' : 'rgba(167,139,250,0.12)',
+          border: `1px solid ${isAdvanced ? 'rgba(251,191,36,0.3)' : 'rgba(167,139,250,0.3)'}`,
+          borderRadius: 6, padding: '3px 8px',
+        }}, isAdvanced ? '★ Advanced' : '● Core'),
+        h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, progress)
+      ),
+
+      // Icon + title
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 } },
+        h('div', { style: {
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          background: hexToRgba(feature.color, 0.15), border: `1px solid ${hexToRgba(feature.color, 0.35)}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }},
+          h(Icon, { name: feature.icon, size: 17, color: feature.color })
+        ),
+        h('div', { style: { fontSize: 14, fontWeight: 700, color: '#f4f1ea', lineHeight: 1.3 } }, feature.title)
+      ),
+
+      // Body text
+      h('div', { style: { fontSize: 12.5, color: '#c4c4ce', lineHeight: 1.6, marginBottom: 14 } }, feature.body),
+
+      // Navigation buttons
+      h('div', { style: { display: 'flex', gap: 6 } },
+        h('button', {
+          className: 'rpg-btn',
+          onClick: onClose,
+          style: { flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid #2a2a35', borderRadius: 8, color: '#7c7c8a', fontSize: 12, cursor: 'pointer' },
+        }, 'Skip'),
+        step > 0 && h('button', {
+          className: 'rpg-btn',
+          onClick: () => onNext(step - 1, ALL_STEPS[step - 1].tab),
+          style: { flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid #2a2a35', borderRadius: 8, color: '#9ca3af', fontSize: 12, cursor: 'pointer' },
+        }, '← Back'),
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => isLast ? onClose() : onNext(step + 1, ALL_STEPS[step + 1].tab),
+          style: { flex: 2, padding: '8px 0', background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', borderRadius: 8, color: '#c4b5fd', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
+        }, isLast ? 'Done ✓' : isLastCore ? 'See advanced →' : 'Next →')
+      )
+    )
   );
 }
 
 // ---------- Header ----------
 
-function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncStatus, onGoldClick, onStreakClick, pendingBonuses, onDismissBonus, onRetrySync, powerValues }) {
+function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncStatus, onGoldClick, onStreakClick, pendingBonuses, onDismissBonus, onRetrySync, powerValues, onOpenTutorial }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
 
@@ -1522,6 +1858,13 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
         h(Icon, { name: 'coins', size: 15, color: '#fbbf24' }),
         h('span', { style: styles.streakNum }, gold)
       ),
+      h('button', {
+        className: 'rpg-btn',
+        onClick: onOpenTutorial,
+        style: { ...styles.accountBtn, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', color: '#c4b5fd', fontSize: 14, fontWeight: 700 },
+        title: 'Help & tutorial',
+        'data-tutorial-id': 'help-btn',
+      }, '?'),
       h('div', { style: { position: 'relative' }, onClick: (e) => e.stopPropagation() },
         h('button', {
           className: 'rpg-btn',
@@ -2685,6 +3028,7 @@ function FAB({ onClick }) {
     style: styles.fab,
     title: 'Quick log',
     'aria-label': 'Quick log',
+    'data-tutorial-id': 'quick-log-fab',
   }, h(Icon, { name: 'plus', size: 26, color: 'white' }));
 }
 
@@ -2975,10 +3319,20 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
   );
 }
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock }) {
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
+
+    h('section', { style: { marginBottom: 24 } },
+      h(SectionLabel, { text: 'Help' }),
+      h('button', {
+        className: 'rpg-btn',
+        onClick: onOpenTutorial,
+        'data-tutorial-id': 'settings-tutorial-btn',
+        style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '11px 0' },
+      }, '? Replay tutorial')
+    ),
 
     h('section', { style: { marginBottom: 24 } },
       h(SectionLabel, { text: 'Level gates & boss battles' }),
