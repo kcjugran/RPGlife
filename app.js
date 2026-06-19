@@ -164,6 +164,28 @@ const STARTER_QUESTS = [
   { id: 'q3', name: 'Finish RPG Maker Course', desc: 'Complete the full RPG Maker course', domain: 'career', days: 90, xpReward: 400, progress: 18, createdAt: Date.now() - 1000*60*60*24*16 },
 ];
 
+// Achievement registry — every achievement the system can unlock.
+// Adding a new achievement: add an entry here + a trigger in checkAchievements().
+// The UI reads from this for display; the data stores only the unlocked set.
+const ACHIEVEMENTS = {
+  first_activity:  { name: 'First Steps',        desc: 'Create your first activity',              icon: 'zap',    color: '#a78bfa' },
+  first_log:       { name: 'In Motion',           desc: 'Log your first activity',                 icon: 'zap',    color: '#a78bfa' },
+  log_10:          { name: 'Getting Started',     desc: 'Log 10 activities',                       icon: 'zap',    color: '#60a5fa' },
+  log_50:          { name: 'Building Habits',     desc: 'Log 50 activities',                       icon: 'flame',  color: '#fb923c' },
+  log_100:         { name: 'Centurion',           desc: 'Log 100 activities',                      icon: 'trophy', color: '#fbbf24' },
+  xp_100:          { name: 'First XP',            desc: 'Earn 100 total XP',                       icon: 'star',   color: '#a78bfa' },
+  xp_1000:         { name: 'XP Grinder',          desc: 'Earn 1,000 total XP',                     icon: 'star',   color: '#60a5fa' },
+  xp_10000:        { name: 'XP Legend',           desc: 'Earn 10,000 total XP',                    icon: 'star',   color: '#fbbf24' },
+  streak_7:        { name: '7-Day Consistent',    desc: 'Maintain a 7-day consistency streak',     icon: 'flame',  color: '#fb923c' },
+  streak_30:       { name: 'The Month',           desc: 'Maintain a 30-day consistency streak',    icon: 'flame',  color: '#f59e0b' },
+  streak_100:      { name: 'Unbreakable',         desc: 'Maintain a 100-day consistency streak',   icon: 'shield', color: '#34d399' },
+  first_boss:      { name: 'Gate Breaker',        desc: 'Defeat your first boss gate',             icon: 'trophy', color: '#fbbf24' },
+  boss_5:          { name: 'Gate Veteran',        desc: 'Defeat 5 boss gates',                     icon: 'trophy', color: '#f59e0b' },
+  first_quest:     { name: 'Quest Completed',     desc: 'Complete and archive your first quest',   icon: 'target', color: '#818cf8' },
+  quest_5:         { name: 'Quest Veteran',       desc: 'Complete and archive 5 quests',           icon: 'target', color: '#a78bfa' },
+  quest_10:        { name: 'Quest Master',        desc: 'Complete and archive 10 quests',          icon: 'target', color: '#fbbf24' },
+};
+
 const DEFAULT_REWARDS = [
   { id: 'r1', name: 'Special meal', cost: 50, desc: 'Treat yourself to a meal out' },
   { id: 'r2', name: 'Day off', cost: 200, desc: 'A guilt-free rest day' },
@@ -229,10 +251,21 @@ function buildInitialState() {
       { name: '', symbol: '' },
       { name: '', symbol: '' },
     ],
-    dayMode: 'standard',          // 'standard' | 'quest' — active mode for the CURRENT day only
-    dailyQuestLockEnabled: false, // setting: lock mission list after first completion
-    dailyQuestPlans: {},          // keyed by date: { activityIds, completedIds, locked, countsForStreak }
-    dailyQuestHistory: [],        // snapshot written at each daily reset
+    dayMode: 'standard',
+    dailyQuestLockEnabled: false,
+    dailyQuestPlans: {},
+    dailyQuestHistory: [],        // each entry now also stores: type, activitiesDetail[]
+    missionTemplates: [],         // [{ id, name, type, activityIds, createdAt }]
+    archivedQuests: [],           // quests moved here on completion
+    achievements: {},             // { [achievementId]: { unlockedAt } }
+    missionStats: {               // aggregate mission statistics (updated on finalize)
+      totalCompleted: 0,
+      totalAttempted: 0,
+      longestStreak: 0,
+      currentStreak: 0,
+      byType: {},                 // { [type]: { completed, attempted } }
+      activityCompletionCounts: {}, // { [activityId]: number }
+    },
   };
 }
 
@@ -883,7 +916,8 @@ function RPGLife({ user, onSignOut }) {
         ...prev.activityLog,
       ].slice(0, 30);
 
-      return checkStreaks(next, dayLog, prev);
+      const afterStreaks = checkStreaks(next, dayLog, prev);
+      return checkAchievements(afterStreaks);
     });
 
     showToast(`+${xpGain} XP — ${activity.name}`);
@@ -964,15 +998,19 @@ function RPGLife({ user, onSignOut }) {
         next = creditConsistencyDay(next, prevDateStr, yesterdayKeyFor(prevDateStr));
       }
 
-      // Write history snapshot
+      // Write history snapshot (with type for future analytics)
       const historyEntry = {
         date: prevDateStr,
+        type: plan.type || 'routine',
         activitiesPlanned: plan.activityIds.length,
         activitiesCompleted: plan.completedIds.length,
         completionPct,
         countedForStreak: hit100,
       };
-      next.dailyQuestHistory = [historyEntry, ...(prev.dailyQuestHistory || [])].slice(0, 90);
+      next.dailyQuestHistory = [historyEntry, ...(prev.dailyQuestHistory || [])].slice(0, 365);
+
+      // Update aggregate mission statistics
+      next.missionStats = updateMissionStats(prev, plan, completionPct);
 
       return next;
     });
@@ -982,14 +1020,151 @@ function RPGLife({ user, onSignOut }) {
     setState(prev => ({ ...prev, dailyQuestLockEnabled: enabled }));
   }
 
+  // ---------- Achievement engine ----------
+  // Pure function — takes state, returns state with achievement unlocked.
+  // Safe to call multiple times (idempotent).
+  function unlockAchievementInState(prev, id) {
+    if (prev.achievements && prev.achievements[id]) return prev; // already unlocked
+    const achievements = { ...(prev.achievements || {}), [id]: { unlockedAt: Date.now() } };
+    showToast(`🏆 Achievement unlocked: ${ACHIEVEMENTS[id] ? ACHIEVEMENTS[id].name : id}`);
+    return { ...prev, achievements };
+  }
+
+  function checkAchievements(next, context = {}) {
+    const acts = (next.activityLog || []).length;
+    const totalXp = DOMAIN_KEYS.reduce((s, k) => s + (next.domains[k]?.totalXp || 0), 0);
+    const streak = next.consistencyStreak || 0;
+    const bossCount = Object.keys(next.bossCompletions || {}).length;
+    const questsDone = (next.archivedQuests || []).length;
+
+    const checks = [
+      ['first_log', acts >= 1],
+      ['log_10', acts >= 10],
+      ['log_50', acts >= 50],
+      ['log_100', acts >= 100],
+      ['xp_100', totalXp >= 100],
+      ['xp_1000', totalXp >= 1000],
+      ['xp_10000', totalXp >= 10000],
+      ['streak_7', streak >= 7],
+      ['streak_30', streak >= 30],
+      ['streak_100', streak >= 100],
+      ['first_boss', bossCount >= 1],
+      ['boss_5', bossCount >= 5],
+      ['first_quest', questsDone >= 1],
+      ['quest_5', questsDone >= 5],
+      ['quest_10', questsDone >= 10],
+    ];
+
+    let state = next;
+    for (const [id, condition] of checks) {
+      if (condition) state = unlockAchievementInState(state, id);
+    }
+    return state;
+  }
+
+  // ---------- Quest archive ----------
+  function archiveQuest(questId) {
+    setState(prev => {
+      const quest = prev.quests.find(q => q.id === questId);
+      if (!quest) return prev;
+      const quests = prev.quests.filter(q => q.id !== questId);
+      const archivedQuests = [
+        { ...quest, archivedAt: Date.now() },
+        ...(prev.archivedQuests || []),
+      ];
+      let next = { ...prev, quests, archivedQuests };
+      next = checkAchievements(next);
+      return next;
+    });
+  }
+
+  function restoreQuestFromArchive(questId) {
+    setState(prev => {
+      const quest = (prev.archivedQuests || []).find(q => q.id === questId);
+      if (!quest) return prev;
+      const archivedQuests = (prev.archivedQuests || []).filter(q => q.id !== questId);
+      const { archivedAt, ...restoredQuest } = quest;
+      const quests = [...prev.quests, { ...restoredQuest, progress: 0 }];
+      return { ...prev, quests, archivedQuests };
+    });
+    showToast('Quest restored');
+  }
+
+  // ---------- Mission templates ----------
+  function saveMissionTemplate(name, type, activityIds) {
+    setState(prev => {
+      const existing = (prev.missionTemplates || []).find(t => t.name === name);
+      const templates = existing
+        ? (prev.missionTemplates || []).map(t => t.name === name ? { ...t, type, activityIds, updatedAt: Date.now() } : t)
+        : [...(prev.missionTemplates || []), { id: uid('tmpl'), name, type: type || 'routine', activityIds, createdAt: Date.now() }];
+      return { ...prev, missionTemplates: templates };
+    });
+    showToast(`Template "${name}" saved`);
+  }
+
+  function deleteMissionTemplate(id) {
+    setState(prev => ({ ...prev, missionTemplates: (prev.missionTemplates || []).filter(t => t.id !== id) }));
+  }
+
+  // ---------- Activity favorite toggle ----------
+  function toggleActivityFavorite(activityId) {
+    setState(prev => ({
+      ...prev,
+      activities: prev.activities.map(a =>
+        a.id === activityId ? { ...a, favorite: !a.favorite } : a
+      ),
+    }));
+  }
+
+  // ---------- Update mission stats on finalize ----------
+  function updateMissionStats(prev, plan, completionPct) {
+    const stats = { ...(prev.missionStats || {}) };
+    stats.totalAttempted = (stats.totalAttempted || 0) + 1;
+    if (completionPct >= 100) stats.totalCompleted = (stats.totalCompleted || 0) + 1;
+
+    const type = plan.type || 'routine';
+    const byType = { ...(stats.byType || {}) };
+    byType[type] = {
+      attempted: ((byType[type] || {}).attempted || 0) + 1,
+      completed: ((byType[type] || {}).completed || 0) + (completionPct >= 100 ? 1 : 0),
+    };
+    stats.byType = byType;
+
+    const actCounts = { ...(stats.activityCompletionCounts || {}) };
+    (plan.completedIds || []).forEach(id => {
+      actCounts[id] = (actCounts[id] || 0) + 1;
+    });
+    stats.activityCompletionCounts = actCounts;
+
+    // Track mission completion streaks
+    if (completionPct >= 100) {
+      stats.currentStreak = (stats.currentStreak || 0) + 1;
+      stats.longestStreak = Math.max(stats.longestStreak || 0, stats.currentStreak);
+    } else {
+      stats.currentStreak = 0;
+    }
+
+    return stats;
+  }
+
   function saveActivity(activityData) {
     setState(prev => {
       const activities = [...prev.activities];
-      if (activityData.id) {
-        const idx = activities.findIndex(a => a.id === activityData.id);
-        if (idx >= 0) activities[idx] = activityData;
+      const normalised = {
+        tags: [],
+        favorite: false,
+        ...activityData,
+      };
+      if (normalised.id) {
+        const idx = activities.findIndex(a => a.id === normalised.id);
+        if (idx >= 0) activities[idx] = normalised;
       } else {
-        activities.push({ ...activityData, id: uid('act') });
+        const newAct = { ...normalised, id: uid('act') };
+        activities.push(newAct);
+        // Achievement: first activity created
+        if (activities.length === 1) {
+          return unlockAchievementInState({ ...prev, activities }, 'first_activity');
+        }
       }
       return { ...prev, activities };
     });
@@ -1025,7 +1200,14 @@ function RPGLife({ user, onSignOut }) {
       next.gold = next.gold + goldGain;
       next.goldHistory = { ...(next.goldHistory || {}) };
       next.goldHistory[today] = (next.goldHistory[today] || 0) + goldGain;
-      showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold`);
+      showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold — archived`);
+      // Auto-archive on completion
+      next.quests = next.quests.filter(q => q.id !== quest.id);
+      next.archivedQuests = [
+        { ...quest, archivedAt: Date.now(), goldEarned: goldGain },
+        ...(next.archivedQuests || []),
+      ];
+      next = checkAchievements(next);
     }
     return next;
   }
@@ -1078,7 +1260,7 @@ function RPGLife({ user, onSignOut }) {
       const goldGain = Math.round(base * mult);
       const goldHistory = { ...(prev.goldHistory || {}) };
       goldHistory[today] = (goldHistory[today] || 0) + goldGain;
-      return { ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory };
+      return checkAchievements({ ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory });
     });
     showToast(`Boss defeated! Rank unlocked.`);
     setBossModal(null);
@@ -1339,6 +1521,8 @@ function RPGLife({ user, onSignOut }) {
         onSwitchDayMode: switchDayMode,
         onSetQuestActivities: setTodayQuestActivities,
         onToggleQuestComplete: toggleQuestActivityComplete,
+        onSaveTemplate: saveMissionTemplate,
+        onDeleteTemplate: deleteMissionTemplate,
       }),
       activeTab === 'activities' && h(ActivitiesView, {
         state,
@@ -1346,8 +1530,9 @@ function RPGLife({ user, onSignOut }) {
         onEdit: (act) => { setEditingActivity(act); setShowActivityForm(true); },
         onDelete: deleteActivity,
         onAdd: () => { setEditingActivity(null); setShowActivityForm(true); },
+        onToggleFavorite: toggleActivityFavorite,
       }),
-      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest }),
+      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive }),
       activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat }),
       activeTab === 'rewards' && h(RewardsView, {
         state,
@@ -1946,23 +2131,47 @@ function ModeSwitchConfirmModal({ targetMode, onConfirm, onCancel }) {
 
 // ---------- Daily Quest Panel ----------
 
-function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete }) {
+function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSaveTemplate, onDeleteTemplate }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [saveTemplateType, setSaveTemplateType] = useState('routine');
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+
   const plan = (state.dailyQuestPlans && state.dailyQuestPlans[today]) || { activityIds: [], completedIds: [], locked: false };
+  const templates = state.missionTemplates || [];
   const allActivities = state.activities || [];
+
+  // Favourites appear first in picker
+  const sortedActivities = [...allActivities].sort((a, b) => {
+    if (a.favorite && !b.favorite) return -1;
+    if (!a.favorite && b.favorite) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
   const missionActivities = plan.activityIds.map(id => allActivities.find(a => a.id === id)).filter(Boolean);
-  const availableToAdd = allActivities.filter(a => !plan.activityIds.includes(a.id));
+  const availableToAdd = sortedActivities.filter(a => !plan.activityIds.includes(a.id));
 
   const total = missionActivities.length;
   const doneCount = plan.completedIds.length;
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const isComplete = total > 0 && doneCount === total;
 
-  function addActivity(id) {
-    onSetActivities([...plan.activityIds, id]);
+  const MISSION_TYPES = ['routine', 'fitness', 'work', 'learning', 'recovery', 'custom'];
+
+  function addActivity(id) { onSetActivities([...plan.activityIds, id]); }
+  function removeActivity(id) { onSetActivities(plan.activityIds.filter(x => x !== id)); }
+
+  function applyTemplate(tmpl) {
+    onSetActivities(tmpl.activityIds.filter(id => allActivities.some(a => a.id === id)));
+    setTemplatePickerOpen(false);
   }
-  function removeActivity(id) {
-    onSetActivities(plan.activityIds.filter(x => x !== id));
+
+  function handleSaveTemplate() {
+    if (!saveTemplateName.trim()) return;
+    onSaveTemplate(saveTemplateName.trim(), saveTemplateType, plan.activityIds);
+    setSaveTemplateName('');
+    setShowSaveTemplate(false);
   }
 
   return h('div', { style: styles.questPanelCard },
@@ -1983,6 +2192,39 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete }) {
       h('div', { style: { ...styles.meterFill, width: `${pct}%`, background: isComplete ? '#fbbf24' : '#a78bfa' } })
     ),
 
+    // Template actions row
+    h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' } },
+      templates.length > 0 && h('div', { style: { position: 'relative' } },
+        h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, fontSize: 12, padding: '6px 10px' }, onClick: () => setTemplatePickerOpen(v => !v) },
+          '📋 Use template'
+        ),
+        templatePickerOpen && h('div', { style: { ...styles.questPickerDropdown, zIndex: 50 } },
+          h('div', { style: { fontSize: 11, color: '#7c7c8a', padding: '8px 12px 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Mission templates'),
+          templates.map(tmpl => h('div', { key: tmpl.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' } },
+            h('button', { className: 'rpg-btn', onClick: () => applyTemplate(tmpl), style: { flex: 1, background: 'transparent', border: 'none', textAlign: 'left', color: '#e5e7eb', fontSize: 13, cursor: 'pointer', padding: 0 } },
+              tmpl.name,
+              h('span', { style: { fontSize: 10, color: '#7c7c8a', marginLeft: 6 } }, `${tmpl.activityIds.length} activities · ${tmpl.type}`)
+            ),
+            h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDeleteTemplate(tmpl.id) }, h(Icon, { name: 'x', size: 11 }))
+          ))
+        )
+      ),
+      total > 0 && !plan.locked && h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, fontSize: 12, padding: '6px 10px' }, onClick: () => setShowSaveTemplate(v => !v) },
+        '💾 Save as template'
+      )
+    ),
+
+    // Save template form
+    showSaveTemplate && h('div', { style: { background: '#0e0e14', borderRadius: 8, padding: '10px 12px', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 } },
+      h('input', { value: saveTemplateName, onChange: e => setSaveTemplateName(e.target.value), placeholder: 'Template name (e.g. Morning Routine)', style: styles.input }),
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        MISSION_TYPES.map(t => h('button', { key: t, className: 'rpg-btn', onClick: () => setSaveTemplateType(t),
+          style: { ...styles.filterChip, ...(saveTemplateType === t ? { background: 'rgba(167,139,250,0.18)', borderColor: '#a78bfa', color: '#c4b5fd' } : {}) }
+        }, t))
+      ),
+      h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center' }, onClick: handleSaveTemplate }, 'Save template')
+    ),
+
     total === 0
       ? h('div', { style: { fontSize: 12.5, color: '#7c7c8a', marginBottom: 14, textAlign: 'center', padding: '12px 0' } },
           'No activities selected yet for today\'s mission.'
@@ -1995,47 +2237,40 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete }) {
               h('button', {
                 className: 'rpg-btn',
                 onClick: () => onToggleComplete(act.id),
-                style: {
-                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                  border: `2px solid ${isDone ? d.color : '#3a3a4a'}`,
-                  background: isDone ? hexToRgba(d.color, 0.2) : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                },
+                style: { width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${isDone ? d.color : '#3a3a4a'}`, background: isDone ? hexToRgba(d.color, 0.2) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
               }, isDone && h(Icon, { name: 'check', size: 13, color: d.color })),
               h(Icon, { name: d.icon, size: 13, color: d.color }),
               h('span', { style: { flex: 1, fontSize: 13, color: isDone ? '#7c7c8a' : '#e5e7eb', textDecoration: isDone ? 'line-through' : 'none' } }, act.name),
+              act.favorite && h('span', { style: { color: '#fbbf24', fontSize: 12 } }, '★'),
               !plan.locked && h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeActivity(act.id) }, h(Icon, { name: 'x', size: 11 }))
             );
           })
         ),
 
     plan.locked && h('div', { style: { fontSize: 11.5, color: '#fbbf24', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 } },
-      h(Icon, { name: 'lock', size: 12, color: '#fbbf24' }), 'Mission locked — list can\'t be changed once started'
+      h(Icon, { name: 'lock', size: 12, color: '#fbbf24' }), 'Mission locked'
     ),
 
     !plan.locked && h('div', { style: { position: 'relative' } },
-      h('button', {
-        className: 'rpg-btn',
-        onClick: () => setPickerOpen(v => !v),
-        style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '9px 0' },
-      }, h(Icon, { name: 'plus', size: 14 }), ' Add activity to mission'),
+      h('button', { className: 'rpg-btn', onClick: () => setPickerOpen(v => !v), style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '9px 0' } },
+        h(Icon, { name: 'plus', size: 14 }), ' Add activity to mission'),
       pickerOpen && h('div', { style: styles.questPickerDropdown },
         availableToAdd.length === 0
-          ? h('div', { style: { fontSize: 12, color: '#7c7c8a', padding: '10px 12px' } }, 'All your activities are already in today\'s mission.')
+          ? h('div', { style: { fontSize: 12, color: '#7c7c8a', padding: '10px 12px' } }, 'All activities are in today\'s mission.')
           : availableToAdd.map(act => {
               const d = DOMAINS[act.domain];
               return h('button', {
                 key: act.id, className: 'rpg-btn',
                 onClick: () => { addActivity(act.id); setPickerOpen(false); },
                 style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#e5e7eb', fontSize: 13 },
-              }, h(Icon, { name: d.icon, size: 13, color: d.color }), act.name);
+              }, h(Icon, { name: d.icon, size: 13, color: d.color }), act.name, act.favorite && h('span', { style: { color: '#fbbf24', fontSize: 12, marginLeft: 4 } }, '★'));
             })
       )
     )
   );
 }
 
-function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete }) {
+function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate }) {
   const dailyGoal = eco({ economy }, 'dailyGoal');
   const consistencyMin = eco({ economy }, 'consistencyMin');
   const dayMode = state.dayMode || 'standard';
@@ -2094,6 +2329,8 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
             state, today,
             onSetActivities: onSetQuestActivities,
             onToggleComplete: onToggleQuestComplete,
+            onSaveTemplate,
+            onDeleteTemplate,
           })
         : h('div', { style: styles.bigMetersGrid },
         DOMAIN_KEYS.map(k => {
@@ -2181,6 +2418,8 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
       )
     ),
 
+    h(DomainBalanceIndicator, { state, economy }),
+
     h('section', null,
       h(SectionLabel, { text: 'Recent activity' }),
       state.activityLog.length === 0
@@ -2218,12 +2457,33 @@ function EmptyState({ text }) {
 
 // ---------- Activities View ----------
 
-function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd }) {
+function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorite }) {
   const [filter, setFilter] = useState('all');
-  const filtered = filter === 'all' ? state.activities : state.activities.filter(a => a.domain === filter);
+  const [search, setSearch] = useState('');
+
+  const allActivities = state.activities || [];
+
+  // Sort: favorites first, then alphabetical
+  const sorted = [...allActivities].sort((a, b) => {
+    if (a.favorite && !b.favorite) return -1;
+    if (!a.favorite && b.favorite) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const filtered = sorted.filter(a => {
+    if (filter !== 'all' && a.domain !== filter) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      a.name.toLowerCase().includes(q) ||
+      (a.subcat || '').toLowerCase().includes(q) ||
+      (a.desc || '').toLowerCase().includes(q) ||
+      (a.tags || []).some(t => t.toLowerCase().includes(q))
+    );
+  });
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
-    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 } },
       h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
         h(FilterChip, { label: 'All', active: filter==='all', onClick: () => setFilter('all') }),
         DOMAIN_KEYS.map(k => h(FilterChip, { key: k, label: DOMAINS[k].name, active: filter===k, onClick: () => setFilter(k), color: DOMAINS[k].color }))
@@ -2232,19 +2492,39 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd }) {
         h(Icon, { name: 'plus', size: 14 }), ' New activity'
       )
     ),
+    h('input', {
+      value: search,
+      onChange: e => setSearch(e.target.value),
+      placeholder: 'Search by name, category, tag, or description…',
+      style: { ...styles.input, marginBottom: 10 },
+    }),
     filtered.length === 0
-      ? h(EmptyState, { text: 'No activities in this domain yet. Create one to start tracking.' })
+      ? h(EmptyState, { text: search ? `No activities match "${search}"` : 'No activities in this domain yet. Create one to start tracking.' })
       : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
           filtered.map(act => {
             const d = DOMAINS[act.domain];
             return h('div', { key: act.id, style: styles.activityCard },
               h('div', { style: { ...styles.quickLogDot, background: d.color } }),
               h('div', { style: { flex: 1, minWidth: 0 } },
-                h('div', { style: styles.activityCardName }, act.name),
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                  h('span', { style: styles.activityCardName }, act.name),
+                  act.favorite && h('span', { title: 'Favourite', style: { color: '#fbbf24', fontSize: 13 } }, '★')
+                ),
                 h('div', { style: styles.activityCardMeta }, `${d.name} · ${act.subcat} · ${scoringLabel(act)}`),
-                act.desc && h('div', { style: styles.activityCardDesc }, act.desc)
+                act.desc && h('div', { style: styles.activityCardDesc }, act.desc),
+                (act.tags || []).length > 0 && h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 } },
+                  (act.tags || []).map((tag, i) =>
+                    h('span', { key: i, style: { fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 5, background: hexToRgba(d.color, 0.12), color: d.color, border: `1px solid ${hexToRgba(d.color, 0.3)}` } }, tag)
+                  )
+                )
               ),
-              h('div', { style: { display: 'flex', gap: 6 } },
+              h('div', { style: { display: 'flex', gap: 6, flexShrink: 0 } },
+                h('button', {
+                  className: 'rpg-btn',
+                  style: { ...styles.iconBtn, color: act.favorite ? '#fbbf24' : '#7c7c8a' },
+                  onClick: () => onToggleFavorite(act.id),
+                  title: act.favorite ? 'Remove from favourites' : 'Mark as favourite',
+                }, '★'),
                 h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onLog(act), title: 'Log activity' }, h(Icon, { name: 'plus', size: 14 })),
                 h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(act), title: 'Edit' }, h(Icon, { name: 'edit2', size: 13 })),
                 h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(act.id), title: 'Delete' }, h(Icon, { name: 'trash2', size: 13 }))
@@ -2272,30 +2552,57 @@ function FilterChip({ label, active, onClick, color }) {
 
 // ---------- Quests View ----------
 
-function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDelete }) {
-  const active = state.quests.filter(q => q.progress < 100);
-  const completed = state.quests.filter(q => q.progress >= 100);
+function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, onRestoreArchive }) {
+  const [showArchive, setShowArchive] = useState(false);
+  const active = (state.quests || []).filter(q => q.progress < 100);
+  const archived = state.archivedQuests || [];
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
       h(SectionLabel, { text: `Active quests (${active.length})` }),
-      h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
+      h('div', { style: { display: 'flex', gap: 8 } },
+        archived.length > 0 && h('button', {
+          className: 'rpg-btn',
+          style: { ...styles.secondaryBtn, fontSize: 12 },
+          onClick: () => setShowArchive(v => !v),
+        }, showArchive ? 'Hide archive' : `Archive (${archived.length})`),
+        h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
+      )
     ),
     active.length === 0
       ? h(EmptyState, { text: 'No active quests. Create a time-bound quest to chart a longer journey.' })
       : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          active.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete }))
+          active.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive }))
         ),
-    completed.length > 0 && h('div', { style: { marginTop: 24 } },
-      h(SectionLabel, { text: `Completed (${completed.length})`, icon: 'trophy', accent: '#fbbf24' }),
+    showArchive && archived.length > 0 && h('div', { style: { marginTop: 24 } },
+      h(SectionLabel, { text: `Quest archive (${archived.length})`, icon: 'trophy', accent: '#fbbf24' }),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        completed.map(q => h(QuestRow, { key: q.id, quest: q, onToggleCheckpoint, onDelete, compact: true }))
+        archived.map(q => h('div', { key: q.id, style: { ...styles.questCard, opacity: 0.8 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
+            h('div', { style: { flex: 1 } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                h(Icon, { name: DOMAINS[q.domain].icon, size: 13, color: DOMAINS[q.domain].color }),
+                h('span', { style: { ...styles.questName, color: '#9ca3af' } }, q.name),
+                h(Icon, { name: 'trophy', size: 13, color: '#fbbf24' })
+              ),
+              h('div', { style: { ...styles.questMeta, marginTop: 4 } },
+                `Completed ${new Date(q.archivedAt).toLocaleDateString()} · +${q.xpReward} XP · +${q.goldEarned || 0} coins`
+              )
+            ),
+            h('button', {
+              className: 'rpg-btn',
+              style: { ...styles.secondaryBtn, fontSize: 11, padding: '4px 10px' },
+              onClick: () => onRestoreArchive(q.id),
+              title: 'Restore to active quests',
+            }, 'Restore')
+          )
+        ))
       )
     )
   );
 }
 
-function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, compact }) {
+function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, compact }) {
   const d = DOMAINS[quest.domain];
   const daysLeft = quest.days - Math.floor((Date.now() - quest.createdAt) / (1000*60*60*24));
   const isComplete = quest.progress >= 100;
@@ -2318,7 +2625,8 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, compa
       ),
       h('div', { style: { textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { fontSize: 18, fontWeight: 700, color: isComplete ? '#fbbf24' : d.color } }, `${quest.progress}%`),
-        onDelete && h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(quest.id) }, h(Icon, { name: 'trash2', size: 12 }))
+        onDelete && h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(quest.id) }, h(Icon, { name: 'trash2', size: 12 })),
+        onArchive && h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, fontSize: 11, padding: '4px 8px', height: 'auto' }, onClick: () => onArchive(quest.id), title: 'Archive quest' }, '→')
       )
     ),
     h('div', { style: { ...styles.meterTrack, marginTop: 8 } },
@@ -2625,6 +2933,22 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
   const [xp, setXp] = useState(activity && activity.xp ? activity.xp : 25);
   const [desc, setDesc] = useState(activity && activity.desc ? activity.desc : '');
   const [curve, setCurve] = useState(activity && activity.curve ? activity.curve : [[5,5],[15,15],[30,25],[60,35]]);
+  const [tags, setTags] = useState(activity && activity.tags ? activity.tags : []);
+  const [tagInput, setTagInput] = useState('');
+  const [favorite, setFavorite] = useState(activity ? !!activity.favorite : false);
+
+  const SUGGESTED_TAGS = ['Fitness', 'Recovery', 'Learning', 'Family', 'Business', 'Creative', 'Social', 'Finance', 'Health', 'Mindfulness'];
+
+  function addTag(tag) {
+    const t = tag.trim();
+    if (!t || tags.includes(t)) return;
+    setTags([...tags, t]);
+    setTagInput('');
+  }
+
+  function removeTag(tag) {
+    setTags(tags.filter(t => t !== tag));
+  }
 
   const allSubcats = [...DOMAINS[domain].subcats, ...(customSubcats[domain] || [])];
 
@@ -2643,7 +2967,7 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
 
   function handleSave() {
     if (!name.trim()) return;
-    const data = { id: activity ? activity.id : undefined, name: name.trim(), domain, subcat, type, desc: desc.trim() };
+    const data = { id: activity ? activity.id : undefined, name: name.trim(), domain, subcat, type, desc: desc.trim(), tags, favorite };
     if (type === 'fixed' || type === 'milestone') data.xp = xp;
     if (type === 'duration') data.curve = curve;
     onSave(data);
@@ -2701,6 +3025,32 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
         h('label', { style: styles.label }, 'Description (optional)'),
         h('textarea', { value: desc, onChange: e => setDesc(e.target.value), style: { ...styles.input, minHeight: 60, resize: 'vertical' } })
       ),
+
+      h('div', null,
+        h('label', { style: styles.label }, 'Tags (optional)'),
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 } },
+          tags.map(tag => h('span', { key: tag, style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#c4b5fd', border: '1px solid rgba(167,139,250,0.3)' } },
+            tag,
+            h('button', { className: 'rpg-btn', onClick: () => removeTag(tag), style: { background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 } }, '×')
+          ))
+        ),
+        h('div', { style: { display: 'flex', gap: 6 } },
+          h('input', { value: tagInput, onChange: e => setTagInput(e.target.value), onKeyDown: e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }, style: { ...styles.input, flex: 1 }, placeholder: 'Add a tag…' }),
+          h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => addTag(tagInput) }, h(Icon, { name: 'plus', size: 13 }))
+        ),
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 } },
+          SUGGESTED_TAGS.filter(t => !tags.includes(t)).map(t =>
+            h('button', { key: t, className: 'rpg-btn', onClick: () => addTag(t), style: { ...styles.filterChip, fontSize: 11 } }, '+ ', t)
+          )
+        )
+      ),
+
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => setFavorite(v => !v),
+        style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: favorite ? 'rgba(251,191,36,0.12)' : '#0e0e14', border: `1px solid ${favorite ? '#fbbf24' : '#2a2a35'}`, borderRadius: 8, color: favorite ? '#fbbf24' : '#7c7c8a', cursor: 'pointer', fontSize: 13 },
+      }, h('span', { style: { fontSize: 16 } }, favorite ? '★' : '☆'), favorite ? 'Marked as favourite' : 'Mark as favourite'),
+
       h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave }, h(Icon, { name: 'check', size: 14 }), ' Save activity')
     )
   );
@@ -2960,6 +3310,62 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
       selectedIdx !== null
         ? ` Complete — ${challenges[selectedIdx].tier} tier`
         : ' Select a challenge first'
+    )
+  );
+}
+
+// ---------- Domain Balance Indicator ----------
+
+function DomainBalanceIndicator({ state, economy }) {
+  const dailyGoal = eco({ economy }, 'dailyGoal');
+  // Use last 7 days of data to measure balance
+  const today = todayKey();
+  const last7 = [];
+  const d = new Date();
+  for (let i = 0; i < 7; i++) {
+    last7.push(dateKey(new Date(d.getTime() - i * 86400000)));
+  }
+
+  const totals = {};
+  DOMAIN_KEYS.forEach(k => { totals[k] = 0; });
+  last7.forEach(dk => {
+    const log = state.dailyLogs[dk];
+    if (!log) return;
+    DOMAIN_KEYS.forEach(k => { totals[k] += log[k] || 0; });
+  });
+
+  const values = DOMAIN_KEYS.map(k => totals[k]);
+  const maxVal = Math.max(...values, 1);
+  const minVal = Math.min(...values);
+  const spread = maxVal - minVal;
+  const avgVal = values.reduce((a, b) => a + b, 0) / values.length || 0;
+  const hasActivity = values.some(v => v > 0);
+
+  // Balance score: lower spread relative to average = more balanced
+  const balanceRatio = avgVal > 0 ? spread / avgVal : 0;
+  const label = balanceRatio < 0.4 ? 'Highly balanced' : balanceRatio < 1.0 ? 'Balanced' : balanceRatio < 2.0 ? 'Somewhat lopsided' : 'Lopsided';
+  const labelColor = balanceRatio < 0.4 ? '#86efac' : balanceRatio < 1.0 ? '#fbbf24' : balanceRatio < 2.0 ? '#fb923c' : '#f09595';
+
+  if (!hasActivity) return null; // don't show if no data yet
+
+  return h('section', null,
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
+      h(SectionLabel, { text: 'HRCF Balance (7 days)' }),
+      h('span', { style: { fontSize: 12, fontWeight: 700, color: labelColor } }, label)
+    ),
+    h('div', { style: { display: 'flex', gap: 8 } },
+      DOMAIN_KEYS.map(k => {
+        const dom = DOMAINS[k];
+        const val = totals[k];
+        const pct = Math.round((val / maxVal) * 100);
+        return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
+          h('div', { style: { width: '100%', height: 56, background: '#0e0e14', borderRadius: 8, position: 'relative', overflow: 'hidden' } },
+            h('div', { style: { position: 'absolute', bottom: 0, left: 0, right: 0, height: `${Math.max(pct, 4)}%`, background: hexToRgba(dom.color, 0.5), borderRadius: '8px 8px 0 0', transition: 'height 0.4s ease' } })
+          ),
+          h(Icon, { name: dom.icon, size: 13, color: dom.color }),
+          h('div', { style: { fontSize: 10, color: '#7c7c8a' } }, dom.name.slice(0, 3))
+        );
+      })
     )
   );
 }
