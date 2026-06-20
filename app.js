@@ -840,9 +840,16 @@ function RPGLife({ user, onSignOut }) {
   }, [loaded, state]);
 
   if (!loaded || !state) {
-    return h('div', { style: styles.loadingScreen },
-      h('div', { style: styles.loadingText }, 'Loading character data...'),
-      h('div', { style: { ...styles.loadingText, fontSize: 11, marginTop: 6, opacity: 0.5 } }, `Signed in as ${user.email}`)
+    return h('div', { style: { ...styles.app, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 } },
+      h('style', null, `
+        :root { --bg-void: #080810; }
+        html, body { background: #080810; }
+      `),
+      h('div', { style: { width: 44, height: 44, borderRadius: 4, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+        h(Icon, { name: 'sword', size: 22, color: '#a78bfa' })
+      ),
+      h('div', { style: { fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: '#4a4868' } }, 'Loading character data'),
+      user && h('div', { style: { fontSize: 10, color: '#2a2840' } }, user.email)
     );
   }
 
@@ -1642,55 +1649,499 @@ function RPGLife({ user, onSignOut }) {
 
   return h('div', { style: styles.app },
     h('style', null, `
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes barFill { from { width: 0%; } }
-      @keyframes toastSlide { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.08); } }
-      @keyframes tutorialPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0.6); opacity: 1; } 50% { box-shadow: 0 0 0 6px rgba(167,139,250,0); opacity: 0.85; } }
-      .rpg-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-      .rpg-scroll::-webkit-scrollbar-thumb { background: #3a3a4a; border-radius: 3px; }
-      .rpg-scroll::-webkit-scrollbar-track { background: transparent; }
-      button.rpg-btn { font-family: inherit; cursor: pointer; transition: all 0.15s ease; }
-      button.rpg-btn:active { transform: scale(0.97); }
-      input, select, textarea { font-family: inherit; }
-      * { box-sizing: border-box; }
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+      :root {
+        --bg-void:    #080810;
+        --bg-panel:   #0d0d1a;
+        --bg-raised:  #12121f;
+        --bg-hover:   #1a1a2e;
+        --border-dim: rgba(255,255,255,0.055);
+        --border-mid: rgba(255,255,255,0.10);
+        --border-glow: rgba(167,139,250,0.45);
+        --gold:       #c9a84c;
+        --gold-dim:   rgba(201,168,76,0.15);
+        --gold-glow:  rgba(201,168,76,0.3);
+        --accent:     #a78bfa;
+        --accent-dim: rgba(167,139,250,0.12);
+        --accent-glow:rgba(167,139,250,0.3);
+        --text-hi:    #eceaf6;
+        --text-mid:   #9896b0;
+        --text-lo:    #4a4868;
+        --danger:     #e05c5c;
+        --success:    #5de8a0;
+        --sidebar-w:  220px;
+        --sidebar-w-mobile: 0px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body {
+        background: var(--bg-void);
+        color: var(--text-hi);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow-x: hidden;
+      }
+
+      /* ── Scanline overlay ──────────────────────────────── */
+      body::after {
+        content: '';
+        position: fixed; inset: 0; z-index: 9999;
+        background: repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(0,0,0,0.03) 2px,
+          rgba(0,0,0,0.03) 4px
+        );
+        pointer-events: none;
+      }
+
+      /* ── Scrollbars ────────────────────────────────────── */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--text-lo); border-radius: 2px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--text-mid); }
+
+      /* ── Base elements ─────────────────────────────────── */
+      input, select, textarea, button { font-family: inherit; }
+
+      input, textarea, select {
+        background: var(--bg-void);
+        border: 1px solid var(--border-mid);
+        border-radius: 4px;
+        color: var(--text-hi);
+        padding: 9px 12px;
+        font-size: 13px;
+        width: 100%;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        outline: none;
+      }
+      input:focus, textarea:focus, select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-dim);
+      }
+      input::placeholder, textarea::placeholder { color: var(--text-lo); }
+
+      /* ── Button reset + transitions ────────────────────── */
+      button.rpg-btn {
+        border: none; background: none; padding: 0;
+        cursor: pointer; font-family: inherit;
+        transition: all 0.15s ease;
+        display: inline-flex; align-items: center;
+        -webkit-user-select: none; user-select: none;
+      }
+      button.rpg-btn:active { transform: scale(0.96); }
+      button.rpg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+      /* ── Sidebar nav ────────────────────────────────────── */
+      .rpg-sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0;
+        width: var(--sidebar-w);
+        background: var(--bg-panel);
+        border-right: 1px solid var(--border-dim);
+        display: flex; flex-direction: column;
+        z-index: 100;
+        transition: transform 0.25s ease;
+      }
+      .rpg-sidebar-logo {
+        padding: 24px 20px 20px;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      .rpg-sidebar-logo-title {
+        font-size: 13px; font-weight: 800; letter-spacing: 2.5px;
+        text-transform: uppercase; color: var(--gold);
+        line-height: 1;
+      }
+      .rpg-sidebar-logo-sub {
+        font-size: 10px; color: var(--text-lo); letter-spacing: 1px;
+        text-transform: uppercase; margin-top: 3px;
+      }
+      .rpg-nav-list {
+        flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
+      }
+      .rpg-nav-item {
+        position: relative;
+        display: flex; align-items: center; gap: 11px;
+        padding: 11px 20px;
+        font-size: 12.5px; font-weight: 500; letter-spacing: 0.3px;
+        color: var(--text-mid);
+        cursor: pointer; border: none; background: transparent;
+        text-align: left; width: 100%;
+        transition: color 0.15s, background 0.15s;
+      }
+      .rpg-nav-item::before {
+        content: '';
+        position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+        width: 2px; height: 0;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+        border-radius: 0 2px 2px 0;
+        transition: height 0.2s ease;
+      }
+      .rpg-nav-item:hover { color: var(--text-hi); background: var(--accent-dim); }
+      .rpg-nav-item.active {
+        color: var(--text-hi);
+        background: linear-gradient(90deg, var(--accent-dim) 0%, transparent 100%);
+        font-weight: 600;
+      }
+      .rpg-nav-item.active::before { height: 22px; }
+      .rpg-nav-item .nav-icon { flex-shrink: 0; opacity: 0.7; transition: opacity 0.15s; }
+      .rpg-nav-item.active .nav-icon,
+      .rpg-nav-item:hover .nav-icon { opacity: 1; }
+      .rpg-sidebar-footer {
+        padding: 16px 20px;
+        border-top: 1px solid var(--border-dim);
+        display: flex; flex-direction: column; gap: 10px;
+      }
+
+      /* ── Main content area ──────────────────────────────── */
+      .rpg-main {
+        margin-left: var(--sidebar-w);
+        min-height: 100vh;
+        display: flex; flex-direction: column;
+      }
+      .rpg-topbar {
+        position: sticky; top: 0; z-index: 50;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 28px;
+        height: 52px;
+        background: rgba(8,8,16,0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border-dim);
+      }
+      .rpg-topbar-title {
+        font-size: 11px; font-weight: 700; letter-spacing: 2px;
+        text-transform: uppercase; color: var(--text-lo);
+      }
+      .rpg-topbar-chips {
+        display: flex; align-items: center; gap: 8px;
+      }
+      .rpg-hud-chip {
+        display: flex; align-items: center; gap: 6px;
+        padding: 5px 10px;
+        background: var(--bg-raised);
+        border: 1px solid var(--border-dim);
+        border-radius: 4px;
+        font-size: 12px; font-weight: 700; color: var(--text-hi);
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .rpg-hud-chip:hover { border-color: var(--border-mid); background: var(--bg-hover); }
+      .rpg-hud-chip.gold-chip { color: var(--gold); }
+      .rpg-hud-chip.streak-chip { color: #fb923c; }
+      .rpg-hud-chip.power-chip { color: #fbbf24; }
+      .rpg-content {
+        flex: 1; padding: 28px;
+        max-width: 900px; width: 100%;
+        margin: 0 auto;
+      }
+
+      /* ── Section labels ─────────────────────────────────── */
+      .rpg-section-label {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 10px; font-weight: 700; letter-spacing: 2px;
+        text-transform: uppercase; color: var(--text-lo);
+        margin-bottom: 12px;
+      }
+      .rpg-section-label::after {
+        content: '';
+        flex: 1; height: 1px;
+        background: linear-gradient(90deg, var(--border-dim), transparent);
+      }
+
+      /* ── Cards ──────────────────────────────────────────── */
+      .rpg-card {
+        background: var(--bg-raised);
+        border: 1px solid var(--border-dim);
+        border-radius: 4px;
+        padding: 16px;
+        transition: border-color 0.2s;
+      }
+      .rpg-card:hover { border-color: var(--border-mid); }
+      .rpg-card.glow { border-color: var(--border-glow); box-shadow: 0 0 20px var(--accent-dim); }
+
+      /* ── XP meter ───────────────────────────────────────── */
+      .rpg-meter-track {
+        position: relative; height: 8px;
+        background: var(--bg-void);
+        border: 1px solid var(--border-dim);
+        border-radius: 2px; overflow: visible;
+      }
+      .rpg-meter-fill {
+        position: absolute; top: 0; left: 0; bottom: 0;
+        border-radius: 2px;
+        transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: barFill 0.7s cubic-bezier(0.4,0,0.2,1);
+      }
+      .rpg-meter-tick {
+        position: absolute; top: -2px; bottom: -2px; width: 1px;
+        background: var(--bg-panel); opacity: 0.6;
+        pointer-events: none;
+      }
+      .rpg-meter-overflow { box-shadow: 0 0 12px currentColor; }
+
+      /* ── Stat value display ─────────────────────────────── */
+      .rpg-stat-value { font-size: 24px; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+      .rpg-stat-label { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-lo); margin-top: 2px; }
+
+      /* ── Primary / secondary buttons ───────────────────── */
+      .rpg-primary-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 9px 16px; border-radius: 4px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent);
+        color: var(--accent); font-size: 12px; font-weight: 700;
+        letter-spacing: 0.5px; text-transform: uppercase;
+        cursor: pointer; transition: all 0.15s;
+      }
+      .rpg-primary-btn:hover { background: rgba(167,139,250,0.22); box-shadow: 0 0 14px var(--accent-glow); }
+
+      .rpg-secondary-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 8px 14px; border-radius: 4px;
+        background: transparent;
+        border: 1px solid var(--border-mid);
+        color: var(--text-mid); font-size: 12px; font-weight: 600;
+        cursor: pointer; transition: all 0.15s;
+      }
+      .rpg-secondary-btn:hover { border-color: var(--text-mid); color: var(--text-hi); background: var(--bg-hover); }
+
+      .rpg-gold-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 9px 16px; border-radius: 4px;
+        background: var(--gold-dim);
+        border: 1px solid var(--gold);
+        color: var(--gold); font-size: 12px; font-weight: 700;
+        letter-spacing: 0.5px; text-transform: uppercase;
+        cursor: pointer; transition: all 0.15s;
+      }
+      .rpg-gold-btn:hover { background: rgba(201,168,76,0.22); box-shadow: 0 0 14px var(--gold-glow); }
+
+      .rpg-icon-btn {
+        width: 30px; height: 30px; border-radius: 4px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--bg-hover); border: 1px solid var(--border-dim);
+        color: var(--text-mid); cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+      }
+      .rpg-icon-btn:hover { border-color: var(--border-mid); color: var(--text-hi); }
+      .rpg-icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(224,92,92,0.1); }
+
+      /* ── Toast ──────────────────────────────────────────── */
+      .rpg-toast {
+        position: fixed; top: 16px; right: 16px; z-index: 9998;
+        background: var(--bg-raised);
+        border: 1px solid var(--border-mid);
+        border-left: 3px solid var(--accent);
+        border-radius: 4px;
+        padding: 11px 16px;
+        font-size: 13px; font-weight: 500; color: var(--text-hi);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        animation: toastSlide 0.25s ease;
+        max-width: 320px;
+      }
+
+      /* ── Modal overlay ──────────────────────────────────── */
+      .rpg-modal-overlay {
+        position: fixed; inset: 0; z-index: 200;
+        background: rgba(4,4,10,0.85);
+        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+      }
+      .rpg-modal {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-mid);
+        border-top: 1px solid rgba(167,139,250,0.25);
+        border-radius: 4px;
+        width: 100%; max-width: 500px;
+        max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03);
+      }
+      .rpg-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid var(--border-dim);
+      }
+      .rpg-modal-title {
+        font-size: 12px; font-weight: 700; letter-spacing: 2px;
+        text-transform: uppercase; color: var(--text-hi);
+      }
+      .rpg-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+      /* ── FAB ────────────────────────────────────────────── */
+      .rpg-fab {
+        position: fixed; bottom: 24px; right: 24px; z-index: 90;
+        width: 50px; height: 50px; border-radius: 4px;
+        background: var(--accent);
+        border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 20px rgba(167,139,250,0.4);
+        transition: all 0.2s;
+      }
+      .rpg-fab:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(167,139,250,0.55); }
+      .rpg-fab:active { transform: scale(0.97); }
+
+      /* ── Mobile overlay nav ─────────────────────────────── */
+      .rpg-mobile-nav {
+        display: none;
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+        background: var(--bg-panel);
+        border-top: 1px solid var(--border-dim);
+        padding: 6px 0 env(safe-area-inset-bottom, 6px);
+      }
+      .rpg-mobile-nav-inner {
+        display: flex; justify-content: space-around;
+      }
+      .rpg-mobile-nav-item {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding: 6px 10px;
+        font-size: 9px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+        color: var(--text-lo); cursor: pointer; border: none; background: transparent;
+        transition: color 0.15s;
+      }
+      .rpg-mobile-nav-item.active { color: var(--accent); }
+
+      /* ── Domain colour vars ─────────────────────────────── */
+      .domain-health  { --domain-color: #e24b4a; }
+      .domain-relationships { --domain-color: #d4537e; }
+      .domain-career  { --domain-color: #378add; }
+      .domain-finance { --domain-color: #ef9f27; }
+
+      /* ── Keyframes ──────────────────────────────────────── */
+      @keyframes fadeIn    { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes fadeInUp  { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes barFill   { from { width:0; } }
+      @keyframes toastSlide{ from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }
+      @keyframes pulseGlow { 0%,100% { box-shadow:0 0 0 0 rgba(167,139,250,0); } 50% { box-shadow:0 0 0 6px rgba(167,139,250,0.12); } }
+      @keyframes tutorialPulse { 0%,100% { box-shadow:0 0 0 0 rgba(167,139,250,0.6); } 50% { box-shadow:0 0 0 8px rgba(167,139,250,0); } }
+      @keyframes glowPulse { 0%,100% { opacity:0.7; } 50% { opacity:1; } }
+      @keyframes shimmer   { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
+
+      /* ── Responsive ─────────────────────────────────────── */
+      @media (max-width: 768px) {
+        .rpg-sidebar { transform: translateX(-100%); }
+        .rpg-main { margin-left: 0; padding-bottom: 64px; }
+        .rpg-content { padding: 16px; }
+        .rpg-mobile-nav { display: block; }
+        .rpg-topbar { padding: 0 16px; }
+      }
+
+      /* ── Filter chips ───────────────────────────────────── */
+      .rpg-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 10px; border-radius: 3px;
+        font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+        border: 1px solid var(--border-dim); background: transparent;
+        color: var(--text-mid); cursor: pointer; transition: all 0.15s;
+      }
+      .rpg-chip:hover { border-color: var(--border-mid); color: var(--text-hi); }
+      .rpg-chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+      /* ── Progress bar tick marks ────────────────────────── */
+      .rpg-meter-wrap { position: relative; }
+      .rpg-meter-wrap .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bg-panel); z-index: 1; }
+
+      /* ── Misc utility ───────────────────────────────────── */
+      .rpg-divider { height: 1px; background: var(--border-dim); margin: 4px 0; }
+      .text-gold { color: var(--gold); }
+      .text-accent { color: var(--accent); }
+      .text-dim { color: var(--text-lo); }
+      .text-mid { color: var(--text-mid); }
     `),
-    toast && h('div', { style: styles.toast }, toast),
-    h(Header, {
-      gold: state.gold,
-      consistencyStreak: state.consistencyStreak,
-      powerStreak: state.powerStreak,
-      user, onSignOut, syncStatus,
-      onGoldClick: () => setActiveTab('rewards'),
-      onStreakClick: (mode) => setStreakCalendar(mode),
-      pendingBonuses: state.pendingBonuses || [],
-      onDismissBonus: dismissBonus,
-      onRetrySync: attemptResync,
-      powerValues: state.powerValues || [],
-      onOpenTutorial: () => setTutorialStep(0),
-    }),
-    h('nav', { style: styles.nav },
-      [
-        { id: 'dashboard', label: 'Adventure log', icon: 'scroll' },
-        { id: 'activities', label: 'Activities', icon: 'zap' },
-        { id: 'quests', label: 'Quests', icon: 'target' },
-        { id: 'character', label: 'Level', icon: 'shield' },
-        { id: 'rewards', label: 'Rewards', icon: 'gift' },
-        { id: 'settings', label: 'Settings', icon: 'settings' },
-      ].map(tab =>
-        h('button', {
-          key: tab.id,
-          className: 'rpg-btn',
-          onClick: () => setActiveTab(tab.id),
-          style: { ...styles.navBtn, ...(activeTab === tab.id ? styles.navBtnActive : {}) },
-          'data-tutorial-id': `tab-${tab.id}`,
-        },
-          h(Icon, { name: tab.icon, size: 16 }),
-          h('span', null, tab.label)
+    toast && h('div', { className: 'rpg-toast' }, toast),
+
+    // ── Sidebar (desktop) ──────────────────────────────────
+    h('aside', { className: 'rpg-sidebar' },
+      h('div', { className: 'rpg-sidebar-logo' },
+        h('div', { className: 'rpg-sidebar-logo-title' }, 'Adventure Log'),
+        h('div', { className: 'rpg-sidebar-logo-sub' }, 'Character Progression System')
+      ),
+      h('nav', { className: 'rpg-nav-list' },
+        [
+          { id: 'dashboard',  label: 'Adventure Log', icon: 'scroll'   },
+          { id: 'activities', label: 'Activities',     icon: 'zap'      },
+          { id: 'quests',     label: 'Quests',         icon: 'target'   },
+          { id: 'character',  label: 'Character',      icon: 'shield'   },
+          { id: 'rewards',    label: 'Rewards',        icon: 'gift'     },
+          { id: 'settings',   label: 'Settings',       icon: 'settings' },
+        ].map(tab =>
+          h('button', {
+            key: tab.id,
+            className: `rpg-nav-item rpg-btn${activeTab === tab.id ? ' active' : ''}`,
+            onClick: () => setActiveTab(tab.id),
+            'data-tutorial-id': `tab-${tab.id}`,
+          },
+            h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 15, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
+            tab.label
+          )
         )
+      ),
+      h('div', { className: 'rpg-sidebar-footer' },
+        // Sync status
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: syncStatus === 'offline' ? '#9ca3af' : syncStatus === 'syncing' ? '#fbbf24' : '#5de8a0' } },
+          h('div', { style: { width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 } }),
+          syncStatus === 'offline'
+            ? h('button', { className: 'rpg-btn', onClick: attemptResync, style: { color: '#9ca3af', fontSize: 11, textDecoration: 'underline' } }, 'Offline — tap to retry')
+            : syncStatus === 'syncing' ? 'Syncing…' : 'Synced'
+        ),
+        // User + sign out
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          h('div', { style: { fontSize: 11, color: '#4a4868', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 } }, user && user.email),
+          h('button', { className: 'rpg-btn', onClick: onSignOut, style: { fontSize: 11, color: '#4a4868', flexShrink: 0, marginLeft: 8 } }, 'Sign out')
+        ),
+        // Tutorial button
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => setTutorialStep(0),
+          'data-tutorial-id': 'help-btn',
+          style: { fontSize: 11, color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 },
+        }, h(Icon, { name: 'helpCircle', size: 12, color: '#a78bfa' }), 'Help & tutorial')
       )
     ),
-    h('main', { style: styles.main },
+
+    // ── Main content area ──────────────────────────────────
+    h('div', { className: 'rpg-main' },
+      // Top bar (contextual — shows HUD stats for current tab)
+      h('div', { className: 'rpg-topbar' },
+        h('div', { className: 'rpg-topbar-title' },
+          { dashboard: 'Adventure Log', activities: 'Activities', quests: 'Quests', character: 'Character', rewards: 'Rewards', settings: 'Settings' }[activeTab] || activeTab
+        ),
+        h('div', { className: 'rpg-topbar-chips' },
+          // Pending bonuses bell
+          (state.pendingBonuses || []).length > 0 && h('div', { style: { position: 'relative' } },
+            h('button', {
+              className: 'rpg-hud-chip rpg-btn',
+              onClick: () => setBonusOpen && setBonusOpen(v => !v),
+              title: 'Bonus earned',
+            }, h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }), (state.pendingBonuses || []).length)
+          ),
+          h('button', { className: 'rpg-hud-chip streak-chip rpg-btn', onClick: () => setStreakCalendar('consistency'), title: 'Consistency streak' },
+            h(Icon, { name: 'flame', size: 13, color: '#fb923c' }), state.consistencyStreak
+          ),
+          h('button', { className: 'rpg-hud-chip power-chip rpg-btn', onClick: () => setStreakCalendar('power'), title: 'Power streak' },
+            h(Icon, { name: 'star', size: 13, color: '#fbbf24' }), state.powerStreak
+          ),
+          h('button', { className: 'rpg-hud-chip gold-chip rpg-btn', onClick: () => setActiveTab('rewards'), title: 'Gold' },
+            h(Icon, { name: 'coins', size: 13, color: '#c9a84c' }), state.gold
+          ),
+          // Power values
+          (() => {
+            const pv = (state.powerValues || []).filter(v => v && v.symbol);
+            if (!pv.length) return null;
+            return h('div', { className: 'rpg-hud-chip', style: { gap: 3 } },
+              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 14 } }, v.symbol))
+            );
+          })()
+        )
+      ),
+
+      h('main', { className: 'rpg-content', style: { animation: 'fadeIn 0.2s ease' } },
       activeTab === 'dashboard' && h(Dashboard, {
         state, domainProgress, domainComputed, today, todayLog,
         onLogClick: setLogModal, onBossClick: setBossModal, economy: state.economy,
@@ -1736,15 +2187,38 @@ function RPGLife({ user, onSignOut }) {
         onSetDailyQuestLock: setDailyQuestLockEnabled,
         onOpenTutorial: () => setTutorialStep(0),
       })
-    ),
+      ) // close rpg-content main
+      , // mobile nav inside rpg-main
+      h('nav', { className: 'rpg-mobile-nav' },
+        h('div', { className: 'rpg-mobile-nav-inner' },
+          [
+            { id: 'dashboard',  label: 'Home',       icon: 'scroll'   },
+            { id: 'activities', label: 'Activities',  icon: 'zap'      },
+            { id: 'quests',     label: 'Quests',      icon: 'target'   },
+            { id: 'character',  label: 'Character',   icon: 'shield'   },
+            { id: 'rewards',    label: 'Rewards',     icon: 'gift'     },
+            { id: 'settings',   label: 'Settings',    icon: 'settings' },
+          ].map(tab =>
+            h('button', {
+              key: tab.id,
+              className: `rpg-mobile-nav-item rpg-btn${activeTab === tab.id ? ' active' : ''}`,
+              onClick: () => setActiveTab(tab.id),
+            },
+              h(Icon, { name: tab.icon, size: 18, color: activeTab === tab.id ? '#a78bfa' : '#4a4868' }),
+              tab.label
+            )
+          )
+        )
+      )
+    ), // close rpg-main
+    // ── Modals and overlays (outside layout) ──────────────
+    h(FAB, { onClick: () => setShowQuickLog(true) }),
     buyConfirm && h(BuyConfirmModal, {
       reward: buyConfirm,
       canAfford: state.gold >= buyConfirm.cost,
       onConfirm: () => { buyTicket(buyConfirm); setBuyConfirm(null); },
       onCancel: () => setBuyConfirm(null),
     }),
-    // Floating "+" button — only when not on auth screens
-    h(FAB, { onClick: () => setShowQuickLog(true) }),
     showQuickLog && h(QuickLogSheet, {
       activities: state.activities,
       onSelect: (act) => { setShowQuickLog(false); setLogModal(act); },
@@ -1806,7 +2280,7 @@ function RPGLife({ user, onSignOut }) {
       achievement: achievementQueue[0],
       onClose: () => setAchievementQueue(q => q.slice(1)),
     })
-  );
+  ); // close app div
 }
 
 // ==========================================================
@@ -2720,14 +3194,15 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
 // ---------- Section Label ----------
 
 function SectionLabel({ text, icon, accent }) {
-  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 } },
-    icon && h(Icon, { name: icon, size: 13, color: accent || '#7c7c8a' }),
-    h('span', { style: styles.sectionLabel }, text)
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 } },
+    icon && h(Icon, { name: icon, size: 12, color: accent || '#4a4868' }),
+    h('span', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: accent || '#4a4868' } }, text),
+    h('div', { style: { flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(255,255,255,0.06), transparent)', marginLeft: 4 } })
   );
 }
 
 function EmptyState({ text }) {
-  return h('div', { style: styles.emptyState }, text);
+  return h('div', { style: { padding: '32px 20px', textAlign: 'center', color: '#4a4868', fontSize: 12, letterSpacing: 0.3, border: '1px dashed rgba(255,255,255,0.06)', borderRadius: 4 } }, text);
 }
 
 // ---------- Activities View ----------
@@ -5038,358 +5513,161 @@ function AuthGate() {
 }
 
 // ---------- Styles ----------
+// CSS-variable-backed design token system.
+const C = {
+  void:       '#080810',
+  panel:      '#0d0d1a',
+  raised:     '#12121f',
+  hover:      '#1a1a2e',
+  borderDim:  'rgba(255,255,255,0.055)',
+  borderMid:  'rgba(255,255,255,0.10)',
+  borderGlow: 'rgba(167,139,250,0.45)',
+  accent:     '#a78bfa',
+  accentDim:  'rgba(167,139,250,0.12)',
+  accentGlow: 'rgba(167,139,250,0.3)',
+  gold:       '#c9a84c',
+  goldDim:    'rgba(201,168,76,0.15)',
+  textHi:     '#eceaf6',
+  textMid:    '#9896b0',
+  textLo:     '#4a4868',
+  danger:     '#e05c5c',
+  success:    '#5de8a0',
+};
 
 const styles = {
   app: {
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    background: '#13131a',
-    color: '#e5e7eb',
-    minHeight: '100vh',
-    borderRadius: 0,
-    overflow: 'hidden',
-    width: '100%',
+    background: C.void, color: C.textHi,
+    minHeight: '100vh', overflow: 'hidden', width: '100%', position: 'relative',
   },
   loadingScreen: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    height: '100vh', background: '#13131a', color: '#9ca3af',
-    fontFamily: "'Inter', sans-serif", fontSize: 13,
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    height: '100vh', background: C.void, color: C.textMid, gap: 12,
   },
-  loadingText: { opacity: 0.7 },
-  toast: {
-    position: 'fixed', top: 12, right: 12, zIndex: 50,
-    background: '#1f1f2b', border: '1px solid #3a3a4a', borderRadius: 8,
-    padding: '8px 14px', fontSize: 13, color: '#e5e7eb',
-    animation: 'toastSlide 0.25s ease', boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-  },
-  header: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '16px 20px', borderBottom: '1px solid #22222e',
-    background: 'linear-gradient(180deg, #1a1a24 0%, #15151e 100%)',
-    flexWrap: 'wrap', gap: 12,
-  },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: 12 },
-  logoMark: {
-    width: 38, height: 38, borderRadius: 10, background: 'rgba(167,139,250,0.12)',
-    border: '1px solid rgba(167,139,250,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  title: { fontSize: 15, fontWeight: 700, color: '#f4f1ea', letterSpacing: 0.2 },
-  subtitle: { fontSize: 11.5, color: '#7c7c8a', marginTop: 1 },
-  headerRight: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
-  streakChip: {
-    display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px',
-    background: '#1f1f2b', border: '1px solid #2e2e3a', borderRadius: 999, fontSize: 12,
-  },
-  goldChip: {
-    display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px',
-    background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 999, fontSize: 12,
-  },
-  pValuesChip: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    padding: '4px 10px',
-    background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)',
-    borderRadius: 10, gap: 2,
-  },
-  pValuesLabel: {
-    fontSize: 9, fontWeight: 700, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.8,
-  },
-  pValuesIcons: {
-    display: 'flex', gap: 4, lineHeight: 1,
-  },
-  streakNum: { fontWeight: 700, color: '#f4f1ea', fontSize: 13 },
-  streakLabel: { color: '#7c7c8a', fontSize: 11 },
-  nav: {
-    display: 'flex', gap: 4, padding: '10px 16px', borderBottom: '1px solid #22222e',
-    overflowX: 'auto', background: '#15151e',
-  },
-  navBtn: {
-    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-    background: 'transparent', border: '1px solid transparent', borderRadius: 8,
-    color: '#9ca3af', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
-  },
-  navBtnActive: {
-    background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', color: '#c4b5fd',
-  },
-  main: { padding: '18px 20px 28px', maxWidth: 900, margin: '0 auto' },
-  sectionLabel: { fontSize: 11.5, fontWeight: 700, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.8 },
-  metersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 },
-  bigMetersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 },
-  modeToggle: {
-    display: 'flex', gap: 2, padding: 3, background: '#0e0e14',
-    border: '1px solid #2a2a35', borderRadius: 10,
-  },
-  modeToggleBtn: {
-    padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-    background: 'transparent', border: 'none', color: '#7c7c8a', cursor: 'pointer',
-  },
-  modeToggleBtnActive: {
-    background: 'rgba(167,139,250,0.15)', color: '#c4b5fd',
-  },
-  questPanelCard: {
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 14, padding: '18px 18px',
-  },
-  questPickerDropdown: {
-    position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 30,
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10,
-    maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-  },
-  bigMeterCard: {
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 14, padding: '16px 18px',
-  },
-  bigMeterIcon: {
-    width: 38, height: 38, borderRadius: 10,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  bigMeterName: { fontSize: 15, fontWeight: 700, color: '#f4f1ea' },
-  bigMeterSubName: { fontSize: 11.5, color: '#9ca3af', marginTop: 2 },
-  bigMeterValue: { fontSize: 30, fontWeight: 700, lineHeight: 1 },
-  meterCard: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' },
-  levelCard: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' },
-  meterTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  meterName: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' },
-  meterValue: { fontSize: 13, fontWeight: 700 },
-  meterTrack: { height: 8, background: '#0e0e14', borderRadius: 999, overflow: 'hidden', position: 'relative' },
-  meterFill: { height: '100%', borderRadius: 999, transition: 'width 0.4s ease' },
-  meterSub: { fontSize: 11, color: '#7c7c8a', marginTop: 6 },
-  bossRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    background: '#1a1a24', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 10,
-    padding: '10px 14px', cursor: 'pointer',
-  },
-  bossIcon: { width: 32, height: 32, borderRadius: 8, border: '1px solid', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  bossTitle: { fontSize: 13, fontWeight: 600, color: '#f4f1ea' },
-  bossSub: { fontSize: 11, color: '#9ca3af', marginTop: 1 },
-  quickLogGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 },
-  quickLogBtn: {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb',
-  },
-  quickLogDot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
-  quickLogName: { fontSize: 13, fontWeight: 600 },
-  quickLogMeta: { fontSize: 11, color: '#7c7c8a', marginTop: 1 },
-  activityFeed: { display: 'flex', flexDirection: 'column', gap: 6 },
-  activityRow: {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-    background: '#1a1a24', border: '1px solid #25252f', borderRadius: 8,
-  },
-  activityDot: { width: 6, height: 6, borderRadius: '50%', flexShrink: 0 },
-  activityName: { fontSize: 12.5, fontWeight: 500, color: '#e5e7eb' },
-  activityDetail: { fontSize: 11.5, color: '#7c7c8a' },
-  activityXp: { fontSize: 12.5, fontWeight: 700 },
-  activityTime: { fontSize: 11, color: '#5e5e6b', minWidth: 44, textAlign: 'right' },
-  emptyState: {
-    padding: '24px 16px', textAlign: 'center', color: '#5e5e6b', fontSize: 13,
-    background: '#1a1a24', border: '1px dashed #2a2a35', borderRadius: 10,
-  },
-  primaryBtn: {
-    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-    background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)', borderRadius: 8,
-    color: '#c4b5fd', fontSize: 12.5, fontWeight: 600,
-  },
-  iconBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
-    background: '#1f1f2b', border: '1px solid #2e2e3a', borderRadius: 8, color: '#9ca3af',
-  },
-  iconBtnDanger: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
-    background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 8, color: '#f09595',
-  },
-  filterChip: {
-    display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px',
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 999, color: '#9ca3af', fontSize: 12, fontWeight: 500,
-  },
-  activityCard: {
-    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10,
-  },
-  activityCardName: { fontSize: 13.5, fontWeight: 600, color: '#f4f1ea' },
-  activityCardMeta: { fontSize: 11.5, color: '#7c7c8a', marginTop: 2 },
-  activityCardDesc: { fontSize: 11.5, color: '#9ca3af', marginTop: 4 },
-  questCard: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' },
-  questName: { fontSize: 13.5, fontWeight: 600, color: '#f4f1ea' },
-  questDesc: { fontSize: 12, color: '#9ca3af', marginTop: 4 },
-  questMeta: { fontSize: 11, color: '#7c7c8a', marginTop: 4 },
-  charSummary: {
-    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-    background: 'linear-gradient(135deg, rgba(167,139,250,0.1), rgba(167,139,250,0.02))',
-    border: '1px solid rgba(167,139,250,0.2)', borderRadius: 12,
-  },
-  charAvatar: {
-    width: 50, height: 50, borderRadius: 12, background: 'rgba(167,139,250,0.15)',
-    border: '1px solid rgba(167,139,250,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  charDomainCard: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 12, padding: '14px 16px' },
-  charDomainIcon: { width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  subcatPill: {
-    display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999,
-    border: '1px solid', fontSize: 11.5, fontWeight: 500, background: 'transparent',
-  },
-  bossPill: {
-    display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 999,
-    border: '1px solid #2a2a35', fontSize: 11.5, fontWeight: 600, background: 'transparent', color: '#5e5e6b',
-  },
-  bossChallenge: {
-    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 8,
-  },
-  goldBanner: {
-    background: 'linear-gradient(135deg, rgba(251,191,36,0.1), rgba(251,191,36,0.02))',
-    border: '1px solid rgba(251,191,36,0.25)', borderRadius: 12, padding: '14px 18px',
-  },
-  rewardCard: {
-    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-    background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10,
-  },
-  ticketCard: {
-    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-    background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 10,
-    transition: 'opacity 0.2s ease',
-  },
-  toggleSwitch: {
-    width: 36, height: 20, borderRadius: 999, position: 'relative',
-    border: 'none', cursor: 'pointer', transition: 'background 0.2s ease',
-    flexShrink: 0,
-  },
-  toggleKnob: {
-    position: 'absolute', top: 2, width: 16, height: 16, borderRadius: '50%',
-    background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-    transition: 'left 0.2s ease',
-  },
-  modalOverlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex',
-    alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16,
-  },
-  modalCard: {
-    background: '#1a1a24', border: '1px solid #2e2e3a', borderRadius: 14, width: '100%',
-    maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
-  },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #25252f' },
-  modalTitle: { fontSize: 14, fontWeight: 700, color: '#f4f1ea' },
-  label: { display: 'block', fontSize: 11.5, color: '#9ca3af', marginBottom: 5, fontWeight: 600 },
-  input: {
-    width: '100%', padding: '8px 10px', background: '#0e0e14', border: '1px solid #2a2a35',
-    borderRadius: 8, color: '#e5e7eb', fontSize: 13, outline: 'none',
-  },
-  xpPreview: {
-    display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '10px 14px',
-    background: '#0e0e14', border: '1px solid #2a2a35', borderRadius: 10,
-  },
-  accountBtn: {
-    width: 32, height: 32, borderRadius: '50%',
-    background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)',
-    color: '#c4b5fd', fontSize: 13, fontWeight: 700,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  accountMenu: {
-    position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-    background: '#1f1f2b', border: '1px solid #2e2e3a', borderRadius: 10,
-    minWidth: 200, zIndex: 90, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-    overflow: 'hidden',
-  },
-  accountMenuEmail: {
-    padding: '10px 14px', borderBottom: '1px solid #2e2e3a',
-    fontSize: 12, color: '#9ca3af', wordBreak: 'break-all',
-  },
-  accountMenuItem: {
-    width: '100%', textAlign: 'left', padding: '10px 14px',
-    background: 'transparent', border: 'none', color: '#e5e7eb', fontSize: 13,
-    cursor: 'pointer',
-  },
-  bonusBell: {
-    position: 'relative',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: 34, height: 34, borderRadius: '50%',
-    background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)',
-    animation: 'pulseGlow 1.6s infinite',
-  },
-  bonusBadge: {
-    position: 'absolute', top: -4, right: -4,
-    background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 700,
-    minWidth: 16, height: 16, borderRadius: 999,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: '0 3px',
-  },
-  bonusPopover: {
-    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-    background: '#1f1f2b', border: '1px solid #2e2e3a', borderRadius: 12,
-    minWidth: 240, zIndex: 95, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-    padding: '12px 14px',
-  },
-  bonusRow: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    padding: '8px 10px', background: 'rgba(251,191,36,0.06)',
-    border: '1px solid rgba(251,191,36,0.2)', borderRadius: 8,
-  },
-  authScreen: {
-    minHeight: '100vh', minHeight: '100dvh',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 20, background: '#13131a',
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  authCard: {
-    width: '100%', maxWidth: 380,
-    background: '#1a1a24', border: '1px solid #2e2e3a', borderRadius: 14,
-    padding: '28px 24px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-  },
-  authTitle: { fontSize: 18, fontWeight: 700, color: '#f4f1ea', marginBottom: 4 },
-  authSubtitle: { fontSize: 13, color: '#9ca3af' },
-  authError: {
-    background: 'rgba(226,75,74,0.1)', border: '1px solid rgba(226,75,74,0.3)',
-    color: '#f09595', fontSize: 12.5, padding: '8px 12px', borderRadius: 8,
-  },
-  authLink: {
-    color: '#c4b5fd', textDecoration: 'none', fontWeight: 600,
-  },
-  secondaryBtn: {
-    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-    background: 'transparent', border: '1px solid #2e2e3a', borderRadius: 8,
-    color: '#9ca3af', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-  },
-  dangerBtn: {
-    display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-    background: 'rgba(226,75,74,0.12)', border: '1px solid rgba(226,75,74,0.4)', borderRadius: 8,
-    color: '#f09595', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-  },
-  dangerBtnSmall: {
-    padding: '6px 12px',
-    background: 'rgba(226,75,74,0.1)', border: '1px solid rgba(226,75,74,0.3)', borderRadius: 8,
-    color: '#f09595', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-  },
-  fab: {
-    position: 'fixed',
-    bottom: 'calc(env(safe-area-inset-bottom) + 20px)',
-    right: 20,
-    width: 56, height: 56, borderRadius: '50%',
-    background: 'linear-gradient(135deg, #a78bfa, #7c3aed)',
-    border: 'none',
-    color: 'white',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 6px 24px rgba(124,58,237,0.45), 0 2px 6px rgba(0,0,0,0.3)',
-    zIndex: 80,
-    cursor: 'pointer',
-  },
-  bottomSheet: {
-    background: '#1a1a24',
-    border: '1px solid #2e2e3a',
-    borderRadius: 14,
-    width: '100%',
-    maxWidth: 440,
-    maxHeight: '80vh',
-    overflow: 'hidden',
-    display: 'flex', flexDirection: 'column',
-    boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-  },
-  overflowBadge: {
-    fontSize: 11, fontWeight: 700,
-    padding: '2px 8px',
-    borderRadius: 999,
-    border: '1px solid',
-  },
-  bossLevelRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-    padding: '10px 12px',
-    background: 'rgba(255,255,255,0.02)', border: '1px solid #2a2a35', borderRadius: 8,
-    cursor: 'pointer',
-  },
+  loadingText: { fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 },
+
+  // Domain meters
+  bigMetersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 },
+  bigMeterCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', transition: 'border-color 0.2s' },
+  bigMeterIcon: { width: 32, height: 32, borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  bigMeterName: { fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: C.textHi },
+  bigMeterSubName: { fontSize: 10.5, color: C.textMid, marginTop: 1 },
+  bigMeterValue: { fontSize: 22, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1 },
+  meterTrack: { position: 'relative', height: 7, background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 2, overflow: 'hidden' },
+  meterFill: { position: 'absolute', top: 0, left: 0, bottom: 0, borderRadius: 2, transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)', animation: 'barFill 0.7s cubic-bezier(0.4,0,0.2,1)' },
+  overflowBadge: { fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, border: '1px solid', letterSpacing: 0.5 },
+
+  // Activity cards
+  activityCard: { display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, transition: 'border-color 0.15s' },
+  quickLogDot: { width: 3, height: 3, borderRadius: '50%', flexShrink: 0, marginTop: 7 },
+  activityCardName: { fontSize: 13, fontWeight: 600, color: C.textHi },
+  activityCardMeta: { fontSize: 11, color: C.textMid, marginTop: 2 },
+  activityCardDesc: { fontSize: 11.5, color: C.textMid, marginTop: 3, lineHeight: 1.4 },
+
+  // Quest cards
+  questCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', transition: 'border-color 0.2s' },
+  questName: { fontSize: 13, fontWeight: 700, color: C.textHi },
+  questMeta: { fontSize: 11, color: C.textMid },
+  questProgressText: { fontSize: 11.5, fontWeight: 700 },
+
+  // Modals
+  modalOverlay: { position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(4,4,10,0.88)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  modal: { background: C.panel, border: '1px solid ' + C.borderMid, borderTop: '1px solid rgba(167,139,250,0.25)', borderRadius: 4, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.7)' },
+  modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', borderBottom: '1px solid ' + C.borderDim },
+  modalTitle: { fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: C.textHi },
+  modalBody: { padding: 20, display: 'flex', flexDirection: 'column', gap: 14 },
+
+  // Inputs
+  label: { display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 6 },
+  input: { background: C.void, border: '1px solid ' + C.borderMid, borderRadius: 4, color: C.textHi, padding: '9px 12px', fontSize: 13, width: '100%', outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s' },
+
+  // Buttons
+  primaryBtn: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 4, background: C.accentDim, border: '1px solid ' + C.accent, color: C.accent, fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.15s' },
+  secondaryBtn: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px', borderRadius: 4, background: 'transparent', border: '1px solid ' + C.borderMid, color: C.textMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+  iconBtn: { width: 30, height: 30, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 },
+  iconBtnDanger: { width: 30, height: 30, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 },
+
+  // FAB
+  fab: { position: 'fixed', bottom: 24, right: 24, zIndex: 90, width: 50, height: 50, borderRadius: 4, background: C.accent, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(167,139,250,0.4)', transition: 'all 0.2s' },
+
+  // Toast
+  toast: { position: 'fixed', top: 16, right: 16, zIndex: 9998, background: C.raised, border: '1px solid ' + C.borderMid, borderLeft: '3px solid ' + C.accent, borderRadius: 4, padding: '10px 16px', fontSize: 13, fontWeight: 500, color: C.textHi, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', animation: 'toastSlide 0.25s ease', maxWidth: 320 },
+
+  // Filter chips
+  filterChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 3, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, border: '1px solid ' + C.borderDim, background: 'transparent', color: C.textMid, cursor: 'pointer', transition: 'all 0.15s' },
+
+  // Character view
+  charSummary: { display: 'flex', alignItems: 'center', gap: 16, padding: '20px 0 24px', borderBottom: '1px solid ' + C.borderDim, marginBottom: 24 },
+  charAvatar: { width: 52, height: 52, borderRadius: 4, flexShrink: 0, background: C.accentDim, border: '1px solid ' + C.borderGlow, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(167,139,250,0.2)' },
+  domainCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', marginBottom: 10 },
+  bossPill: { padding: '5px 10px', borderRadius: 3, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, border: '1px solid', cursor: 'default', display: 'inline-flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' },
+
+  // Rewards
+  rewardCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, transition: 'border-color 0.15s' },
+  ticketCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 },
+
+  // Boss modal
+  tierBtn: { flex: 1, padding: '14px 10px', borderRadius: 4, border: '1px solid', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'transparent', transition: 'all 0.15s' },
+
+  // Auth
+  authScreen: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.void, padding: 20 },
+  authCard: { background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, padding: '32px', width: '100%', maxWidth: 400, boxShadow: '0 24px 80px rgba(0,0,0,0.6)' },
+  authTitle: { fontSize: 18, fontWeight: 800, color: C.textHi, marginBottom: 4 },
+  authSub: { fontSize: 13, color: C.textMid, marginBottom: 24 },
+
+  // Quick log
+  bottomSheet: { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200, background: C.panel, border: '1px solid ' + C.borderMid, borderBottom: 'none', borderRadius: '4px 4px 0 0', padding: 20, boxShadow: '0 -8px 40px rgba(0,0,0,0.5)', maxHeight: '80vh', overflowY: 'auto' },
+
+  // Settings
+  settingCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  settingRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid ' + C.borderDim },
+
+  // Economy
+  ecoGroup: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', marginBottom: 10 },
+  ecoGroupLabel: { fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 },
+  ecoField: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },
+  ecoLabel: { flex: 1, fontSize: 12, color: C.textMid },
+  ecoInput: { width: 72, background: C.void, border: '1px solid ' + C.borderMid, borderRadius: 3, color: C.textHi, padding: '5px 8px', fontSize: 12, textAlign: 'right', outline: 'none' },
+
+  // Account (kept for auth screens, hidden in main UI)
+  accountBtn: { width: 30, height: 30, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', fontSize: 12, fontWeight: 700 },
+  accountMenu: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' },
+  accountMenuEmail: { padding: '10px 14px', fontSize: 11, color: C.textMid, borderBottom: '1px solid ' + C.borderDim },
+  accountMenuItem: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', background: 'transparent', border: 'none', color: C.textMid, fontSize: 12, cursor: 'pointer', transition: 'background 0.12s, color 0.12s' },
+
+  // Streak calendar
+  calendarGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 },
+  calendarDay: { width: '100%', aspectRatio: '1', borderRadius: 2, cursor: 'default' },
+  calendarLegend: { display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8, flexWrap: 'wrap' },
+  calendarLegendItem: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: C.textMid },
+
+  // Legacy stubs (sidebar now handles nav — these are hidden)
+  header: { display: 'none' },
+  headerLeft: { display: 'none' },
+  headerRight: { display: 'none' },
+  logoMark: { width: 32, height: 32, borderRadius: 4, background: C.accentDim, border: '1px solid ' + C.borderGlow, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 13, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: C.gold },
+  subtitle: { fontSize: 10, color: C.textLo },
+  nav: { display: 'none' },
+  navBtn: { display: 'none' },
+  navBtnActive: { display: 'none' },
+  main: { flex: 1 },
+  streakChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim, fontSize: 12, fontWeight: 700 },
+  streakNum: { fontSize: 13, fontWeight: 800, lineHeight: 1 },
+  streakLabel: { fontSize: 10, color: C.textMid },
+  goldChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim, color: C.gold, fontSize: 12, fontWeight: 700 },
+  bonusBell: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim, color: C.textMid, fontSize: 12, fontWeight: 600, position: 'relative', cursor: 'pointer' },
+  bonusBadge: { position: 'absolute', top: -5, right: -5, background: C.accent, color: 'white', fontSize: 9, fontWeight: 700, lineHeight: 1, padding: '2px 4px', borderRadius: 3, minWidth: 14, textAlign: 'center' },
+  pValuesChip: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim },
+  pValuesLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.textLo },
+  pValuesIcons: { display: 'flex', gap: 2 },
+
+  // Daily quest
+  modeToggle: { display: 'flex', gap: 2, padding: 3, background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 4 },
+  modeToggleBtn: { padding: '5px 12px', borderRadius: 3, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', background: 'transparent', border: 'none', color: C.textMid, cursor: 'pointer' },
+  modeToggleBtnActive: { background: C.accentDim, color: C.accent },
+  questPanelCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '16px 18px' },
+  questPickerDropdown: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 30, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' },
 };
 
 // ---------- Render ----------
