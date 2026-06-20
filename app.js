@@ -84,7 +84,15 @@ const DEFAULT_ECONOMY = {
   challengeXpMax: 70,
   challengeCoinMin: 10,
   challengeCoinMax: 100,
-  reminderThresholdDays: 7,     // days before a neglected domain triggers a reminder (0 = disabled)
+  reminderThresholdDays: 7,
+};
+
+// Difficulty presets — sensible out-of-the-box tunings for different player types.
+// Advanced users can override individual values via Economy Config in Advanced Settings.
+const DIFFICULTY_PRESETS = {
+  easy:      { dailyGoal: 60,  consistencyMin: 30, powerStreakUnlockDays: 10, streakCoinsAmount: 15, bossCoinBase: 100 },
+  balanced:  { dailyGoal: 100, consistencyMin: 50, powerStreakUnlockDays: 15, streakCoinsAmount: 10, bossCoinBase: 75  },
+  ambitious: { dailyGoal: 150, consistencyMin: 75, powerStreakUnlockDays: 21, streakCoinsAmount: 8,  bossCoinBase: 60  },
 };
 
 // Helper: get economy value from state, falling back to defaults
@@ -301,14 +309,15 @@ function buildInitialState() {
     },
     questChains: [],
     equippedTitle: null,
-    classMastery: {         // XP contributed toward each class (updated in logActivity)
-      warrior: 0,           // health domain
-      scholar: 0,           // career + learning-tagged activities
-      guardian: 0,          // relationships domain
-      treasurer: 0,         // finance domain
-      creator: 0,           // creative-tagged activities (any domain)
+    classMastery: {
+      warrior: 0, scholar: 0, guardian: 0, treasurer: 0, creator: 0,
     },
-    yearlyLegacy: {},       // { [year]: { xpEarned, coinsEarned, activitiesLogged, questsCompleted, gatesCleared, highestStreak, topDomain } }
+    yearlyLegacy: {},
+    restDayTokens: 0,          // earned every 7 consistency days, protects streak on one missed day
+    difficultyPreset: 'balanced', // 'easy' | 'balanced' | 'ambitious'
+    advancedSettingsUnlocked: false, // unlocked at level 10 total combined rank
+    totalCoinsEarnedAllTime: 0,  // running total, never decremented
+    newAchievementsSince: null,  // timestamp — Character tab shows dot when achievements unlocked after this
   };
 }
 
@@ -836,7 +845,17 @@ function RPGLife({ user, onSignOut }) {
     const last = state.lastConsistencyDate;
     const wasMissed = last !== null && last !== currentToday && last !== yesterdayKey();
     if (wasMissed && (state.consistencyStreak > 0 || state.powerStreak > 0)) {
-      setState(prev => ({ ...prev, consistencyStreak: 0, powerStreak: 0 }));
+      if ((state.restDayTokens || 0) > 0) {
+        // Consume one rest day token — streak is protected
+        setState(prev => ({
+          ...prev,
+          restDayTokens: prev.restDayTokens - 1,
+          lastConsistencyDate: yesterdayKey(), // treat yesterday as covered
+        }));
+        showToast('🛡️ Rest Day token used — streak protected!');
+      } else {
+        setState(prev => ({ ...prev, consistencyStreak: 0, powerStreak: 0 }));
+      }
     }
   }, [loaded, state]);
 
@@ -894,7 +913,12 @@ function RPGLife({ user, onSignOut }) {
         bonuses.push({ label: `${next.consistencyStreak}-day streak`, amount: streakAmount, type: 'streak' });
       }
 
-      // Power Streak: gated behind Consistency Streak reaching the unlock
+      // Rest day token: earn one every 7 consistency days.
+      // Tokens protect the streak on one missed day (used in the rollover check).
+      if (next.consistencyStreak > 0 && next.consistencyStreak % 7 === 0) {
+        next.restDayTokens = (next.restDayTokens || 0) + 1;
+        bonuses.push({ label: 'Rest Day token earned', amount: 0, type: 'rest', icon: '🛡️' });
+      }
       // threshold. Day `unlockDays` itself only unlocks eligibility (Power
       // Streak stays 0); from `unlockDays + 1` onward, Power Streak climbs
       // 1:1 alongside Consistency Streak. Any break in Consistency Streak
@@ -1142,10 +1166,25 @@ function RPGLife({ user, onSignOut }) {
       ['quest_10', questsDone >= 10],
     ];
 
+    const prevAchievementCount = Object.keys(next.achievements || {}).length;
     let state = next;
     for (const [id, condition] of checks) {
       if (condition) state = unlockAchievementInState(state, id);
     }
+
+    // Unlock advanced settings at combined rank 10
+    const totalRank = DOMAIN_KEYS.reduce((s, k) => s + (state.domains[k]?.rank || 0), 0);
+    if (totalRank >= 10 && !state.advancedSettingsUnlocked) {
+      state = { ...state, advancedSettingsUnlocked: true };
+      setTimeout(() => showToast('🔓 Advanced Settings unlocked — Settings → Advanced'), 800);
+    }
+
+    // Mark new achievements for the Character tab notification dot
+    const newAchievementCount = Object.keys(state.achievements || {}).length;
+    if (newAchievementCount > prevAchievementCount) {
+      state = { ...state, newAchievementsSince: Date.now() };
+    }
+
     return state;
   }
 
@@ -1368,6 +1407,7 @@ function RPGLife({ user, onSignOut }) {
       next.domains = { ...next.domains };
       next.domains[quest.domain] = { ...next.domains[quest.domain], totalXp: next.domains[quest.domain].totalXp + quest.xpReward };
       next.gold = next.gold + goldGain;
+      next.totalCoinsEarnedAllTime = (next.totalCoinsEarnedAllTime || 0) + goldGain;
       next.goldHistory = { ...(next.goldHistory || {}) };
       next.goldHistory[today] = (next.goldHistory[today] || 0) + goldGain;
       showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold — archived`);
@@ -1471,7 +1511,7 @@ function RPGLife({ user, onSignOut }) {
       const goldGain = Math.round(base * mult);
       const goldHistory = { ...(prev.goldHistory || {}) };
       goldHistory[today] = (goldHistory[today] || 0) + goldGain;
-      const after = checkAchievements({ ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory });
+      const after = checkAchievements({ ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory, totalCoinsEarnedAllTime: (prev.totalCoinsEarnedAllTime || 0) + goldGain });
       // Yearly legacy: gate count and coins
       const _year = String(new Date().getFullYear());
       const _yearlyLegacy = { ...(after.yearlyLegacy || {}) };
@@ -1482,6 +1522,12 @@ function RPGLife({ user, onSignOut }) {
       return { ...after, yearlyLegacy: _yearlyLegacy };
     });
     showToast(`Boss defeated! Rank unlocked.`);
+    // #4 Reward proximity hint — show if a reward is now affordable
+    setState(prev => {
+      const cheapest = (prev.rewards || []).filter(r => r.cost <= prev.gold).sort((a,b) => b.cost - a.cost)[0];
+      if (cheapest) setTimeout(() => showToast(`💰 You can now afford: ${cheapest.name} (${cheapest.cost} coins)`), 1500);
+      return prev;
+    });
     setBossModal(null);
   }
 
@@ -1645,6 +1691,21 @@ function RPGLife({ user, onSignOut }) {
   function saveEconomy(newEconomy) {
     setState(prev => ({ ...prev, economy: { ...(prev.economy || {}), ...newEconomy } }));
     showToast('Economy settings saved');
+  }
+
+  function setDifficultyPreset(preset) {
+    const overrides = DIFFICULTY_PRESETS[preset];
+    if (!overrides) return;
+    setState(prev => ({
+      ...prev,
+      difficultyPreset: preset,
+      economy: { ...DEFAULT_ECONOMY, ...(prev.economy || {}), ...overrides },
+    }));
+    showToast(`Difficulty: ${preset.charAt(0).toUpperCase() + preset.slice(1)}`);
+  }
+
+  function clearNewAchievementDot() {
+    setState(prev => ({ ...prev, newAchievementsSince: null }));
   }
 
   function savePowerValues(values) {
@@ -2167,7 +2228,8 @@ function RPGLife({ user, onSignOut }) {
             'data-tutorial-id': `tab-${tab.id}`,
           },
             h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 18, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
-            tab.label
+            tab.label,
+            tab.id === 'character' && state.newAchievementsSince && h('span', { style: { width: 7, height: 7, borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 6px #a78bfa', marginLeft: 'auto', flexShrink: 0 } })
           )
         )
       ),
@@ -2184,13 +2246,13 @@ function RPGLife({ user, onSignOut }) {
           h('div', { style: { fontSize: 11, color: '#4a4868', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 } }, user && user.email),
           h('button', { className: 'rpg-btn', onClick: onSignOut, style: { fontSize: 11, color: '#4a4868', flexShrink: 0, marginLeft: 8 } }, 'Sign out')
         ),
-        // Tutorial button
+        // Tutorial/guide button — promoted to secondary button style
         h('button', {
           className: 'rpg-btn',
           onClick: () => setTutorialStep(0),
           'data-tutorial-id': 'help-btn',
-          style: { fontSize: 11, color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 5 },
-        }, h(Icon, { name: 'helpCircle', size: 12, color: '#a78bfa' }), 'Help & tutorial')
+          style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '8px 0', fontSize: 11.5, gap: 6 },
+        }, h(Icon, { name: 'helpCircle', size: 13, color: '#9896b0' }), 'Guide')
       )
     ),
 
@@ -2258,7 +2320,7 @@ function RPGLife({ user, onSignOut }) {
         onToggleFavorite: toggleActivityFavorite,
       }),
       activeTab === 'quests' && h(QuestsView, { state, onAdd: () => { setEditingQuest(null); setShowQuestForm(true); }, onEdit: (q) => { setEditingQuest(q); setShowQuestForm(true); }, onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive, onSaveChain: saveQuestChain, onRemoveFromChain: removeQuestFromChain, isQuestUnlocked }),
-      activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat, onEquipTitle: equipTitle }),
+      activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat, onEquipTitle: equipTitle, onClearAchievementDot: clearNewAchievementDot }),
       activeTab === 'rewards' && h(RewardsView, {
         state,
         onBuy: (r) => setBuyConfirm(r),
@@ -2281,6 +2343,7 @@ function RPGLife({ user, onSignOut }) {
         onSavePowerValues: savePowerValues,
         onSetDailyQuestLock: setDailyQuestLockEnabled,
         onOpenTutorial: () => setTutorialStep(0),
+        onSetDifficulty: setDifficultyPreset,
       })
       ) // close rpg-content main
       , // mobile nav inside rpg-main
@@ -3141,7 +3204,25 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
   const dailyGoal = eco({ economy }, 'dailyGoal');
   const consistencyMin = eco({ economy }, 'consistencyMin');
   const dayMode = state.dayMode || 'standard';
-  const [switchConfirm, setSwitchConfirm] = useState(null); // holds the target mode while confirming
+  const [switchConfirm, setSwitchConfirm] = useState(null);
+  const [dayCompleteShown, setDayCompleteShown] = useState(false);
+
+  // #2 Day complete detection
+  const allDomainsComplete = DOMAIN_KEYS.every(k => (todayLog[k] || 0) >= dailyGoal);
+  // Show day complete flash once per session when all domains hit goal
+  const [dayCompleteCelebrated, setDayCompleteCelebrated] = useState(false);
+  useEffect(() => {
+    if (allDomainsComplete && !dayCompleteCelebrated) {
+      setDayCompleteCelebrated(true);
+      setDayCompleteShown(true);
+      setTimeout(() => setDayCompleteShown(false), 3000);
+    }
+  }, [allDomainsComplete]);
+
+  // #3 Streak-at-risk: hour >= 20 and minimum not hit in all domains
+  const currentHour = new Date().getHours();
+  const streakAtRisk = state.consistencyStreak > 0 && currentHour >= 20 &&
+    DOMAIN_KEYS.some(k => (todayLog[k] || 0) < consistencyMin);
 
   function requestModeSwitch(target) {
     if (target === dayMode) return;
@@ -3166,7 +3247,44 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
 
   const activeQuests = state.quests.filter(q => q.progress < 100);
 
+  // #5 Today's activity log — last 8 logs from today
+  const todayActLog = (state.activityLog || []).filter(l => {
+    const d = new Date(l.timestamp);
+    return dateKey(d) === today;
+  }).slice(0, 8);
+
+  // #1 First-session "Start here" banner
+  const hasActivities = (state.activities || []).length > 0;
+  const hasQuests = (state.quests || []).length > 0;
+  const hasLoggedOnce = (state.activityLog || []).length > 0;
+  const showStartBanner = !hasActivities && !hasLoggedOnce;
+
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 20, animation: 'fadeIn 0.3s ease' } },
+
+    // #2 Day complete celebration flash
+    dayCompleteShown && h('div', { style: { padding: '14px 18px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.5)', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10, animation: 'fadeIn 0.3s ease' } },
+      h('span', { style: { fontSize: 20 } }, '✦'),
+      h('div', null,
+        h('div', { style: { fontSize: 13, fontWeight: 700, color: '#c4b5fd' } }, 'Day complete — all domains cleared'),
+        h('div', { style: { fontSize: 11.5, color: '#9896b0', marginTop: 1 } }, `Consistency streak: ${state.consistencyStreak} day${state.consistencyStreak !== 1 ? 's' : ''}`)
+      )
+    ),
+
+    // #3 Streak-at-risk warning
+    streakAtRisk && h('div', { style: { padding: '10px 14px', background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.3)', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 } },
+      h(Icon, { name: 'flame', size: 14, color: '#fb923c' }),
+      h('span', { style: { fontSize: 12.5, color: '#fb923c' } }, `Streak at risk — hit your minimums before midnight to protect your ${state.consistencyStreak}-day streak`)
+    ),
+
+    // #1 Start here banner for new users
+    showStartBanner && h('div', { style: { padding: '16px 18px', background: 'rgba(167,139,250,0.07)', border: '1px dashed rgba(167,139,250,0.3)', borderRadius: 4 } },
+      h('div', { style: { fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10 } }, 'Where to begin'),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        h('div', { style: { fontSize: 12, color: '#9896b0' } }, '① Create activities in the Activities tab — these are the things you do daily that earn XP'),
+        h('div', { style: { fontSize: 12, color: '#9896b0' } }, '② Log an activity using the + button — XP flows into your domain meters above'),
+        h('div', { style: { fontSize: 12, color: '#9896b0' } }, '③ Set a quest in the Quests tab — a longer-term goal with a deadline and reward'),
+      )
+    ),
 
     h('section', null,
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
@@ -3264,28 +3382,56 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     activeQuests.length > 0 && h('section', null,
       h(SectionLabel, { text: 'Active quests' }),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        activeQuests.slice(0,3).map(q => h(QuestRow, { key: q.id, quest: q, compact: true }))
+        activeQuests.slice(0,3).map(q => {
+          const chain = (state.questChains || []).find(c => c.questIds.includes(q.id));
+          const chainPos = chain ? chain.questIds.indexOf(q.id) + 1 : null;
+          return h('div', { key: q.id },
+            chain && h('div', { style: { fontSize: 10, color: '#a78bfa', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
+              '⛓', `${chain.name} — step ${chainPos} of ${chain.questIds.length}`
+            ),
+            h(QuestRow, { quest: q, compact: true })
+          );
+        })
       )
     ),
 
     h(NeglectedDomainsReminder, { state, economy, dismissedReminders: dismissedReminders || [], onDismiss: onDismissReminder }),
     h(DomainBalanceIndicator, { state, economy }),
 
+    // #6 Power Streak visibility — show when active
+    state.powerStreak > 0 && h('div', { style: { padding: '12px 16px', background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h(Icon, { name: 'star', size: 15, color: '#c9a84c' }),
+        h('div', null,
+          h('div', { style: { fontSize: 12.5, fontWeight: 700, color: '#c9a84c' } }, `Power Streak active — day ${state.powerStreak}`),
+          h('div', { style: { fontSize: 11, color: '#7c6a3a' } },
+            eco({ economy }, 'powerStreakCoinsEvery') - (state.powerStreak % eco({ economy }, 'powerStreakCoinsEvery')) > 0
+              ? `${eco({ economy }, 'powerStreakCoinsEvery') - (state.powerStreak % eco({ economy }, 'powerStreakCoinsEvery'))} days to next bonus`
+              : 'Milestone reached!'
+          )
+        )
+      ),
+      h('div', { style: { fontSize: 22, fontWeight: 800, color: '#c9a84c' } }, state.powerStreak)
+    ),
+
+    // #19 Rest day tokens display
+    state.restDayTokens > 0 && h('div', { style: { fontSize: 11.5, color: '#7c7c8a', display: 'flex', alignItems: 'center', gap: 5 } },
+      h('span', null, '🛡️'),
+      `${state.restDayTokens} rest day token${state.restDayTokens !== 1 ? 's' : ''} — miss a day without losing your streak`
+    ),
+
     h('section', null,
-      h(SectionLabel, { text: 'Recent activity' }),
-      state.activityLog.length === 0
-        ? h(EmptyState, { text: 'No activity yet. Log something from Quick log above to start your run.' })
-        : h('div', { style: styles.activityFeed },
-            state.activityLog.slice(0, 8).map(log => {
+      h(SectionLabel, { text: 'Today\'s activity' }),
+      todayActLog.length === 0
+        ? h(EmptyState, { text: 'Nothing logged yet today. Tap + to log your first activity.' })
+        : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+            todayActLog.map(log => {
               const d = DOMAINS[log.domain];
-              return h('div', { key: log.id, style: styles.activityRow },
-                h('div', { style: { ...styles.activityDot, background: d.color } }),
-                h('div', { style: { flex: 1 } },
-                  h('span', { style: styles.activityName }, log.activityName),
-                  log.detail && h('span', { style: styles.activityDetail }, ` · ${log.detail}`)
-                ),
-                h('span', { style: { ...styles.activityXp, color: d.color } }, `+${log.xp} XP`),
-                h('span', { style: styles.activityTime }, relativeTime(log.timestamp))
+              return h('div', { key: log.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', background: '#12121f', borderRadius: 4 } },
+                h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
+                h('span', { style: { flex: 1, fontSize: 12.5, color: '#eceaf6' } }, log.activityName),
+                log.detail && h('span', { style: { fontSize: 11, color: '#4a4868' } }, log.detail),
+                h('span', { style: { fontSize: 12, fontWeight: 700, color: d.color } }, `+${log.xp}`),
               );
             })
           )
@@ -3315,6 +3461,16 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
 
   const allActivities = state.activities || [];
 
+  // #9 Most-logged activities for quick access
+  const logCounts = {};
+  (state.activityLog || []).forEach(l => { logCounts[l.activityName] = (logCounts[l.activityName] || 0) + 1; });
+  const recentIds = new Set((state.activityLog || []).slice(0, 10).map(l =>
+    allActivities.find(a => a.name === l.activityName)?.id).filter(Boolean));
+  const quickLog = allActivities
+    .filter(a => a.favorite || recentIds.has(a.id))
+    .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
+    .slice(0, 4);
+
   // Sort: favorites first, then alphabetical
   const sorted = [...allActivities].sort((a, b) => {
     if (a.favorite && !b.favorite) return -1;
@@ -3335,6 +3491,25 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
   });
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
+
+    // Quick log strip — favorites + recently logged, one tap
+    quickLog.length > 0 && h('div', { style: { marginBottom: 16 } },
+      h(SectionLabel, { text: 'Quick log' }),
+      h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+        quickLog.map(act => {
+          const d = DOMAINS[act.domain];
+          return h('button', {
+            key: act.id, className: 'rpg-btn',
+            onClick: () => onLog(act),
+            style: { display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#12121f', border: `1px solid ${hexToRgba(d.color, 0.3)}`, borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s' },
+          },
+            h('div', { style: { width: 5, height: 5, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
+            h('span', { style: { fontSize: 12.5, fontWeight: 600, color: '#eceaf6' } }, act.name),
+            act.favorite && h('span', { style: { color: '#c9a84c', fontSize: 11 } }, '★')
+          );
+        })
+      )
+    ),
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 } },
       h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
         h(FilterChip, { label: 'All', active: filter==='all', onClick: () => setFilter('all') }),
@@ -3360,7 +3535,15 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
               h('div', { style: { flex: 1, minWidth: 0 } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                   h('span', { style: styles.activityCardName }, act.name),
-                  act.favorite && h('span', { title: 'Favourite', style: { color: '#fbbf24', fontSize: 13 } }, '★')
+                  act.favorite && h('span', { title: 'Favourite', style: { color: '#fbbf24', fontSize: 13 } }, '★'),
+                  // #12 Class badge — shows which class this activity feeds
+                  (() => {
+                    const cls = CLASS_DEFINITIONS.find(c =>
+                      c.domain === act.domain ||
+                      (c.id === 'creator' && (act.tags || []).some(t => t.toLowerCase() === 'creative' || t.toLowerCase() === 'creativity'))
+                    );
+                    return cls ? h('span', { title: `${cls.name} class`, style: { fontSize: 12, opacity: 0.7 } }, cls.badge) : null;
+                  })()
                 ),
                 h('div', { style: styles.activityCardMeta }, `${d.name} · ${act.subcat} · ${scoringLabel(act)}`),
                 act.desc && h('div', { style: styles.activityCardDesc }, act.desc),
@@ -3626,7 +3809,12 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArc
   const checkpoints = quest.checkpoints || [];
   const hasCheckpoints = checkpoints.length > 0;
 
-  return h('div', { style: styles.questCard },
+  // #7 Deadline urgency
+  const deadlineColor = daysLeft < 0 ? '#e05c5c' : daysLeft <= 7 ? '#fb923c' : '#4a4868';
+  const deadlineLabel = daysLeft < 0 ? 'overdue' : `${daysLeft}d left`;
+  const deadlinePulse = daysLeft < 0 ? { animation: 'pulseGlow 2s infinite' } : {};
+
+  return h('div', { style: { ...styles.questCard, ...(daysLeft < 0 ? { borderColor: 'rgba(224,92,92,0.3)', ...deadlinePulse } : daysLeft <= 7 ? { borderColor: 'rgba(251,146,60,0.25)' } : {}) } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 } },
       h('div', { style: { flex: 1, minWidth: 0 } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
@@ -3635,9 +3823,9 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArc
           isComplete && h(Icon, { name: 'trophy', size: 13, color: '#fbbf24' })
         ),
         !compact && quest.desc && h('div', { style: styles.questDesc }, quest.desc),
-        h('div', { style: styles.questMeta },
-          `${d.name} · ${quest.xpReward} XP reward`,
-          !isComplete && (daysLeft >= 0 ? ` · ${daysLeft}d left` : ' · overdue')
+        h('div', { style: { ...styles.questMeta, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
+          `${d.name} · ${quest.xpReward} XP`,
+          !isComplete && h('span', { style: { color: deadlineColor, fontWeight: daysLeft <= 7 ? 600 : 400 } }, `· ${deadlineLabel}`)
         )
       ),
       h('div', { style: { textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 } },
@@ -3691,10 +3879,14 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArc
 
 // ---------- Character View ----------
 
-function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEquipTitle }) {
+function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEquipTitle, onClearAchievementDot }) {
   const totalLevel = DOMAIN_KEYS.reduce((sum,k) => sum + domainComputed[k].rank, 0);
   const totalXp = DOMAIN_KEYS.reduce((sum,k) => sum + state.domains[k].totalXp, 0);
   const equippedTitleDef = state.equippedTitle ? TITLES[state.equippedTitle] : null;
+  const [identityOpen, setIdentityOpen] = useState(false);
+
+  // Clear achievement dot when user opens this tab
+  useEffect(() => { if (onClearAchievementDot) onClearAchievementDot(); }, []);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: styles.charSummary },
@@ -3707,78 +3899,95 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
         h('div', { style: { fontSize: 13, color: '#9ca3af' } }, `Combined level ${totalLevel} · ${totalXp.toLocaleString()} total XP`)
       )
     ),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16, marginTop: 20 } },
-      DOMAIN_KEYS.map(k => {
-        const d = DOMAINS[k];
-        const comp = domainComputed[k];
-        const allSubcats = [...d.subcats, ...(state.customSubcats[k] || [])];
-        const pct = Math.round((comp.currentLevelXp / comp.currentLevelReq) * 100);
 
-        return h('div', { key: k, style: styles.charDomainCard },
-          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-              h('div', { style: { ...styles.charDomainIcon, background: hexToRgba(d.color, 0.15) } }, h(Icon, { name: d.icon, size: 18, color: d.color })),
-              h('div', null,
-                h('div', { style: { fontWeight: 700, fontSize: 15, color: '#f4f1ea' } }, d.name),
-                h('div', { style: { fontSize: 12, color: '#9ca3af' } }, `${state.domains[k].totalXp.toLocaleString()} total XP`)
+    // ── PROGRESSION group (domain meters + boss gates) ──
+    h('div', { style: { marginTop: 20 } },
+      h(SectionLabel, { text: 'Progression' }),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+        DOMAIN_KEYS.map(k => {
+          const d = DOMAINS[k];
+          const comp = domainComputed[k];
+          const allSubcats = [...d.subcats, ...(state.customSubcats[k] || [])];
+          const pct = Math.round((comp.currentLevelXp / comp.currentLevelReq) * 100);
+
+          return h('div', { key: k, style: styles.charDomainCard },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                h('div', { style: { ...styles.charDomainIcon, background: hexToRgba(d.color, 0.15) } }, h(Icon, { name: d.icon, size: 18, color: d.color })),
+                h('div', null,
+                  h('div', { style: { fontWeight: 700, fontSize: 15, color: '#f4f1ea' } }, d.name),
+                  h('div', { style: { fontSize: 12, color: '#9ca3af' } }, `${state.domains[k].totalXp.toLocaleString()} total XP`)
+                )
+              ),
+              h('div', { style: { textAlign: 'right' } },
+                h('div', { style: { fontSize: 22, fontWeight: 700, color: d.color } }, `Level ${comp.rank}`),
+                h('div', { style: { fontSize: 12, color: '#9ca3af' } }, `${comp.currentLevelXp} / ${comp.currentLevelReq} XP`)
               )
             ),
-            h('div', { style: { textAlign: 'right' } },
-              h('div', { style: { fontSize: 22, fontWeight: 700, color: d.color } }, `Level ${comp.rank}`),
-              comp.potentialRank > comp.rank && h('div', { style: { fontSize: 11, color: '#fbbf24' } }, `Potential: ${comp.potentialRank}`)
-            )
-          ),
-          h('div', { style: styles.meterTrack }, h('div', { style: { ...styles.meterFill, width: `${pct}%`, background: d.color } })),
-          h('div', { style: styles.meterSub }, `${comp.currentLevelXp} / ${comp.currentLevelReq} XP to next level`),
-          h('div', { style: { marginTop: 12 } },
-            h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 6 } }, 'Subcategories'),
-            h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
-              allSubcats.map(s => h('span', { key: s, style: { ...styles.subcatPill, borderColor: hexToRgba(d.color,0.3), color: d.color } }, s)),
-              h(AddSubcatButton, { domain: k, onAdd: onAddSubcat, color: d.color })
-            )
-          ),
-          h('div', { style: { marginTop: 12 } },
-            h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 6 } }, 'Boss gates'),
-            h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
-              activeBossLevelsFor(state, k).map(bl => {
-                const key = `${k}-${bl}`;
-                const completed = state.bossCompletions[key];
-                const reached = comp.potentialRank > bl;
-                const isGate = comp.rank <= bl && reached;
-                return h('button', {
-                  key: bl,
-                  className: 'rpg-btn',
-                  onClick: () => (isGate && !completed) ? onBossClick({ domain: k, level: bl }) : null,
-                  style: {
-                    ...styles.bossPill,
-                    ...(completed ? { background: hexToRgba('#fbbf24',0.15), borderColor: '#fbbf24', color: '#fbbf24' } :
-                        isGate ? { background: hexToRgba(d.color,0.12), borderColor: d.color, color: d.color, cursor: 'pointer', animation: 'pulseGlow 2s infinite' } :
-                        { opacity: 0.4 }),
+            h('div', { style: { ...styles.meterTrack, height: 8, marginBottom: 10 } },
+              h('div', { style: { ...styles.meterFill, width: `${pct}%`, background: d.color } })
+            ),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' } },
+              h(AddSubcatButton, { domain: k, color: d.color, onAdd: (sub) => onAddSubcat(k, sub) }),
+              allSubcats.map(s => h('span', { key: s, style: { fontSize: 11, padding: '2px 8px', borderRadius: 3, background: hexToRgba(d.color, 0.1), color: d.color, border: `1px solid ${hexToRgba(d.color, 0.2)}` } }, s))
+            ),
+            h('div', { style: { marginTop: 12 } },
+              h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 6 } }, 'Boss gates'),
+              h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+                activeBossLevelsFor(state, k).map(bl => {
+                  const key = `${k}-${bl}`;
+                  const completed = state.bossCompletions[key];
+                  const reached = comp.potentialRank > bl;
+                  const isGate = comp.rank <= bl && reached;
+                  return h('button', {
+                    key: bl,
+                    className: 'rpg-btn',
+                    onClick: () => (isGate && !completed) ? onBossClick({ domain: k, level: bl }) : null,
+                    style: {
+                      ...styles.bossPill,
+                      ...(completed ? { background: hexToRgba('#fbbf24',0.15), borderColor: '#fbbf24', color: '#fbbf24' } :
+                          isGate ? { background: hexToRgba(d.color,0.12), borderColor: d.color, color: d.color, cursor: 'pointer', animation: 'pulseGlow 2s infinite' } :
+                          { opacity: 0.4 }),
+                    },
                   },
-                },
-                  h(Icon, { name: completed ? 'trophy' : 'shield', size: 11 }),
-                  ` Lv ${bl}`
-                );
-              })
+                    h(Icon, { name: completed ? 'trophy' : 'shield', size: 11 }),
+                    ` Lv ${bl}`
+                  );
+                })
+              )
             )
-          )
-        );
-      })
+          );
+        })
+      )
     ),
+
+    // ── IDENTITY group (achievements, titles, class, legacy) ── collapsible
     h('div', { style: { marginTop: 28 } },
-      h(AchievementsSection, { achievements: state.achievements || {} })
-    ),
-    h('div', { style: { marginTop: 28 } },
-      h(TitleSection, { achievements: state.achievements || {}, equippedTitle: state.equippedTitle, onEquip: onEquipTitle })
-    ),
-    h('div', { style: { marginTop: 28 } },
-      h(ClassMasterySection, { classMastery: state.classMastery || {} })
-    ),
-    h('div', { style: { marginTop: 28 } },
-      h(YearlyLegacySection, { yearlyLegacy: state.yearlyLegacy || {} })
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => setIdentityOpen(o => !o),
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#12121f', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 4, color: '#eceaf6' },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h(Icon, { name: 'award', size: 15, color: '#a78bfa' }),
+          h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Identity'),
+          h('span', { style: { fontSize: 11, color: '#4a4868' } }, '— achievements, titles, class mastery, legacy'),
+          state.newAchievementsSince && h('span', { style: { width: 7, height: 7, borderRadius: '50%', background: '#a78bfa', marginLeft: 4, display: 'inline-block' } })
+        ),
+        h('div', { style: { transform: identityOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
+          h(Icon, { name: 'chevronRight', size: 14, color: '#4a4868' })
+        )
+      ),
+      identityOpen && h('div', { style: { display: 'flex', flexDirection: 'column', gap: 24, marginTop: 16 } },
+        h(AchievementsSection, { achievements: state.achievements || {} }),
+        h(TitleSection, { achievements: state.achievements || {}, equippedTitle: state.equippedTitle, onEquip: onEquipTitle }),
+        h(ClassMasterySection, { classMastery: state.classMastery || {} }),
+        h(YearlyLegacySection, { yearlyLegacy: state.yearlyLegacy || {} })
+      )
     )
   );
 }
+
 
 // ---------- Title System ----------
 
@@ -3962,7 +4171,7 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: styles.goldBanner },
-      h('div', null,
+      h('div', { style: { flex: 1 } },
         h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 2 } }, 'Reward currency'),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h(Icon, { name: 'coins', size: 22, color: '#fbbf24' }),
@@ -3972,6 +4181,11 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
         haveEstimate
           ? h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, `Current pace: ~${avgPerDay.toFixed(1)} gold/day`)
           : h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, 'No earning history yet — estimates will appear after you earn some gold.')
+      ),
+      (state.totalCoinsEarnedAllTime || 0) > 0 && h('div', { style: { textAlign: 'right', paddingLeft: 16, borderLeft: '1px solid rgba(255,255,255,0.06)' } },
+        h('div', { style: { fontSize: 10, color: '#4a4868', textTransform: 'uppercase', letterSpacing: 1 } }, 'All-time earned'),
+        h('div', { style: { fontSize: 22, fontWeight: 700, color: '#c9a84c' } }, (state.totalCoinsEarnedAllTime || 0).toLocaleString()),
+        h('div', { style: { fontSize: 10, color: '#4a4868' } }, 'coins total')
       )
     ),
 
@@ -4578,10 +4792,18 @@ function DomainBalanceIndicator({ state, economy }) {
 
   if (!hasActivity) return null; // don't show if no data yet
 
+  const consequenceText = balanceRatio < 0.4
+    ? 'Your character is developing evenly across all domains.'
+    : balanceRatio < 1.0
+    ? 'Slightly uneven — keep an eye on your weaker domains.'
+    : 'Neglected domains level slower and boss gates stay locked longer.';
+
   return h('section', null,
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
       h(SectionLabel, { text: 'HRCF Balance (7 days)' }),
-      h('span', { style: { fontSize: 12, fontWeight: 700, color: labelColor } }, label)
+      h('div', null,
+        h('span', { style: { fontSize: 12, fontWeight: 700, color: labelColor } }, label),
+      )
     ),
     h('div', { style: { display: 'flex', gap: 8 } },
       DOMAIN_KEYS.map(k => {
@@ -4596,7 +4818,8 @@ function DomainBalanceIndicator({ state, economy }) {
           h('div', { style: { fontSize: 10, color: '#7c7c8a' } }, dom.name.slice(0, 3))
         );
       })
-    )
+    ),
+    h('div', { style: { fontSize: 11.5, color: '#4a4868', marginTop: 8 } }, consequenceText)
   );
 }
 
@@ -4610,24 +4833,30 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
   const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
   const tc = tierColors[tier] || '#9ca3af';
 
+  // #11 Hours remaining in the day
+  const now = new Date();
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const hoursLeft = Math.round((endOfDay - now) / (1000 * 60 * 60));
+  const isUrgent = hoursLeft <= 4;
+
   return h('section', null,
     h('div', { style: {
       background: `linear-gradient(135deg, ${hexToRgba(d.color, 0.12)}, ${hexToRgba(d.color, 0.04)})`,
-      border: `1px solid ${hexToRgba(d.color, 0.35)}`,
+      border: `1px solid ${isUrgent ? 'rgba(201,168,76,0.5)' : hexToRgba(d.color, 0.35)}`,
       borderRadius: 12, padding: '14px 16px', position: 'relative',
+      ...(isUrgent ? { boxShadow: '0 0 12px rgba(201,168,76,0.1)' } : {}),
     }},
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
-        h(Icon, { name: 'zap', size: 14, color: d.color }),
-        h('span', { style: { fontSize: 11, fontWeight: 700, color: d.color, textTransform: 'uppercase', letterSpacing: 1 } },
-          isCompleted ? 'Challenge complete!' : 'Daily challenge'
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h(Icon, { name: 'zap', size: 14, color: d.color }),
+          h('span', { style: { fontSize: 11, fontWeight: 700, color: d.color, textTransform: 'uppercase', letterSpacing: 1 } },
+            isCompleted ? 'Challenge complete!' : 'Daily challenge'
+          ),
+          h('span', { style: { fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: hexToRgba(tc, 0.15), color: tc, border: `1px solid ${hexToRgba(tc, 0.4)}` } }, `Tier ${tier}`)
         ),
-        h('span', { style: {
-          fontWeight: 800, fontSize: 11, color: tc,
-          background: hexToRgba(tc, 0.15), border: `1px solid ${hexToRgba(tc, 0.4)}`,
-          borderRadius: 5, padding: '2px 7px', marginLeft: 4,
-        }}, `${tier} tier`),
-        !isCompleted && h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, position: 'absolute', top: 12, right: 12, width: 24, height: 24 }, onClick: onDismiss, title: 'Dismiss' },
-          h(Icon, { name: 'x', size: 11 })
+        !isCompleted && h('div', { style: { fontSize: 11, fontWeight: 600, color: isUrgent ? '#c9a84c' : '#4a4868', display: 'flex', alignItems: 'center', gap: 4 } },
+          isUrgent && h(Icon, { name: 'flame', size: 12, color: '#c9a84c' }),
+          `${hoursLeft}h left`
         )
       ),
       h('div', { style: { fontSize: 15, fontWeight: 700, color: '#f4f1ea', marginBottom: 4 } }, challenge.name),
@@ -4978,11 +5207,19 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
   );
 }
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial }) {
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial, onSetDifficulty }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const PRESETS = [
+    { id: 'easy',      label: 'Relaxed',   desc: 'Lower daily goals, more forgiving streak rules', icon: '🌿' },
+    { id: 'balanced',  label: 'Balanced',  desc: 'Default settings, good for most people', icon: '⚖️' },
+    { id: 'ambitious', label: 'Ambitious', desc: 'Harder goals, longer streak lock, fewer coins', icon: '⚔️' },
+  ];
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
 
+    // Help
     h('section', { style: { marginBottom: 24 } },
       h(SectionLabel, { text: 'Help' }),
       h('button', {
@@ -4990,9 +5227,34 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
         onClick: onOpenTutorial,
         'data-tutorial-id': 'settings-tutorial-btn',
         style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '11px 0' },
-      }, '? Replay tutorial')
+      }, '? Replay guide')
     ),
 
+    // #13 Difficulty preset
+    h('section', { style: { marginBottom: 24 } },
+      h(SectionLabel, { text: 'Difficulty' }),
+      h('div', { style: { display: 'flex', gap: 8 } },
+        PRESETS.map(p =>
+          h('button', {
+            key: p.id, className: 'rpg-btn',
+            onClick: () => onSetDifficulty(p.id),
+            style: {
+              flex: 1, padding: '12px 10px', borderRadius: 4, cursor: 'pointer',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, textAlign: 'center',
+              background: (state.difficultyPreset || 'balanced') === p.id ? 'rgba(167,139,250,0.12)' : '#12121f',
+              border: `1px solid ${(state.difficultyPreset || 'balanced') === p.id ? '#a78bfa' : 'rgba(255,255,255,0.055)'}`,
+              transition: 'all 0.15s',
+            },
+          },
+            h('span', { style: { fontSize: 20 } }, p.icon),
+            h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.difficultyPreset || 'balanced') === p.id ? '#c4b5fd' : '#eceaf6' } }, p.label),
+            h('span', { style: { fontSize: 10, color: '#4a4868', lineHeight: 1.3 } }, p.desc)
+          )
+        )
+      )
+    ),
+
+    // Level gates & boss battles section
     h('section', { style: { marginBottom: 24 } },
       h(SectionLabel, { text: 'Level gates & boss battles' }),
       h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
@@ -5102,9 +5364,32 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
     ),
 
     h(PowerValuesSection, { state, onSave: onSavePowerValues }),
-    h(DailyQuestSettingsSection, { state, onSetLock: onSetDailyQuestLock }),
-    h(EconomySettingsSection, { state, onSave: onSaveEconomy }),
-    h(ChallengeLibrarySection, { state, onSaveLibrary: onSaveChallengeLibrary, onSaveSpawnChance })
+
+    // Advanced Settings — visible when unlocked (rank 10+) or always available
+    h('section', { style: { marginBottom: 24 } },
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => setAdvancedOpen(o => !o),
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: '#12121f', border: `1px solid ${state.advancedSettingsUnlocked ? 'rgba(167,139,250,0.3)' : 'rgba(255,255,255,0.055)'}`, borderRadius: 4, color: '#eceaf6' },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('span', null, state.advancedSettingsUnlocked ? '🔓' : '🔒'),
+          h('span', { style: { fontSize: 13, fontWeight: 600 } }, 'Advanced Settings'),
+          !state.advancedSettingsUnlocked && h('span', { style: { fontSize: 10, color: '#4a4868' } }, '— unlocks at combined rank 10')
+        ),
+        h('div', { style: { transform: advancedOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
+          h(Icon, { name: 'chevronRight', size: 14, color: '#4a4868' })
+        )
+      ),
+      advancedOpen && h('div', { style: { marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 } },
+        !state.advancedSettingsUnlocked && h('div', { style: { fontSize: 12, color: '#4a4868', padding: '8px 0' } },
+          'These settings are available for preview. They unlock permanently at combined rank 10 — when you\'ve built enough experience to tune the system meaningfully.'
+        ),
+        h(DailyQuestSettingsSection, { state, onSetLock: onSetDailyQuestLock }),
+        h(EconomySettingsSection, { state, onSave: onSaveEconomy }),
+        h(ChallengeLibrarySection, { state, onSaveLibrary: onSaveChallengeLibrary, onSaveSpawnChance })
+      )
+    )
   );
 }
 
