@@ -194,6 +194,38 @@ const DEFAULT_REWARDS = [
   { id: 'r4', name: 'Entertainment', cost: 60, desc: 'Movie, game, or show night' },
 ];
 
+// Title registry — cosmetic titles unlocked by reaching certain achievements.
+// One title may be equipped at a time; displayed next to player name in CharacterView.
+// Adding a new title: add an entry here. The equip UI reads from this automatically.
+const TITLES = {
+  the_consistent:  { name: 'The Consistent',  requiredAchievement: 'streak_7',    color: '#fb923c', desc: 'Awarded for a 7-day streak' },
+  the_disciplined: { name: 'The Disciplined',  requiredAchievement: 'streak_30',   color: '#f59e0b', desc: 'Awarded for a 30-day streak' },
+  the_unbreakable: { name: 'The Unbreakable',  requiredAchievement: 'streak_100',  color: '#34d399', desc: 'Awarded for a 100-day streak' },
+  the_builder:     { name: 'The Builder',      requiredAchievement: 'first_boss',  color: '#60a5fa', desc: 'Awarded for clearing a gate' },
+  the_veteran:     { name: 'The Veteran',      requiredAchievement: 'boss_5',      color: '#818cf8', desc: 'Awarded for clearing 5 gates' },
+  the_scholar:     { name: 'The Scholar',      requiredAchievement: 'log_50',      color: '#a78bfa', desc: 'Awarded for logging 50 activities' },
+  the_centurion:   { name: 'The Centurion',    requiredAchievement: 'log_100',     color: '#fbbf24', desc: 'Awarded for logging 100 activities' },
+  the_finisher:    { name: 'The Finisher',     requiredAchievement: 'quest_5',     color: '#34d399', desc: 'Awarded for completing 5 quests' },
+  the_legend:      { name: 'The Legend',       requiredAchievement: 'xp_10000',    color: '#fbbf24', desc: 'Awarded for earning 10,000 XP' },
+};
+
+// Class progression — cosmetic mastery tracks tied to what you actually do.
+// Mastery points = XP earned through domain/tag-matching activities.
+// Thresholds: Bronze 500, Silver 2000, Gold 5000
+const CLASS_DEFINITIONS = [
+  { id: 'warrior',   name: 'Warrior',    desc: 'Fitness & health activities',   domain: 'health',         icon: 'flame',    color: '#e24b4a', badge: '⚔️' },
+  { id: 'scholar',   name: 'Scholar',    desc: 'Career & learning activities',  domain: 'career',         icon: 'scroll',   color: '#378add', badge: '📚' },
+  { id: 'guardian',  name: 'Guardian',   desc: 'Relationship activities',       domain: 'relationships',  icon: 'users',    color: '#d4537e', badge: '🛡️' },
+  { id: 'treasurer', name: 'Treasurer',  desc: 'Finance activities',            domain: 'finance',        icon: 'coins',    color: '#ef9f27', badge: '💰' },
+  { id: 'creator',   name: 'Creator',    desc: 'Activities tagged "Creative"',  domain: null,             icon: 'zap',      color: '#a78bfa', badge: '🎨' },
+];
+
+const CLASS_MASTERY_THRESHOLDS = [
+  { label: 'Bronze', xp: 500,  color: '#cd7f32' },
+  { label: 'Silver', xp: 2000, color: '#c0c0c0' },
+  { label: 'Gold',   xp: 5000, color: '#fbbf24' },
+];
+
 function levelXpRequirement(level) {
   let xp = 100;
   for (let i = 1; i < level; i++) {
@@ -267,8 +299,16 @@ function buildInitialState() {
       byType: {},                 // { [type]: { completed, attempted } }
       activityCompletionCounts: {}, // { [activityId]: number }
     },
-    questChains: [],              // [{ id, name, questIds: [] }]
-    equippedTitle: null,          // achievement-unlocked title id (reserved for Title system)
+    questChains: [],
+    equippedTitle: null,
+    classMastery: {         // XP contributed toward each class (updated in logActivity)
+      warrior: 0,           // health domain
+      scholar: 0,           // career + learning-tagged activities
+      guardian: 0,          // relationships domain
+      treasurer: 0,         // finance domain
+      creator: 0,           // creative-tagged activities (any domain)
+    },
+    yearlyLegacy: {},       // { [year]: { xpEarned, coinsEarned, activitiesLogged, questsCompleted, gatesCleared, highestStreak, topDomain } }
   };
 }
 
@@ -922,7 +962,31 @@ function RPGLife({ user, onSignOut }) {
       ].slice(0, 30);
 
       const afterStreaks = checkStreaks(next, dayLog, prev);
-      return checkAchievements(afterStreaks);
+      const afterAchievements = checkAchievements(afterStreaks);
+
+      // Class mastery: accumulate XP toward the matching class(es)
+      const classMastery = { ...(afterAchievements.classMastery || {}) };
+      if (activity.domain === 'health') classMastery.warrior = (classMastery.warrior || 0) + xpGain;
+      if (activity.domain === 'career') classMastery.scholar = (classMastery.scholar || 0) + xpGain;
+      if (activity.domain === 'relationships') classMastery.guardian = (classMastery.guardian || 0) + xpGain;
+      if (activity.domain === 'finance') classMastery.treasurer = (classMastery.treasurer || 0) + xpGain;
+      if ((activity.tags || []).some(t => t.toLowerCase() === 'creative' || t.toLowerCase() === 'creativity')) {
+        classMastery.creator = (classMastery.creator || 0) + xpGain;
+      }
+
+      // Yearly legacy: accumulate XP and activity count for the current year
+      const year = String(new Date().getFullYear());
+      const yearlyLegacy = { ...(afterAchievements.yearlyLegacy || {}) };
+      const entry = { ...(yearlyLegacy[year] || { xpEarned: 0, coinsEarned: 0, activitiesLogged: 0, questsCompleted: 0, gatesCleared: 0, highestStreak: 0, topDomain: null, _domainXp: {} }) };
+      entry.xpEarned = (entry.xpEarned || 0) + xpGain;
+      entry.activitiesLogged = (entry.activitiesLogged || 0) + 1;
+      entry._domainXp = { ...(entry._domainXp || {}) };
+      entry._domainXp[activity.domain] = (entry._domainXp[activity.domain] || 0) + xpGain;
+      entry.topDomain = Object.entries(entry._domainXp).sort((a,b) => b[1]-a[1])[0]?.[0] || null;
+      entry.highestStreak = Math.max(entry.highestStreak || 0, afterAchievements.consistencyStreak || 0);
+      yearlyLegacy[year] = entry;
+
+      return { ...afterAchievements, classMastery, yearlyLegacy };
     });
 
     showToast(`+${xpGain} XP — ${activity.name}`);
@@ -1190,6 +1254,13 @@ function RPGLife({ user, onSignOut }) {
     }));
   }
 
+  function equipTitle(titleId) {
+    setState(prev => ({
+      ...prev,
+      equippedTitle: prev.equippedTitle === titleId ? null : titleId, // toggle off if same
+    }));
+  }
+
   // ---------- Update mission stats on finalize ----------
   function updateMissionStats(prev, plan, completionPct) {
     const stats = { ...(prev.missionStats || {}) };
@@ -1288,7 +1359,15 @@ function RPGLife({ user, onSignOut }) {
         setTimeout(() => showToast(`⛓ Chain continues: "${nextInChain.name}" is now unlocked!`), 1200);
       }
       next = checkAchievements(next);
-      // Queue achievement unlock popup if any were just earned
+      // Yearly legacy: quest count and coins
+      const _year = String(new Date().getFullYear());
+      const _yearlyLegacy = { ...(next.yearlyLegacy || {}) };
+      const _le = { ...(_yearlyLegacy[_year] || {}) };
+      _le.questsCompleted = (_le.questsCompleted || 0) + 1;
+      _le.coinsEarned = (_le.coinsEarned || 0) + goldGain;
+      _yearlyLegacy[_year] = _le;
+      next.yearlyLegacy = _yearlyLegacy;
+      // Queue achievement unlock popup for any newly earned achievements
       const newlyUnlocked = Object.keys(next.achievements || {}).filter(
         id => !(oldQuest._prevAchievements || {})[id]
       );
@@ -1350,7 +1429,15 @@ function RPGLife({ user, onSignOut }) {
       const goldGain = Math.round(base * mult);
       const goldHistory = { ...(prev.goldHistory || {}) };
       goldHistory[today] = (goldHistory[today] || 0) + goldGain;
-      return checkAchievements({ ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory });
+      const after = checkAchievements({ ...prev, bossCompletions, gold: prev.gold + goldGain, goldHistory });
+      // Yearly legacy: gate count and coins
+      const _year = String(new Date().getFullYear());
+      const _yearlyLegacy = { ...(after.yearlyLegacy || {}) };
+      const _le = { ...(_yearlyLegacy[_year] || {}) };
+      _le.gatesCleared = (_le.gatesCleared || 0) + 1;
+      _le.coinsEarned = (_le.coinsEarned || 0) + goldGain;
+      _yearlyLegacy[_year] = _le;
+      return { ...after, yearlyLegacy: _yearlyLegacy };
     });
     showToast(`Boss defeated! Rank unlocked.`);
     setBossModal(null);
@@ -1625,7 +1712,7 @@ function RPGLife({ user, onSignOut }) {
         onToggleFavorite: toggleActivityFavorite,
       }),
       activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive, onSaveChain: saveQuestChain, onRemoveFromChain: removeQuestFromChain, isQuestUnlocked }),
-      activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat }),
+      activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat, onEquipTitle: equipTitle }),
       activeTab === 'rewards' && h(RewardsView, {
         state,
         onBuy: (r) => setBuyConfirm(r),
@@ -3016,15 +3103,19 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArc
 
 // ---------- Character View ----------
 
-function CharacterView({ state, domainComputed, onBossClick, onAddSubcat }) {
+function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEquipTitle }) {
   const totalLevel = DOMAIN_KEYS.reduce((sum,k) => sum + domainComputed[k].rank, 0);
   const totalXp = DOMAIN_KEYS.reduce((sum,k) => sum + state.domains[k].totalXp, 0);
+  const equippedTitleDef = state.equippedTitle ? TITLES[state.equippedTitle] : null;
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: styles.charSummary },
       h('div', { style: styles.charAvatar }, h(Icon, { name: 'shield', size: 28, color: '#a78bfa' })),
       h('div', null,
-        h('div', { style: { fontSize: 18, fontWeight: 700, color: '#f4f1ea' } }, 'Adventurer'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('div', { style: { fontSize: 18, fontWeight: 700, color: '#f4f1ea' } }, 'Adventurer'),
+          equippedTitleDef && h('span', { style: { fontSize: 13, fontWeight: 600, color: equippedTitleDef.color, background: hexToRgba(equippedTitleDef.color, 0.12), border: `1px solid ${hexToRgba(equippedTitleDef.color, 0.35)}`, borderRadius: 6, padding: '2px 8px' } }, equippedTitleDef.name)
+        ),
         h('div', { style: { fontSize: 13, color: '#9ca3af' } }, `Combined level ${totalLevel} · ${totalXp.toLocaleString()} total XP`)
       )
     ),
@@ -3088,6 +3179,160 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat }) {
     ),
     h('div', { style: { marginTop: 28 } },
       h(AchievementsSection, { achievements: state.achievements || {} })
+    ),
+    h('div', { style: { marginTop: 28 } },
+      h(TitleSection, { achievements: state.achievements || {}, equippedTitle: state.equippedTitle, onEquip: onEquipTitle })
+    ),
+    h('div', { style: { marginTop: 28 } },
+      h(ClassMasterySection, { classMastery: state.classMastery || {} })
+    ),
+    h('div', { style: { marginTop: 28 } },
+      h(YearlyLegacySection, { yearlyLegacy: state.yearlyLegacy || {} })
+    )
+  );
+}
+
+// ---------- Title System ----------
+
+function TitleSection({ achievements, equippedTitle, onEquip }) {
+  const unlockedTitles = Object.entries(TITLES).filter(([id, t]) =>
+    achievements && achievements[t.requiredAchievement]
+  );
+
+  if (unlockedTitles.length === 0) {
+    return h('div', null,
+      h(SectionLabel, { text: 'Titles' }),
+      h('div', { style: { fontSize: 12.5, color: '#7c7c8a', padding: '8px 0' } },
+        'Titles are unlocked through achievements. Earn your first achievement to unlock a title.'
+      )
+    );
+  }
+
+  return h('div', null,
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
+      h(SectionLabel, { text: 'Titles' }),
+      h('span', { style: { fontSize: 11.5, color: '#7c7c8a' } }, `${unlockedTitles.length} unlocked`)
+    ),
+    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+      unlockedTitles.map(([id, t]) => {
+        const isEquipped = equippedTitle === id;
+        return h('button', {
+          key: id,
+          className: 'rpg-btn',
+          onClick: () => onEquip(id),
+          title: t.desc,
+          style: {
+            padding: '8px 14px', borderRadius: 10, cursor: 'pointer',
+            background: isEquipped ? hexToRgba(t.color, 0.18) : '#0e0e14',
+            border: `2px solid ${isEquipped ? t.color : '#2a2a35'}`,
+            color: isEquipped ? t.color : '#9ca3af',
+            fontSize: 13, fontWeight: isEquipped ? 700 : 500,
+            transition: 'all 0.15s',
+            display: 'flex', alignItems: 'center', gap: 6,
+          },
+        },
+          isEquipped && h('span', { style: { fontSize: 11 } }, '✓'),
+          t.name
+        );
+      })
+    ),
+    h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 8 } },
+      equippedTitle ? `Equipped: ${TITLES[equippedTitle]?.name || ''} — click again to unequip` : 'Click a title to equip it. Equipped title shows next to your name.'
+    )
+  );
+}
+
+// ---------- Class Progression ----------
+
+function ClassMasterySection({ classMastery }) {
+  return h('div', null,
+    h(SectionLabel, { text: 'Class mastery' }),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+      CLASS_DEFINITIONS.map(cls => {
+        const xp = (classMastery && classMastery[cls.id]) || 0;
+        const highestTier = [...CLASS_MASTERY_THRESHOLDS].reverse().find(t => xp >= t.xp);
+        const nextTier = CLASS_MASTERY_THRESHOLDS.find(t => xp < t.xp);
+        const progressPct = nextTier
+          ? Math.round(((xp - (highestTier ? highestTier.xp : 0)) / (nextTier.xp - (highestTier ? highestTier.xp : 0))) * 100)
+          : 100;
+
+        return h('div', { key: cls.id, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { fontSize: 18 } }, cls.badge),
+              h('div', null,
+                h('div', { style: { fontSize: 13, fontWeight: 700, color: '#e5e7eb' } }, cls.name),
+                h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, cls.desc)
+              )
+            ),
+            h('div', { style: { textAlign: 'right' } },
+              highestTier && h('div', { style: { fontSize: 12, fontWeight: 700, color: highestTier.color } }, highestTier.label),
+              h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, `${xp.toLocaleString()} XP`)
+            )
+          ),
+          h('div', { style: { ...styles.meterTrack, height: 6 } },
+            h('div', { style: { ...styles.meterFill, width: `${Math.min(progressPct, 100)}%`, background: highestTier ? highestTier.color : cls.color } })
+          ),
+          nextTier && h('div', { style: { fontSize: 10.5, color: '#7c7c8a', marginTop: 4 } },
+            `${(nextTier.xp - xp).toLocaleString()} XP to ${nextTier.label}`
+          ),
+          !nextTier && h('div', { style: { fontSize: 10.5, color: '#fbbf24', marginTop: 4 } }, '✦ Maximum mastery reached')
+        );
+      })
+    )
+  );
+}
+
+// ---------- Yearly Legacy ----------
+
+function YearlyLegacySection({ yearlyLegacy }) {
+  const years = Object.keys(yearlyLegacy).sort((a, b) => Number(b) - Number(a));
+  if (years.length === 0) {
+    return h('div', null,
+      h(SectionLabel, { text: 'Yearly legacy' }),
+      h('div', { style: { fontSize: 12.5, color: '#7c7c8a', padding: '8px 0' } },
+        'Your yearly character sheet will appear here after you start logging activities. Each year becomes a permanent record of your growth.'
+      )
+    );
+  }
+
+  const DOMAIN_NAMES = { health: 'Health', relationships: 'Relationships', career: 'Career', finance: 'Finance' };
+
+  return h('div', null,
+    h(SectionLabel, { text: 'Yearly legacy' }),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+      years.map(year => {
+        const entry = yearlyLegacy[year] || {};
+        const topDomain = entry.topDomain;
+        const topDomainColor = topDomain && DOMAINS[topDomain] ? DOMAINS[topDomain].color : '#a78bfa';
+        const isCurrentYear = year === String(new Date().getFullYear());
+
+        return h('div', { key: year, style: { background: '#1a1a24', border: `1px solid ${isCurrentYear ? 'rgba(167,139,250,0.35)' : '#2a2a35'}`, borderRadius: 12, padding: '14px 16px' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
+            h('div', { style: { fontSize: 16, fontWeight: 800, color: '#f4f1ea' } }, year),
+            isCurrentYear && h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8, background: 'rgba(167,139,250,0.12)', padding: '2px 8px', borderRadius: 5 } }, 'This year')
+          ),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 } },
+            [
+              { label: 'XP Earned', value: (entry.xpEarned || 0).toLocaleString(), color: '#a78bfa' },
+              { label: 'Coins', value: (entry.coinsEarned || 0).toLocaleString(), color: '#fbbf24' },
+              { label: 'Activities', value: (entry.activitiesLogged || 0).toLocaleString(), color: '#60a5fa' },
+              { label: 'Quests Done', value: (entry.questsCompleted || 0).toLocaleString(), color: '#34d399' },
+              { label: 'Gates Cleared', value: (entry.gatesCleared || 0).toLocaleString(), color: '#f59e0b' },
+              { label: 'Best Streak', value: `${entry.highestStreak || 0}d`, color: '#fb923c' },
+            ].map(stat =>
+              h('div', { key: stat.label, style: { background: '#0e0e14', borderRadius: 8, padding: '8px 10px', textAlign: 'center' } },
+                h('div', { style: { fontSize: 16, fontWeight: 800, color: stat.color } }, stat.value),
+                h('div', { style: { fontSize: 10, color: '#7c7c8a', marginTop: 2 } }, stat.label)
+              )
+            )
+          ),
+          topDomain && h('div', { style: { marginTop: 8, fontSize: 11.5, color: '#9ca3af' } },
+            'Top domain: ',
+            h('span', { style: { color: topDomainColor, fontWeight: 600 } }, DOMAIN_NAMES[topDomain] || topDomain)
+          )
+        );
+      })
     )
   );
 }
