@@ -1705,7 +1705,7 @@ function RPGLife({ user, onSignOut }) {
         --text-lo:    #4a4868;
         --danger:     #e05c5c;
         --success:    #5de8a0;
-        --sidebar-w:  220px;
+        --sidebar-w:  260px;
         --sidebar-w-mobile: 0px;
       }
 
@@ -1784,32 +1784,32 @@ function RPGLife({ user, onSignOut }) {
         transition: transform 0.25s ease;
       }
       .rpg-sidebar-logo {
-        padding: 20px 16px 16px;
+        padding: 24px 16px 20px;
         border-bottom: 1px solid var(--border-dim);
         display: flex; flex-direction: column; align-items: center;
       }
       .rpg-sidebar-logo-title {
-        font-size: 11px; font-weight: 800; letter-spacing: 2.5px;
+        font-size: 12px; font-weight: 800; letter-spacing: 2.5px;
         text-transform: uppercase; color: var(--gold);
         line-height: 1; text-align: center;
       }
       .rpg-sidebar-logo-sub {
-        font-size: 9px; color: var(--text-lo); letter-spacing: 1.5px;
-        text-transform: uppercase; margin-top: 3px; text-align: center;
+        font-size: 9.5px; color: var(--text-lo); letter-spacing: 1.5px;
+        text-transform: uppercase; margin-top: 4px; text-align: center;
       }
       .rpg-nav-list {
         flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
       }
       .rpg-nav-item {
         position: relative;
-        display: flex; align-items: center; gap: 12px;
-        padding: 13px 22px;
-        font-size: 13.5px; font-weight: 500; letter-spacing: 0.2px;
+        display: flex; align-items: center; gap: 14px;
+        padding: 14px 28px;
+        font-size: 14px; font-weight: 500; letter-spacing: 0.2px;
         color: var(--text-mid);
         cursor: pointer; border: none; background: transparent;
         text-align: left; width: 100%;
         transition: color 0.15s, background 0.15s;
-        min-height: 46px;
+        min-height: 50px;
       }
       .rpg-nav-item::before {
         content: '';
@@ -1845,8 +1845,8 @@ function RPGLife({ user, onSignOut }) {
       .rpg-topbar {
         position: sticky; top: 0; z-index: 50;
         display: flex; align-items: center; justify-content: space-between;
-        padding: 0 28px;
-        height: 52px;
+        padding: 0 32px;
+        height: 60px;
         background: rgba(8,8,16,0.85);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
@@ -1860,12 +1860,12 @@ function RPGLife({ user, onSignOut }) {
         display: flex; align-items: center; gap: 8px;
       }
       .rpg-hud-chip {
-        display: flex; align-items: center; gap: 6px;
-        padding: 5px 10px;
+        display: flex; align-items: center; gap: 7px;
+        padding: 6px 12px;
         background: var(--bg-raised);
         border: 1px solid var(--border-dim);
         border-radius: 4px;
-        font-size: 12px; font-weight: 700; color: var(--text-hi);
+        font-size: 14px; font-weight: 700; color: var(--text-hi);
         cursor: pointer;
         transition: border-color 0.15s, background 0.15s;
       }
@@ -2099,7 +2099,7 @@ function RPGLife({ user, onSignOut }) {
         h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, paddingBottom: 4 } },
           // Adventure Log sword-and-circle logo — dark variant sized for sidebar
           h('svg', {
-            width: '110', height: '110',
+            width: '160', height: '160',
             viewBox: '0 0 680 720',
             xmlns: 'http://www.w3.org/2000/svg',
             style: { display: 'block' },
@@ -2166,7 +2166,7 @@ function RPGLife({ user, onSignOut }) {
             onClick: () => setActiveTab(tab.id),
             'data-tutorial-id': `tab-${tab.id}`,
           },
-            h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 15, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
+            h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 18, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
             tab.label
           )
         )
@@ -2211,13 +2211,13 @@ function RPGLife({ user, onSignOut }) {
             }, h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }), (state.pendingBonuses || []).length)
           ),
           h('button', { className: 'rpg-hud-chip streak-chip rpg-btn', onClick: () => setStreakCalendar('consistency'), title: 'Consistency streak' },
-            h(Icon, { name: 'flame', size: 13, color: '#fb923c' }), state.consistencyStreak
+            h(Icon, { name: 'flame', size: 17, color: '#fb923c' }), state.consistencyStreak
           ),
           h('button', { className: 'rpg-hud-chip power-chip rpg-btn', onClick: () => setStreakCalendar('power'), title: 'Power streak' },
-            h(Icon, { name: 'star', size: 13, color: '#fbbf24' }), state.powerStreak
+            h(Icon, { name: 'star', size: 17, color: '#fbbf24' }), state.powerStreak
           ),
           h('button', { className: 'rpg-hud-chip gold-chip rpg-btn', onClick: () => setActiveTab('rewards'), title: 'Gold' },
-            h(Icon, { name: 'coins', size: 13, color: '#c9a84c' }), state.gold
+            h(Icon, { name: 'coins', size: 17, color: '#c9a84c' }), state.gold
           ),
           // Power values — clickable, opens settings → Power Values
           (() => {
@@ -2230,7 +2230,7 @@ function RPGLife({ user, onSignOut }) {
               style: { gap: 5, cursor: 'pointer' },
             },
               h('span', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4a4868' } }, 'P'),
-              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 15 } }, v.symbol))
+              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 20 } }, v.symbol))
             );
           })()
         )
