@@ -504,6 +504,7 @@ function RPGLife({ user, onSignOut }) {
   const [logModal, setLogModal] = useState(null);
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [showQuestForm, setShowQuestForm] = useState(false);
+  const [editingQuest, setEditingQuest] = useState(null);
   const [showRewardForm, setShowRewardForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
   const [toast, setToast] = useState(null);
@@ -1169,11 +1170,28 @@ function RPGLife({ user, onSignOut }) {
       const quest = (prev.archivedQuests || []).find(q => q.id === questId);
       if (!quest) return prev;
       const archivedQuests = (prev.archivedQuests || []).filter(q => q.id !== questId);
-      const { archivedAt, ...restoredQuest } = quest;
+      const { archivedAt, goldEarned, finalCompletionPct, ...restoredQuest } = quest;
       const quests = [...prev.quests, { ...restoredQuest, progress: 0 }];
-      return { ...prev, quests, archivedQuests };
+
+      // Reverse the XP and coins that were awarded when this quest completed.
+      // Without this, restoring a quest becomes a way to farm XP — complete it,
+      // restore, complete again infinitely.
+      let next = { ...prev, quests, archivedQuests };
+      if (quest.xpReward) {
+        const dom = quest.domain;
+        if (next.domains[dom]) {
+          next.domains = { ...next.domains };
+          next.domains[dom] = { ...next.domains[dom], totalXp: Math.max(0, next.domains[dom].totalXp - quest.xpReward) };
+        }
+      }
+      const coinRefund = goldEarned || 0;
+      if (coinRefund > 0) {
+        next.gold = Math.max(0, (next.gold || 0) - coinRefund);
+      }
+
+      return next;
     });
-    showToast('Quest restored');
+    showToast('Quest restored — XP and coins reversed');
   }
 
   // ---------- Quest chains ----------
@@ -1422,7 +1440,24 @@ function RPGLife({ user, onSignOut }) {
   }
 
   function deleteQuest(id) {
-    setState(prev => ({ ...prev, quests: prev.quests.filter(q => q.id !== id) }));
+    setState(prev => {
+      const quest = prev.quests.find(q => q.id === id);
+      let quests = prev.quests.filter(q => q.id !== id);
+
+      // If the deleted quest was a chain head (dependsOn === null, has a chainId),
+      // promote the next quest in the chain (lowest chainOrder among its dependents)
+      if (quest && quest.chainId) {
+        const nextInChain = quests
+          .filter(q => q.chainId === quest.chainId && q.dependsOn === id)
+          .sort((a, b) => (a.chainOrder || 0) - (b.chainOrder || 0))[0];
+        if (nextInChain) {
+          quests = quests.map(q =>
+            q.id === nextInChain.id ? { ...q, dependsOn: null } : q
+          );
+        }
+      }
+      return { ...prev, quests };
+    });
   }
 
   function completeBoss(domainKey, level, tier) {
@@ -1766,13 +1801,14 @@ function RPGLife({ user, onSignOut }) {
       }
       .rpg-nav-item {
         position: relative;
-        display: flex; align-items: center; gap: 11px;
-        padding: 11px 20px;
-        font-size: 12.5px; font-weight: 500; letter-spacing: 0.3px;
+        display: flex; align-items: center; gap: 12px;
+        padding: 13px 22px;
+        font-size: 13.5px; font-weight: 500; letter-spacing: 0.2px;
         color: var(--text-mid);
         cursor: pointer; border: none; background: transparent;
         text-align: left; width: 100%;
         transition: color 0.15s, background 0.15s;
+        min-height: 46px;
       }
       .rpg-nav-item::before {
         content: '';
@@ -1999,11 +2035,11 @@ function RPGLife({ user, onSignOut }) {
         display: flex; justify-content: space-around;
       }
       .rpg-mobile-nav-item {
-        display: flex; flex-direction: column; align-items: center; gap: 3px;
-        padding: 6px 10px;
-        font-size: 9px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        padding: 8px 12px;
+        font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
         color: var(--text-lo); cursor: pointer; border: none; background: transparent;
-        transition: color 0.15s;
+        transition: color 0.15s; min-width: 52px; min-height: 52px; justify-content: center;
       }
       .rpg-mobile-nav-item.active { color: var(--accent); }
 
@@ -2162,7 +2198,7 @@ function RPGLife({ user, onSignOut }) {
         onAdd: () => { setEditingActivity(null); setShowActivityForm(true); },
         onToggleFavorite: toggleActivityFavorite,
       }),
-      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive, onSaveChain: saveQuestChain, onRemoveFromChain: removeQuestFromChain, isQuestUnlocked }),
+      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => { setEditingQuest(null); setShowQuestForm(true); }, onEdit: (q) => { setEditingQuest(q); setShowQuestForm(true); }, onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive, onSaveChain: saveQuestChain, onRemoveFromChain: removeQuestFromChain, isQuestUnlocked }),
       activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat, onEquipTitle: equipTitle }),
       activeTab === 'rewards' && h(RewardsView, {
         state,
@@ -2204,7 +2240,7 @@ function RPGLife({ user, onSignOut }) {
               className: `rpg-mobile-nav-item rpg-btn${activeTab === tab.id ? ' active' : ''}`,
               onClick: () => setActiveTab(tab.id),
             },
-              h(Icon, { name: tab.icon, size: 18, color: activeTab === tab.id ? '#a78bfa' : '#4a4868' }),
+              h(Icon, { name: tab.icon, size: 22, color: activeTab === tab.id ? '#a78bfa' : '#4a4868' }),
               tab.label
             )
           )
@@ -2254,7 +2290,11 @@ function RPGLife({ user, onSignOut }) {
       onSave: saveActivity,
       onAddSubcat: addCustomSubcat,
     }),
-    showQuestForm && h(QuestFormModal, { onClose: () => setShowQuestForm(false), onSave: saveQuest }),
+    showQuestForm && h(QuestFormModal, {
+      existingQuest: editingQuest,
+      onClose: () => { setShowQuestForm(false); setEditingQuest(null); },
+      onSave: (data) => { saveQuest(data); setEditingQuest(null); },
+    }),
     showRewardForm && h(RewardFormModal, {
       reward: typeof showRewardForm === 'object' ? showRewardForm : null,
       onClose: () => setShowRewardForm(false),
@@ -2483,19 +2523,39 @@ function TutorialOverlay({ step, onNext, onClose }) {
   // Calculate the best position for the tooltip card:
   // prefer below the spotlight, fall back to above if too close to bottom
   function cardPosition() {
-    if (!spotRect) return { bottom: 100, left: '50%', transform: 'translateX(-50%)' };
     const winH = window.innerHeight || 700;
     const winW = window.innerWidth || 400;
-    const spotBottom = spotRect.top + spotRect.height + PAD;
+    const sidebarW = winW > 768 ? 220 : 0;
+    const usableLeft = sidebarLeft + sidebarW + 8;
+    const usableRight = winW - 8;
+    const usableW = usableRight - usableLeft;
+
+    if (!spotRect) {
+      // No spotlight — centre the card in the usable area
+      const left = usableLeft + Math.max(0, (usableW - CARD_WIDTH) / 2);
+      return { position: 'fixed', top: Math.max(60, (winH - 280) / 2), left: Math.min(left, winW - CARD_WIDTH - 8) };
+    }
+
+    const PAD_EXTRA = 8;
+    const cardH = 260; // conservative estimate
+    const spotBottom = spotRect.top + spotRect.height + PAD + PAD_EXTRA;
     const spaceBelow = winH - spotBottom;
-    const cardH = 200; // estimated
-    const top = spaceBelow > cardH + 20
-      ? spotBottom + 12
-      : spotRect.top - PAD - cardH - 12;
+    let top;
+    if (spaceBelow >= cardH + 16) {
+      top = spotBottom + 8;
+    } else {
+      top = Math.max(8, spotRect.top - PAD - cardH - 8);
+    }
+    // Clamp top so it never goes below viewport
+    top = Math.min(top, winH - cardH - 12);
+    top = Math.max(8, top);
+
     const centreX = spotRect.left + spotRect.width / 2;
-    const left = Math.max(12, Math.min(winW - CARD_WIDTH - 12, centreX - CARD_WIDTH / 2));
-    return { position: 'fixed', top: Math.max(12, top), left };
+    const left = Math.max(usableLeft, Math.min(winW - CARD_WIDTH - 8, centreX - CARD_WIDTH / 2));
+    return { position: 'fixed', top, left };
   }
+
+  const sidebarLeft = 0; // used in cardPosition
 
   const progress = `${step + 1} / ${ALL_STEPS.length}`;
 
@@ -3142,23 +3202,6 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
       onDismiss: onDismissChallenge,
     }),
 
-    h('section', null,
-      h(SectionLabel, { text: 'Quick log' }),
-      h('div', { style: styles.quickLogGrid },
-        state.activities.map(act => {
-          const d = DOMAINS[act.domain];
-          return h('button', { key: act.id, className: 'rpg-btn', style: { ...styles.quickLogBtn, borderColor: 'rgba(255,255,255,0.08)' }, onClick: () => onLogClick(act) },
-            h('div', { style: { ...styles.quickLogDot, background: d.color } }),
-            h('div', { style: { flex: 1, textAlign: 'left' } },
-              h('div', { style: styles.quickLogName }, act.name),
-              h('div', { style: styles.quickLogMeta }, `${d.name} · ${act.subcat}`)
-            ),
-            h(Icon, { name: 'plus', size: 15, color: '#9ca3af' })
-          );
-        })
-      )
-    ),
-
     activeQuests.length > 0 && h('section', null,
       h(SectionLabel, { text: 'Active quests' }),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
@@ -3302,9 +3345,10 @@ function FilterChip({ label, active, onClick, color }) {
 
 // ---------- Quests View ----------
 
-function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, onRestoreArchive, onSaveChain, onRemoveFromChain, isQuestUnlocked }) {
+function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, onRestoreArchive, onSaveChain, onRemoveFromChain, isQuestUnlocked }) {
   const [showArchive, setShowArchive] = useState(false);
   const [showChainEditor, setShowChainEditor] = useState(false);
+  const [editingChain, setEditingChain] = useState(null);
   const active = (state.quests || []).filter(q => q.progress < 100);
   const archived = state.archivedQuests || [];
   const chains = state.questChains || [];
@@ -3329,8 +3373,13 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
         active.length >= 2 && h('button', {
           className: 'rpg-btn',
           style: { ...styles.secondaryBtn, fontSize: 12 },
-          onClick: () => setShowChainEditor(true),
-        }, '⛓ Chains'),
+          onClick: () => { setEditingChain(null); setShowChainEditor(true); },
+        }, '⛓ New chain'),
+        chains.length > 0 && h('button', {
+          className: 'rpg-btn',
+          style: { ...styles.secondaryBtn, fontSize: 12 },
+          onClick: () => { setEditingChain(chains[0]); setShowChainEditor(true); },
+        }, '✏️ Edit chain'),
         h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
       )
     ),
@@ -3338,8 +3387,9 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
     showChainEditor && h(QuestChainEditorModal, {
       quests: active,
       chains: chains,
-      onSave: (name, questIds) => { onSaveChain(name, questIds); setShowChainEditor(false); },
-      onClose: () => setShowChainEditor(false),
+      prefillChain: editingChain,
+      onSave: (name, questIds) => { onSaveChain(name, questIds); setShowChainEditor(false); setEditingChain(null); },
+      onClose: () => { setShowChainEditor(false); setEditingChain(null); },
     }),
 
     active.length === 0
@@ -3364,7 +3414,7 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
                       !unlocked && h('div', { style: { fontSize: 11, color: '#7c7c8a', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
                         '🔒', `Requires: ${(state.quests || []).find(x => x.id === q.dependsOn)?.name || 'previous quest'}`
                       ),
-                      h(QuestRow, { quest: q, onUpdateProgress: unlocked ? onUpdateProgress : null, onToggleCheckpoint: unlocked ? onToggleCheckpoint : null, onDelete, onArchive: unlocked ? onArchive : null, onRemoveFromChain: () => onRemoveFromChain && onRemoveFromChain(q.id) })
+                      h(QuestRow, { quest: q, onUpdateProgress: unlocked ? onUpdateProgress : null, onToggleCheckpoint: unlocked ? onToggleCheckpoint : null, onDelete, onEdit: unlocked ? onEdit : null, onArchive: unlocked ? onArchive : null, onRemoveFromChain: () => onRemoveFromChain && onRemoveFromChain(q.id) })
                     )
                   );
                 })
@@ -3373,7 +3423,7 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
           ),
           // Standalone quests
           standaloneQuests.length > 0 && h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-            standaloneQuests.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive }))
+            standaloneQuests.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete, onEdit, onArchive }))
           )
         ),
 
@@ -3407,9 +3457,9 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
 
 // ---------- Quest Chain Editor ----------
 
-function QuestChainEditorModal({ quests, chains, onSave, onClose }) {
-  const [chainName, setChainName] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
+function QuestChainEditorModal({ quests, chains, prefillChain, onSave, onClose }) {
+  const [chainName, setChainName] = useState(prefillChain ? prefillChain.name : '');
+  const [selectedIds, setSelectedIds] = useState(prefillChain ? prefillChain.questIds.filter(id => quests.some(q => q.id === id)) : []);
 
   // Sort quests so currently-chained ones show their chain name
   const questsWithChain = quests.map(q => {
@@ -3507,7 +3557,7 @@ function QuestChainEditorModal({ quests, chains, onSave, onClose }) {
   );
 }
 
-function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, compact }) {
+function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, onEdit, compact }) {
   const d = DOMAINS[quest.domain];
   const daysLeft = quest.days - Math.floor((Date.now() - quest.createdAt) / (1000*60*60*24));
   const isComplete = quest.progress >= 100;
@@ -3531,6 +3581,7 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArc
       h('div', { style: { textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { fontSize: 18, fontWeight: 700, color: isComplete ? '#fbbf24' : d.color } }, `${quest.progress}%`),
         onDelete && h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(quest.id) }, h(Icon, { name: 'trash2', size: 12 })),
+        onEdit && h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(quest), title: 'Edit quest' }, h(Icon, { name: 'edit2', size: 12 })),
         onArchive && h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, fontSize: 11, padding: '4px 8px', height: 'auto' }, onClick: () => onArchive(quest.id), title: 'Archive quest' }, '→')
       )
     ),
@@ -4122,13 +4173,13 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
   );
 }
 
-function QuestFormModal({ onClose, onSave }) {
-  const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
-  const [domain, setDomain] = useState('health');
-  const [days, setDays] = useState('30');
-  const [xpReward, setXpReward] = useState(100);
-  const [checkpoints, setCheckpoints] = useState([]);
+function QuestFormModal({ onClose, onSave, existingQuest }) {
+  const [name, setName] = useState(existingQuest ? existingQuest.name : '');
+  const [desc, setDesc] = useState(existingQuest ? (existingQuest.desc || '') : '');
+  const [domain, setDomain] = useState(existingQuest ? existingQuest.domain : 'health');
+  const [days, setDays] = useState(existingQuest ? String(existingQuest.days) : '30');
+  const [xpReward, setXpReward] = useState(existingQuest ? existingQuest.xpReward : 100);
+  const [checkpoints, setCheckpoints] = useState(existingQuest ? (existingQuest.checkpoints || []) : []);
   const [newCpName, setNewCpName] = useState('');
   const [newCpDays, setNewCpDays] = useState('');
 
@@ -4155,6 +4206,7 @@ function QuestFormModal({ onClose, onSave }) {
   function handleSave() {
     if (!canSave) return;
     onSave({
+      ...(existingQuest || {}),
       name: name.trim(),
       desc: desc.trim(),
       domain,
@@ -4164,7 +4216,7 @@ function QuestFormModal({ onClose, onSave }) {
     });
   }
 
-  return h(ModalShell, { title: 'New quest', onClose, width: 480 },
+  return h(ModalShell, { title: existingQuest ? 'Edit quest' : 'New quest', onClose, width: 480 },
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
       h('div', null,
         h('label', { style: styles.label }, 'Quest name'),
@@ -4555,30 +4607,53 @@ function FAB({ onClick }) {
 }
 
 function QuickLogSheet({ activities, onSelect, onClose }) {
+  const [search, setSearch] = useState('');
+  const sorted = [...activities]
+    .sort((a, b) => {
+      if (a.favorite && !b.favorite) return -1;
+      if (!a.favorite && b.favorite) return 1;
+      return a.name.localeCompare(b.name);
+    })
+    .filter(a => !search.trim() || a.name.toLowerCase().includes(search.toLowerCase()) || (a.tags || []).some(t => t.toLowerCase().includes(search.toLowerCase())));
+
   return h('div', { style: styles.modalOverlay, onClick: onClose },
     h('div', { style: styles.bottomSheet, onClick: e => e.stopPropagation() },
       h('div', { style: styles.modalHeader },
         h('span', { style: styles.modalTitle }, 'Quick log'),
         h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: onClose }, h(Icon, { name: 'x', size: 14 }))
       ),
-      h('div', { style: { padding: 12, maxHeight: '60vh', overflowY: 'auto' }, className: 'rpg-scroll' },
-        activities.length === 0
-          ? h(EmptyState, { text: 'No activities yet. Create one in the Activities tab first.' })
-          : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-              activities.map(act => {
+      h('div', { style: { padding: '10px 12px 4px' } },
+        h('input', { value: search, onChange: e => setSearch(e.target.value), placeholder: 'Search activities…', style: styles.input })
+      ),
+      h('div', { style: { padding: '8px 12px 12px', maxHeight: '55vh', overflowY: 'auto' } },
+        sorted.length === 0
+          ? h(EmptyState, { text: activities.length === 0 ? 'No activities yet. Create one in the Activities tab first.' : 'No activities match that search.' })
+          : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+              sorted.map(act => {
                 const d = DOMAINS[act.domain];
                 return h('button', {
                   key: act.id,
                   className: 'rpg-btn',
                   onClick: () => onSelect(act),
-                  style: styles.quickLogBtn,
+                  style: {
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    width: '100%', padding: '10px 12px', borderRadius: 4,
+                    background: 'transparent', border: '1px solid transparent',
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'background 0.12s, border-color 0.12s',
+                  },
+                  onMouseEnter: e => { e.currentTarget.style.background = '#1a1a2e'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; },
+                  onMouseLeave: e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; },
                 },
-                  h('div', { style: { ...styles.quickLogDot, background: d.color } }),
-                  h('div', { style: { flex: 1, textAlign: 'left' } },
-                    h('div', { style: styles.quickLogName }, act.name),
-                    h('div', { style: styles.quickLogMeta }, `${d.name} · ${act.subcat}`)
+                  h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
+                  h('div', { style: { flex: 1 } },
+                    h('div', { style: { fontSize: 13, fontWeight: 600, color: '#eceaf6' } },
+                      act.name,
+                      act.favorite && h('span', { style: { color: '#c9a84c', marginLeft: 5, fontSize: 11 } }, '★')
+                    ),
+                    h('div', { style: { fontSize: 11, color: '#9896b0', marginTop: 1 } }, `${d.name} · ${act.subcat}`)
                   ),
-                  h(Icon, { name: 'plus', size: 15, color: '#9ca3af' })
+                  h(Icon, { name: 'plus', size: 14, color: '#4a4868' })
                 );
               })
             )
@@ -4974,17 +5049,29 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
 // ---------- Power Values (#new) ----------
 
 function PowerValuesSection({ state, onSave }) {
+  const [open, setOpen] = useState(false);
   const initial = (state.powerValues && state.powerValues.length === 3)
     ? state.powerValues
     : [{ name: '', symbol: '' }, { name: '', symbol: '' }, { name: '', symbol: '' }];
   const [values, setValues] = useState(initial);
   const [saved, setSaved] = useState(false);
 
-  // Common emoji options for the picker
+  // Mature, refined emoji — thematically varied for representing personal values.
+  // Organised by life domain: strength/discipline, wisdom/growth, relationships,
+  // creative/craft, legacy/honour, health, finance, spirit/purpose.
   const EMOJI_OPTIONS = [
-    '🎨','💪','🧠','⚡','🔥','🌱','🎯','🏆','💡','🌊',
-    '🦁','🛡️','⚔️','🌙','☀️','🎭','📚','💎','🚀','🌿',
-    '❤️','🤝','🎵','🏋️','🧘','✍️','🔬','💼','🌍','🎲',
+    // Strength & Discipline
+    '⚔️','🛡️','🏹','🗡️','⚡','🔱','🦅','🐉',
+    // Wisdom & Growth
+    '📜','🔬','🧭','💡','🌿','🌲','🏔️','🌊',
+    // Honour & Legacy
+    '👑','🏆','💎','🔑','⚖️','🌟','🕯️','🪬',
+    // Craft & Creation
+    '🔧','⚙️','🎯','🏗️','🎻','✒️','🗺️','🔭',
+    // Connection & Relationships
+    '🤝','🌐','🕊️','🔮','🌙','☀️','🧿','🪐',
+    // Vitality & Health
+    '🫀','🦾','🌱','💠','🫶','🧘','🌅','🌿',
   ];
 
   function update(i, field, val) {
@@ -4999,44 +5086,58 @@ function PowerValuesSection({ state, onSave }) {
   }
 
   return h('section', { style: { marginBottom: 24 } },
-    h(SectionLabel, { text: 'Power values' }),
-    h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
-      'Your 3 highest personal values. Their symbols are always visible in the header as a constant reminder.'
+    h('button', {
+      className: 'rpg-btn',
+      onClick: () => setOpen(o => !o),
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, color: C.textHi },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h(Icon, { name: 'star', size: 15, color: '#c9a84c' }),
+        h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Power Values')
+      ),
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
+        h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
+      )
     ),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 } },
+    open && h('div', { style: { background: C.raised, border: '1px solid ' + C.borderDim, borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 14 } },
+      h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 4 } },
+        'Your 3 highest personal values. Their symbols stay visible in the top bar as a constant reminder.'
+      ),
       values.map((v, i) =>
-        h('div', { key: i, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' } },
-          h('div', { style: { fontSize: 11.5, color: '#7c7c8a', fontWeight: 600, marginBottom: 8 } }, `Power value ${i + 1}`),
+        h('div', { key: i, style: { background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '12px 14px' } },
+          h('div', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 8 } }, `Value ${i + 1}`),
           h('div', { style: { display: 'flex', gap: 8, marginBottom: 10 } },
-            h('div', { style: { width: 52, height: 44, borderRadius: 10, background: '#0e0e14', border: '1px solid #2a2a35', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 } },
-              v.symbol || '○'
+            h('div', { style: { width: 46, height: 40, borderRadius: 4, background: C.panel, border: '1px solid ' + C.borderMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 } },
+              v.symbol || '·'
             ),
             h('input', {
               value: v.name,
               onChange: e => update(i, 'name', e.target.value),
               style: { ...styles.input, flex: 1 },
-              placeholder: `Value name (e.g. Creativity)`,
+              placeholder: `Name (e.g. Discipline)`,
             })
           ),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
             EMOJI_OPTIONS.map(emoji =>
               h('button', {
                 key: emoji, className: 'rpg-btn',
                 onClick: () => update(i, 'symbol', emoji),
                 style: {
-                  fontSize: 20, padding: '4px 6px', borderRadius: 8,
-                  border: `2px solid ${v.symbol === emoji ? '#a78bfa' : '#2a2a35'}`,
-                  background: v.symbol === emoji ? 'rgba(167,139,250,0.15)' : 'transparent',
-                  cursor: 'pointer',
+                  fontSize: 18, padding: '5px 7px', borderRadius: 4,
+                  border: `1px solid ${v.symbol === emoji ? C.accent : C.borderDim}`,
+                  background: v.symbol === emoji ? C.accentDim : 'transparent',
+                  cursor: 'pointer', transition: 'all 0.12s',
                 },
               }, emoji)
             )
           )
         )
-      )
-    ),
-    h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave },
-      h(Icon, { name: 'check', size: 14 }), saved ? ' Saved!' : ' Save power values'
+      ),
+      h('button', {
+        className: 'rpg-btn',
+        style: { ...styles.primaryBtn, justifyContent: 'center', padding: '9px 0' },
+        onClick: handleSave,
+      }, saved ? '✓ Saved' : 'Save values')
     )
   );
 }
@@ -5668,6 +5769,15 @@ const styles = {
   modeToggleBtnActive: { background: C.accentDim, color: C.accent },
   questPanelCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '16px 18px' },
   questPickerDropdown: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 30, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' },
+
+  // Quick log
+  quickLogGrid: { display: 'flex', flexDirection: 'column', gap: 4 },
+  quickLogBtn: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', borderRadius: 4, background: C.raised, border: '1px solid ' + C.borderDim, cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.12s' },
+  quickLogName: { fontSize: 13, fontWeight: 600, color: C.textHi },
+  quickLogMeta: { fontSize: 11, color: C.textMid, marginTop: 1 },
+
+  // Danger buttons
+  dangerBtnSmall: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 4, background: 'rgba(224,92,92,0.1)', border: '1px solid rgba(224,92,92,0.3)', color: C.danger, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
 };
 
 // ---------- Render ----------
