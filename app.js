@@ -1281,7 +1281,23 @@ function RPGLife({ user, onSignOut }) {
         { ...quest, archivedAt: Date.now(), goldEarned: goldGain },
         ...(next.archivedQuests || []),
       ];
+      // Chain-continues: if completing this quest unlocks the next one in a chain, notify
+      const nextInChain = next.quests.find(q => q.dependsOn === quest.id);
+      if (nextInChain) {
+        // Schedule the toast slightly after the completion toast
+        setTimeout(() => showToast(`⛓ Chain continues: "${nextInChain.name}" is now unlocked!`), 1200);
+      }
       next = checkAchievements(next);
+      // Queue achievement unlock popup if any were just earned
+      const newlyUnlocked = Object.keys(next.achievements || {}).filter(
+        id => !(oldQuest._prevAchievements || {})[id]
+      );
+      if (newlyUnlocked.length > 0) {
+        next.pendingAchievementUnlocks = [
+          ...(next.pendingAchievementUnlocks || []),
+          ...newlyUnlocked.map(id => ({ id, at: Date.now() })),
+        ];
+      }
     }
     return next;
   }
@@ -2748,9 +2764,21 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
           style: { ...styles.secondaryBtn, fontSize: 12 },
           onClick: () => setShowArchive(v => !v),
         }, showArchive ? 'Hide archive' : `Archive (${archived.length})`),
+        active.length >= 2 && h('button', {
+          className: 'rpg-btn',
+          style: { ...styles.secondaryBtn, fontSize: 12 },
+          onClick: () => setShowChainEditor(true),
+        }, '⛓ Chains'),
         h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
       )
     ),
+
+    showChainEditor && h(QuestChainEditorModal, {
+      quests: active,
+      chains: chains,
+      onSave: (name, questIds) => { onSaveChain(name, questIds); setShowChainEditor(false); },
+      onClose: () => setShowChainEditor(false),
+    }),
 
     active.length === 0
       ? h(EmptyState, { text: 'No active quests. Create a time-bound quest to chart a longer journey.' })
@@ -2811,6 +2839,108 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
           )
         ))
       )
+    )
+  );
+}
+
+// ---------- Quest Chain Editor ----------
+
+function QuestChainEditorModal({ quests, chains, onSave, onClose }) {
+  const [chainName, setChainName] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  // Sort quests so currently-chained ones show their chain name
+  const questsWithChain = quests.map(q => {
+    const chain = chains.find(c => c.questIds.includes(q.id));
+    return { ...q, _chainName: chain ? chain.name : null };
+  });
+
+  function toggle(id) {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }
+
+  // Reorder: drag the order by moving items up/down
+  function moveUp(idx) {
+    if (idx === 0) return;
+    const arr = [...selectedIds];
+    [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]];
+    setSelectedIds(arr);
+  }
+  function moveDown(idx) {
+    if (idx === selectedIds.length - 1) return;
+    const arr = [...selectedIds];
+    [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]];
+    setSelectedIds(arr);
+  }
+
+  const selectedQuests = selectedIds.map(id => quests.find(q => q.id === id)).filter(Boolean);
+  const canSave = chainName.trim() && selectedIds.length >= 2;
+
+  return h(ModalShell, { title: 'Create quest chain', onClose, width: 480 },
+    h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 14 } },
+      'Link quests into a progression chain. Quest N+1 stays locked until Quest N is completed and archived.'
+    ),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+      h('div', null,
+        h('label', { style: styles.label }, 'Chain name'),
+        h('input', { value: chainName, onChange: e => setChainName(e.target.value), style: styles.input, placeholder: 'e.g. Health Mastery Journey' })
+      ),
+
+      h('div', null,
+        h('label', { style: styles.label }, 'Select quests (in order)'),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 } },
+          questsWithChain.map(q => {
+            const d = DOMAINS[q.domain];
+            const isSelected = selectedIds.includes(q.id);
+            return h('button', {
+              key: q.id,
+              className: 'rpg-btn',
+              onClick: () => toggle(q.id),
+              style: {
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                background: isSelected ? hexToRgba(d.color, 0.12) : '#0e0e14',
+                border: `1.5px solid ${isSelected ? d.color : '#2a2a35'}`,
+                borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+              },
+            },
+              h('div', { style: { width: 16, height: 16, borderRadius: 4, border: `2px solid ${isSelected ? d.color : '#3a3a4a'}`, background: isSelected ? hexToRgba(d.color, 0.2) : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+                isSelected && h(Icon, { name: 'check', size: 10, color: d.color })
+              ),
+              h(Icon, { name: d.icon, size: 13, color: d.color }),
+              h('span', { style: { fontSize: 13, color: '#e5e7eb', flex: 1 } }, q.name),
+              q._chainName && h('span', { style: { fontSize: 10, color: '#7c7c8a' } }, `(in: ${q._chainName})`)
+            );
+          })
+        )
+      ),
+
+      selectedIds.length >= 2 && h('div', null,
+        h('div', { style: { ...styles.label, marginBottom: 8 } }, 'Chain order (drag to reorder using ↑↓)'),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+          selectedQuests.map((q, i) => {
+            const d = DOMAINS[q.domain];
+            return h('div', { key: q.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#0e0e14', borderRadius: 7 } },
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+                h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, padding: '2px 4px', height: 'auto', opacity: i===0?0.3:1 }, onClick: () => moveUp(i) }, '↑'),
+                h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, padding: '2px 4px', height: 'auto', opacity: i===selectedIds.length-1?0.3:1 }, onClick: () => moveDown(i) }, '↓')
+              ),
+              h('div', { style: { width: 20, height: 20, borderRadius: '50%', background: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#0e0e14', flexShrink: 0 } }, i+1),
+              h(Icon, { name: d.icon, size: 13, color: d.color }),
+              h('span', { style: { fontSize: 12.5, color: '#e5e7eb' } }, q.name),
+              i < selectedQuests.length-1 && h('span', { style: { fontSize: 10, color: '#7c7c8a', marginLeft: 'auto' } }, '→ unlocks next')
+            );
+          })
+        )
+      ),
+
+      h('button', {
+        className: 'rpg-btn',
+        disabled: !canSave,
+        onClick: () => canSave && onSave(chainName.trim(), selectedIds),
+        style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0', opacity: canSave ? 1 : 0.5, cursor: canSave ? 'pointer' : 'not-allowed' },
+      }, h(Icon, { name: 'check', size: 14 }), ' Create chain')
     )
   );
 }
