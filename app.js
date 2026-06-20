@@ -1784,17 +1784,18 @@ function RPGLife({ user, onSignOut }) {
         transition: transform 0.25s ease;
       }
       .rpg-sidebar-logo {
-        padding: 24px 20px 20px;
+        padding: 20px 16px 16px;
         border-bottom: 1px solid var(--border-dim);
+        display: flex; flex-direction: column; align-items: center;
       }
       .rpg-sidebar-logo-title {
-        font-size: 13px; font-weight: 800; letter-spacing: 2.5px;
+        font-size: 11px; font-weight: 800; letter-spacing: 2.5px;
         text-transform: uppercase; color: var(--gold);
-        line-height: 1;
+        line-height: 1; text-align: center;
       }
       .rpg-sidebar-logo-sub {
-        font-size: 10px; color: var(--text-lo); letter-spacing: 1px;
-        text-transform: uppercase; margin-top: 3px;
+        font-size: 9px; color: var(--text-lo); letter-spacing: 1.5px;
+        text-transform: uppercase; margin-top: 3px; text-align: center;
       }
       .rpg-nav-list {
         flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
@@ -2095,8 +2096,60 @@ function RPGLife({ user, onSignOut }) {
     // ── Sidebar (desktop) ──────────────────────────────────
     h('aside', { className: 'rpg-sidebar' },
       h('div', { className: 'rpg-sidebar-logo' },
-        h('div', { className: 'rpg-sidebar-logo-title' }, 'Adventure Log'),
-        h('div', { className: 'rpg-sidebar-logo-sub' }, 'Character Progression System')
+        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, paddingBottom: 4 } },
+          // Adventure Log sword-and-circle logo — dark variant sized for sidebar
+          h('svg', {
+            width: '110', height: '110',
+            viewBox: '0 0 680 720',
+            xmlns: 'http://www.w3.org/2000/svg',
+            style: { display: 'block' },
+          },
+            // Background pill
+            h('rect', { width: '680', height: '720', fill: '#0d0d1a', rx: '18' }),
+            // Outer ring
+            h('circle', { cx: '340', cy: '248', r: '168', fill: 'none', stroke: '#a78bfa', strokeWidth: '1.2', opacity: '0.35' }),
+            h('circle', { cx: '340', cy: '248', r: '152', fill: 'none', stroke: '#a78bfa', strokeWidth: '0.6', opacity: '0.2' }),
+            // Cardinal tick diamonds
+            h('polygon', { points: '340,71 344,79 340,87 336,79', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '340,409 344,417 340,425 336,417', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '163,244 171,248 163,252 155,248', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '517,244 525,248 517,252 509,248', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
+            // Spark dots
+            h('circle', { cx: '261', cy: '110', r: '2', fill: '#a78bfa', opacity: '0.35' }),
+            h('circle', { cx: '419', cy: '110', r: '2', fill: '#a78bfa', opacity: '0.35' }),
+            h('circle', { cx: '212', cy: '180', r: '1.5', fill: '#a78bfa', opacity: '0.22' }),
+            h('circle', { cx: '468', cy: '180', r: '1.5', fill: '#a78bfa', opacity: '0.22' }),
+            // Blade
+            h('path', { d: 'M335,390 L333,250 L340,88 L347,250 L345,390 Z', fill: '#eceaf6', opacity: '0.92' }),
+            h('path', { d: 'M340,88 L340,385', fill: 'none', stroke: '#9896b0', strokeWidth: '1.2', opacity: '0.5' }),
+            h('path', { d: 'M333,390 L340,418 L347,390 Z', fill: '#c4c0d8' }),
+            // Crossguard
+            h('path', { d: 'M296,250 Q300,245 308,246 L332,248 L332,256 L308,258 Q300,259 296,254 Z', fill: '#eceaf6', opacity: '0.9' }),
+            h('path', { d: 'M384,250 Q380,245 372,246 L348,248 L348,256 L372,258 Q380,259 384,254 Z', fill: '#eceaf6', opacity: '0.9' }),
+            h('ellipse', { cx: '298', cy: '252', rx: '4', ry: '6', fill: '#c4c0d8' }),
+            h('ellipse', { cx: '382', cy: '252', rx: '4', ry: '6', fill: '#c4c0d8' }),
+            // Guard jewel
+            h('polygon', { points: '340,240 348,252 340,264 332,252', fill: '#a78bfa' }),
+            h('polygon', { points: '340,243 346,252 340,261 334,252', fill: '#c4b5fd', opacity: '0.5' }),
+            h('polygon', { points: '340,229 346,236 340,243 334,236', fill: '#a78bfa', opacity: '0.7' }),
+            // Grip
+            h('rect', { x: '336', y: '152', width: '8', height: '82', fill: '#c4c0d8', rx: '2' }),
+            h('line', { x1: '335', y1: '165', x2: '345', y2: '171', stroke: '#0d0d1a', strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '180', x2: '345', y2: '186', stroke: '#0d0d1a', strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '195', x2: '345', y2: '201', stroke: '#0d0d1a', strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '210', x2: '345', y2: '216', stroke: '#0d0d1a', strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '225', x2: '345', y2: '231', stroke: '#0d0d1a', strokeWidth: '1.5' }),
+            // Pommel
+            h('polygon', { points: '340,120 348,136 340,152 332,136', fill: '#eceaf6' }),
+            h('polygon', { points: '340,124 345,136 340,148 335,136', fill: '#a78bfa' }),
+            h('polygon', { points: '340,108 344,116 340,124 336,116', fill: '#a78bfa', opacity: '0.7' }),
+            // Wordmark — only the sword+circle portion is used inline (no text, text shown below in DOM)
+          ),
+          h('div', { style: { textAlign: 'center', marginTop: 2 } },
+            h('div', { className: 'rpg-sidebar-logo-title' }, 'Adventure Log'),
+            h('div', { className: 'rpg-sidebar-logo-sub' }, 'Live · Grow · Level Up')
+          )
+        )
       ),
       h('nav', { className: 'rpg-nav-list' },
         [
@@ -2166,12 +2219,18 @@ function RPGLife({ user, onSignOut }) {
           h('button', { className: 'rpg-hud-chip gold-chip rpg-btn', onClick: () => setActiveTab('rewards'), title: 'Gold' },
             h(Icon, { name: 'coins', size: 13, color: '#c9a84c' }), state.gold
           ),
-          // Power values
+          // Power values — clickable, opens settings → Power Values
           (() => {
             const pv = (state.powerValues || []).filter(v => v && v.symbol);
             if (!pv.length) return null;
-            return h('div', { className: 'rpg-hud-chip', style: { gap: 3 } },
-              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 14 } }, v.symbol))
+            return h('button', {
+              className: 'rpg-hud-chip rpg-btn',
+              onClick: () => { setActiveTab('settings'); },
+              title: 'Power values — click to edit',
+              style: { gap: 5, cursor: 'pointer' },
+            },
+              h('span', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4a4868' } }, 'P'),
+              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 15 } }, v.symbol))
             );
           })()
         )
@@ -3375,11 +3434,6 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
           style: { ...styles.secondaryBtn, fontSize: 12 },
           onClick: () => { setEditingChain(null); setShowChainEditor(true); },
         }, '⛓ New chain'),
-        chains.length > 0 && h('button', {
-          className: 'rpg-btn',
-          style: { ...styles.secondaryBtn, fontSize: 12 },
-          onClick: () => { setEditingChain(chains[0]); setShowChainEditor(true); },
-        }, '✏️ Edit chain'),
         h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
       )
     ),
@@ -3398,9 +3452,17 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
           // Render chain groups first
           chainGroups.map(chain =>
             h('div', { key: chain.id, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 12, padding: '12px 14px' } },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 } },
-                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8 } }, '⛓ Chain:'),
-                h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, chain.name)
+              h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                  h('div', { style: { fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8 } }, '⛓ Chain:'),
+                  h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, chain.name)
+                ),
+                h('button', {
+                  className: 'rpg-btn',
+                  style: { ...styles.iconBtn, width: 'auto', padding: '4px 10px', fontSize: 11, gap: 4 },
+                  onClick: () => { setEditingChain(chain); setShowChainEditor(true); },
+                  title: 'Edit this chain',
+                }, h(Icon, { name: 'edit2', size: 11, color: '#9896b0' }), 'Edit')
               ),
               h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
                 chain.quests.map((q, i) => {
