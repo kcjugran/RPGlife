@@ -84,6 +84,7 @@ const DEFAULT_ECONOMY = {
   challengeXpMax: 70,
   challengeCoinMin: 10,
   challengeCoinMax: 100,
+  reminderThresholdDays: 7,     // days before a neglected domain triggers a reminder (0 = disabled)
 };
 
 // Helper: get economy value from state, falling back to defaults
@@ -266,6 +267,8 @@ function buildInitialState() {
       byType: {},                 // { [type]: { completed, attempted } }
       activityCompletionCounts: {}, // { [activityId]: number }
     },
+    questChains: [],              // [{ id, name, questIds: [] }]
+    equippedTitle: null,          // achievement-unlocked title id (reserved for Title system)
   };
 }
 
@@ -470,7 +473,9 @@ function RPGLife({ user, onSignOut }) {
   const [resetPrompt, setResetPrompt] = useState(null); // 'all' | domainKey | null
   const [bossEditor, setBossEditor] = useState(null); // { domain, level } | null
   const [buyConfirm, setBuyConfirm] = useState(null); // reward object | null
-  const [tutorialStep, setTutorialStep] = useState(null); // null=closed, 0..N=active
+  const [tutorialStep, setTutorialStep] = useState(null);
+  const [achievementQueue, setAchievementQueue] = useState([]); // [{id, name, icon, color}]
+  const [dismissedReminders, setDismissedReminders] = useState([]); // domain keys dismissed this session
   const toastTimer = useRef(null);
   const saveTimer = useRef(null);
   const lastSavedJson = useRef(null);
@@ -1025,8 +1030,18 @@ function RPGLife({ user, onSignOut }) {
   // Safe to call multiple times (idempotent).
   function unlockAchievementInState(prev, id) {
     if (prev.achievements && prev.achievements[id]) return prev; // already unlocked
+    const def = ACHIEVEMENTS[id];
     const achievements = { ...(prev.achievements || {}), [id]: { unlockedAt: Date.now() } };
-    showToast(`🏆 Achievement unlocked: ${ACHIEVEMENTS[id] ? ACHIEVEMENTS[id].name : id}`);
+    // Store the newly-unlocked achievement id so the popup effect can pick it up
+    // We use a simple side-channel: _pendingAchievement is never saved to Firestore
+    // (it's stripped by JSON.stringify on the next save since it starts with _).
+    // Actually Firestore will save it — use a ref instead.
+    if (def) {
+      // Schedule popup outside the setState cycle using a setTimeout(0) trick
+      setTimeout(() => {
+        setAchievementQueue(q => [...q, { id, ...def }]);
+      }, 0);
+    }
     return { ...prev, achievements };
   }
 
@@ -1088,6 +1103,65 @@ function RPGLife({ user, onSignOut }) {
       return { ...prev, quests, archivedQuests };
     });
     showToast('Quest restored');
+  }
+
+  // ---------- Quest chains ----------
+  function saveQuestChain(name, questIds) {
+    setState(prev => {
+      const chains = [...(prev.questChains || [])];
+      const existing = chains.findIndex(c => c.questIds.some(id => questIds.includes(id)));
+      if (existing >= 0) {
+        chains[existing] = { ...chains[existing], name, questIds };
+      } else {
+        chains.push({ id: uid('chain'), name, questIds, createdAt: Date.now() });
+      }
+      // Update each quest's chainId and dependsOn
+      const quests = prev.quests.map(q => {
+        const pos = questIds.indexOf(q.id);
+        if (pos < 0) return q;
+        return {
+          ...q,
+          chainId: chains[existing >= 0 ? existing : chains.length - 1]?.id || chains[chains.length - 1].id,
+          chainOrder: pos,
+          dependsOn: pos > 0 ? questIds[pos - 1] : null,
+        };
+      });
+      return { ...prev, questChains: chains, quests };
+    });
+    showToast(`Chain "${name}" saved`);
+  }
+
+  function removeQuestFromChain(questId) {
+    setState(prev => {
+      const quests = prev.quests.map(q =>
+        q.id === questId ? { ...q, chainId: null, chainOrder: null, dependsOn: null } : q
+      );
+      // Rebuild dependsOn for remaining chain members
+      const quest = prev.quests.find(q => q.id === questId);
+      const chainId = quest && quest.chainId;
+      if (chainId) {
+        const chain = (prev.questChains || []).find(c => c.id === chainId);
+        if (chain) {
+          const remaining = chain.questIds.filter(id => id !== questId);
+          const chains = prev.questChains.map(c =>
+            c.id === chainId ? { ...c, questIds: remaining } : c
+          );
+          const updatedQuests = quests.map(q => {
+            const pos = remaining.indexOf(q.id);
+            if (pos < 0) return q;
+            return { ...q, chainOrder: pos, dependsOn: pos > 0 ? remaining[pos - 1] : null };
+          });
+          return { ...prev, questChains: chains, quests: updatedQuests };
+        }
+      }
+      return { ...prev, quests };
+    });
+  }
+
+  // Check if a quest is unlocked (its dependsOn has been archived, or it has no dependency)
+  function isQuestUnlocked(quest, state) {
+    if (!quest.dependsOn) return true;
+    return (state.archivedQuests || []).some(q => q.id === quest.dependsOn);
   }
 
   // ---------- Mission templates ----------
@@ -1523,6 +1597,8 @@ function RPGLife({ user, onSignOut }) {
         onToggleQuestComplete: toggleQuestActivityComplete,
         onSaveTemplate: saveMissionTemplate,
         onDeleteTemplate: deleteMissionTemplate,
+        dismissedReminders,
+        onDismissReminder: (domain) => setDismissedReminders(d => [...d, domain]),
       }),
       activeTab === 'activities' && h(ActivitiesView, {
         state,
@@ -1532,7 +1608,7 @@ function RPGLife({ user, onSignOut }) {
         onAdd: () => { setEditingActivity(null); setShowActivityForm(true); },
         onToggleFavorite: toggleActivityFavorite,
       }),
-      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive }),
+      activeTab === 'quests' && h(QuestsView, { state, onAdd: () => setShowQuestForm(true), onUpdateProgress: updateQuestProgress, onToggleCheckpoint: toggleCheckpoint, onDelete: deleteQuest, onArchive: archiveQuest, onRestoreArchive: restoreQuestFromArchive, onSaveChain: saveQuestChain, onRemoveFromChain: removeQuestFromChain, isQuestUnlocked }),
       activeTab === 'character' && h(CharacterView, { state, domainComputed, onBossClick: setBossModal, onAddSubcat: addCustomSubcat }),
       activeTab === 'rewards' && h(RewardsView, {
         state,
@@ -1622,6 +1698,10 @@ function RPGLife({ user, onSignOut }) {
         setTutorialStep(nextStep);
       },
       onClose: () => setTutorialStep(null),
+    }),
+    achievementQueue.length > 0 && h(AchievementPopup, {
+      achievement: achievementQueue[0],
+      onClose: () => setAchievementQueue(q => q.slice(1)),
     })
   );
 }
@@ -1942,6 +2022,97 @@ function TutorialOverlay({ step, onNext, onClose }) {
           onClick: () => isLast ? onClose() : onNext(step + 1, ALL_STEPS[step + 1].tab),
           style: { flex: 2, padding: '8px 0', background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', borderRadius: 8, color: '#c4b5fd', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
         }, isLast ? 'Done ✓' : isLastCore ? 'See advanced →' : 'Next →')
+      )
+    )
+  );
+}
+
+// ---------- Achievement Popup ----------
+
+function AchievementPopup({ achievement, onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 5000);
+    return () => clearTimeout(t);
+  }, [achievement.id]);
+
+  return h('div', {
+    style: {
+      position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+      zIndex: 2000, pointerEvents: 'auto', animation: 'toastSlide 0.35s ease',
+    },
+    onClick: onClose,
+  },
+    h('div', { style: {
+      display: 'flex', alignItems: 'center', gap: 14,
+      background: 'linear-gradient(135deg, #1a1528, #0e0e14)',
+      border: `1px solid ${hexToRgba(achievement.color || '#fbbf24', 0.5)}`,
+      borderRadius: 14, padding: '14px 18px',
+      boxShadow: `0 0 30px ${hexToRgba(achievement.color || '#fbbf24', 0.25)}, 0 8px 24px rgba(0,0,0,0.6)`,
+      minWidth: 260, cursor: 'pointer',
+    }},
+      h('div', { style: {
+        width: 46, height: 46, borderRadius: 12, flexShrink: 0,
+        background: hexToRgba(achievement.color || '#fbbf24', 0.15),
+        border: `1.5px solid ${hexToRgba(achievement.color || '#fbbf24', 0.4)}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 22,
+      }}, '🏆'),
+      h('div', null,
+        h('div', { style: { fontSize: 10.5, fontWeight: 700, color: achievement.color || '#fbbf24', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 } }, '★ Achievement unlocked'),
+        h('div', { style: { fontSize: 14, fontWeight: 700, color: '#f4f1ea' } }, achievement.name),
+        h('div', { style: { fontSize: 11.5, color: '#9ca3af', marginTop: 2 } }, achievement.desc)
+      )
+    )
+  );
+}
+
+// ---------- Achievements Section (shown in Character tab) ----------
+
+const ACHIEVEMENT_CATEGORIES = [
+  { id: 'activity', label: 'Activity', ids: ['first_activity', 'first_log', 'log_10', 'log_50', 'log_100'] },
+  { id: 'xp', label: 'XP', ids: ['xp_100', 'xp_1000', 'xp_10000'] },
+  { id: 'streaks', label: 'Streaks', ids: ['streak_7', 'streak_30', 'streak_100'] },
+  { id: 'bosses', label: 'Boss Gates', ids: ['first_boss', 'boss_5'] },
+  { id: 'quests', label: 'Quests', ids: ['first_quest', 'quest_5', 'quest_10'] },
+];
+
+function AchievementsSection({ achievements }) {
+  const unlocked = Object.keys(achievements || {}).length;
+  const total = Object.keys(ACHIEVEMENTS).length;
+
+  return h('div', null,
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 } },
+      h(SectionLabel, { text: 'Achievements' }),
+      h('span', { style: { fontSize: 12, color: '#9ca3af' } }, `${unlocked} / ${total} unlocked`)
+    ),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+      ACHIEVEMENT_CATEGORIES.map(cat =>
+        h('div', { key: cat.id },
+          h('div', { style: { fontSize: 11, fontWeight: 700, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 } }, cat.label),
+          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+            cat.ids.map(id => {
+              const def = ACHIEVEMENTS[id];
+              if (!def) return null;
+              const isUnlocked = !!(achievements && achievements[id]);
+              const unlockedAt = isUnlocked && achievements[id].unlockedAt;
+              return h('div', {
+                key: id,
+                title: isUnlocked ? `${def.desc}\nUnlocked ${new Date(unlockedAt).toLocaleDateString()}` : def.desc,
+                style: {
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                  padding: '10px 12px', borderRadius: 10, width: 88, textAlign: 'center',
+                  background: isUnlocked ? hexToRgba(def.color, 0.1) : '#0e0e14',
+                  border: `1px solid ${isUnlocked ? hexToRgba(def.color, 0.35) : '#2a2a35'}`,
+                  opacity: isUnlocked ? 1 : 0.45,
+                  transition: 'all 0.2s',
+                },
+              },
+                h('div', { style: { fontSize: 22 } }, isUnlocked ? '🏆' : '🔒'),
+                h('div', { style: { fontSize: 10.5, fontWeight: 600, color: isUnlocked ? def.color : '#7c7c8a', lineHeight: 1.3 } }, def.name)
+              );
+            })
+          )
+        )
       )
     )
   );
@@ -2270,7 +2441,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
   );
 }
 
-function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate }) {
+function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate, dismissedReminders, onDismissReminder }) {
   const dailyGoal = eco({ economy }, 'dailyGoal');
   const consistencyMin = eco({ economy }, 'consistencyMin');
   const dayMode = state.dayMode || 'standard';
@@ -2418,6 +2589,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
       )
     ),
 
+    h(NeglectedDomainsReminder, { state, economy, dismissedReminders: dismissedReminders || [], onDismiss: onDismissReminder }),
     h(DomainBalanceIndicator, { state, economy }),
 
     h('section', null,
@@ -2552,10 +2724,20 @@ function FilterChip({ label, active, onClick, color }) {
 
 // ---------- Quests View ----------
 
-function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, onRestoreArchive }) {
+function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive, onRestoreArchive, onSaveChain, onRemoveFromChain, isQuestUnlocked }) {
   const [showArchive, setShowArchive] = useState(false);
+  const [showChainEditor, setShowChainEditor] = useState(false);
   const active = (state.quests || []).filter(q => q.progress < 100);
   const archived = state.archivedQuests || [];
+  const chains = state.questChains || [];
+
+  // Group active quests: chain-ordered first, then standalone
+  const chainedIds = new Set(chains.flatMap(c => c.questIds));
+  const standaloneQuests = active.filter(q => !chainedIds.has(q.id));
+  const chainGroups = chains.map(chain => ({
+    ...chain,
+    quests: chain.questIds.map(id => active.find(q => q.id === id)).filter(Boolean),
+  })).filter(c => c.quests.length > 0);
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
@@ -2569,11 +2751,42 @@ function QuestsView({ state, onAdd, onUpdateProgress, onToggleCheckpoint, onDele
         h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
       )
     ),
+
     active.length === 0
       ? h(EmptyState, { text: 'No active quests. Create a time-bound quest to chart a longer journey.' })
-      : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          active.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive }))
+      : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+          // Render chain groups first
+          chainGroups.map(chain =>
+            h('div', { key: chain.id, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 12, padding: '12px 14px' } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 } },
+                h('div', { style: { fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8 } }, '⛓ Chain:'),
+                h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, chain.name)
+              ),
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+                chain.quests.map((q, i) => {
+                  const unlocked = isQuestUnlocked ? isQuestUnlocked(q, state) : true;
+                  return h('div', { key: q.id, style: { display: 'flex', alignItems: 'flex-start', gap: 8 } },
+                    h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, flexShrink: 0 } },
+                      h('div', { style: { width: 10, height: 10, borderRadius: '50%', background: unlocked ? '#a78bfa' : '#3a3a4a', border: `2px solid ${unlocked ? '#a78bfa' : '#2a2a35'}` } }),
+                      i < chain.quests.length - 1 && h('div', { style: { width: 2, height: 24, background: '#2a2a35', marginTop: 2 } })
+                    ),
+                    h('div', { style: { flex: 1, opacity: unlocked ? 1 : 0.5 } },
+                      !unlocked && h('div', { style: { fontSize: 11, color: '#7c7c8a', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
+                        '🔒', `Requires: ${(state.quests || []).find(x => x.id === q.dependsOn)?.name || 'previous quest'}`
+                      ),
+                      h(QuestRow, { quest: q, onUpdateProgress: unlocked ? onUpdateProgress : null, onToggleCheckpoint: unlocked ? onToggleCheckpoint : null, onDelete, onArchive: unlocked ? onArchive : null, onRemoveFromChain: () => onRemoveFromChain && onRemoveFromChain(q.id) })
+                    )
+                  );
+                })
+              )
+            )
+          ),
+          // Standalone quests
+          standaloneQuests.length > 0 && h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+            standaloneQuests.map(q => h(QuestRow, { key: q.id, quest: q, onUpdateProgress, onToggleCheckpoint, onDelete, onArchive }))
+          )
         ),
+
     showArchive && archived.length > 0 && h('div', { style: { marginTop: 24 } },
       h(SectionLabel, { text: `Quest archive (${archived.length})`, icon: 'trophy', accent: '#fbbf24' }),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
@@ -2742,6 +2955,9 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat }) {
           )
         );
       })
+    ),
+    h('div', { style: { marginTop: 28 } },
+      h(AchievementsSection, { achievements: state.achievements || {} })
     )
   );
 }
@@ -3311,6 +3527,56 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
         ? ` Complete — ${challenges[selectedIdx].tier} tier`
         : ' Select a challenge first'
     )
+  );
+}
+
+// ---------- Smart Reminders ----------
+
+function NeglectedDomainsReminder({ state, economy, dismissedReminders, onDismiss }) {
+  const thresholdDays = eco({ economy }, 'reminderThresholdDays');
+  if (!thresholdDays || thresholdDays <= 0) return null;
+
+  const now = Date.now();
+  const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
+
+  const neglected = DOMAIN_KEYS.filter(k => {
+    if (dismissedReminders.includes(k)) return false;
+    // Find the most recent day this domain had any XP
+    const logs = state.dailyLogs || {};
+    const lastActive = Object.entries(logs)
+      .filter(([, log]) => (log[k] || 0) > 0)
+      .map(([dateStr]) => new Date(dateStr).getTime())
+      .sort((a, b) => b - a)[0];
+    if (!lastActive) {
+      // Never active — only remind if account has been around for threshold days
+      const accountAge = now - (state.createdAt || now);
+      return accountAge > thresholdMs;
+    }
+    return (now - lastActive) > thresholdMs;
+  });
+
+  if (neglected.length === 0) return null;
+
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 4 } },
+    neglected.map(k => {
+      const d = DOMAINS[k];
+      return h('div', { key: k, style: {
+        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+        background: hexToRgba(d.color, 0.06), border: `1px solid ${hexToRgba(d.color, 0.25)}`,
+        borderRadius: 10,
+      }},
+        h(Icon, { name: d.icon, size: 14, color: d.color }),
+        h('span', { style: { flex: 1, fontSize: 12.5, color: '#c4c4ce' } },
+          `${d.name} hasn't received any XP in ${thresholdDays}+ days.`
+        ),
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => onDismiss && onDismiss(k),
+          style: { background: 'none', border: 'none', color: '#7c7c8a', cursor: 'pointer', fontSize: 16, padding: '0 4px' },
+          title: 'Dismiss for this session',
+        }, '×')
+      );
+    })
   );
 }
 
@@ -4080,6 +4346,10 @@ function EconomySettingsSection({ state, onSave }) {
             h('input', { type: 'number', value: vals.challengeCoinMax, onChange: e => setNum('challengeCoinMax', e.target.value), style: styles.input })
           )
         )
+      ),
+
+      h(EcoGroup, { label: 'Smart reminders' },
+        h(EcoField, { label: 'Remind after N days without domain XP (0 = off)', value: vals.reminderThresholdDays, onChange: v => setNum('reminderThresholdDays', v) })
       ),
 
       h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave },
