@@ -1,6 +1,6 @@
 // Service worker — network-first for app code, cache-first for static assets.
 // Bump CACHE_NAME any time you deploy code changes to evict the old cache.
-const CACHE_NAME = 'rpglife-v25';
+const CACHE_NAME = 'rpglife-v27';
 
 // Static assets we precache aggressively
 const ASSETS = [
