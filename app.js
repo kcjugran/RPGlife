@@ -2519,7 +2519,11 @@ function RPGLife({ user, onSignOut }) {
 //   title / body — what to show the user
 // ==========================================================
 const FEATURE_REGISTRY = [
-  // ── CORE ──────────────────────────────────────────────
+
+  // ══════════════════════════════════════════════════
+  // CORE — the journey every beginner must take
+  // ══════════════════════════════════════════════════
+
   {
     id: 'welcome',
     category: 'core',
@@ -2527,72 +2531,163 @@ const FEATURE_REGISTRY = [
     highlight: null,
     icon: 'sword', color: '#a78bfa',
     title: 'Welcome to Adventure Log',
-    body: 'Turn your real life into an RPG. Health, Relationships, Career, and Finance are your four domains — everything you do in them earns XP toward levels, ranks, and real rewards.',
+    body: 'This app turns your real life into an RPG. Every workout, study session, social call, or financial action earns XP — just like a game. You gain levels, defeat bosses, complete quests, and spend coins on real rewards. The goal: build a life you\'re proud of, one logged action at a time.',
   },
+
   {
-    id: 'activities-tab',
+    id: 'four-domains',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'shield', color: '#60a5fa',
+    title: 'Your 4 Domains (HRCF)',
+    body: 'Your character has 4 domains: Health, Relationships, Career, and Finance. Everything you do belongs to one of them. Health = fitness, sleep, nutrition. Relationships = family, friends, social. Career = work, learning, skills. Finance = budgeting, investing, earning. Each domain has its own XP bar and level — neglect one and it falls behind.',
+  },
+
+  {
+    id: 'activities-intro',
     category: 'core',
     tab: 'activities',
     highlight: 'tab-activities',
     icon: 'zap', color: '#fbbf24',
     title: 'Activities — your XP sources',
-    body: 'Activities are the things you actually do — workouts, study sessions, journaling. Each one is tied to a domain and awards XP when you log it. Create your first activity here.',
+    body: 'Activities are the real-world actions you track. You create them once, then log them whenever you do them. Each activity belongs to a domain and has an XP value. Examples: "Morning Run → Health, 30 XP", "Read 30 min → Career, 15 XP", "Called Mum → Relationships, 20 XP".',
   },
+
+  {
+    id: 'activity-types',
+    category: 'core',
+    tab: 'activities',
+    highlight: null,
+    icon: 'zap', color: '#fbbf24',
+    title: 'Activity Types: Fixed, Duration, Milestone',
+    body: 'Fixed: always awards the same XP (e.g. "Meditation = 20 XP" every time). Duration: XP scales with time spent — the longer you go, the more you earn, following a curve you define. Milestone: a one-time event (e.g. "Finished a book = 100 XP"). You choose the type when creating an activity.',
+  },
+
+  {
+    id: 'activity-tags',
+    category: 'core',
+    tab: 'activities',
+    highlight: null,
+    icon: 'zap', color: '#fbbf24',
+    title: 'Tags, Favourites & Class Badges',
+    body: 'Add tags to activities (e.g. "Fitness", "Creative", "Learning") to power the search filter and class mastery tracking. Mark any activity as a ★ Favourite — favourites always appear first in every list and in the Quick Log strip. The small emoji badge on each card shows which character class it feeds.',
+  },
+
   {
     id: 'quick-log',
     category: 'core',
     tab: 'activities',
     highlight: 'quick-log-fab',
     icon: 'plus', color: '#a78bfa',
-    title: 'Quick Log — tap the + button',
-    body: 'The purple + button lets you instantly log any activity from anywhere in the app. Select the activity, enter a value if needed, and your XP is awarded immediately.',
+    title: 'Logging — the + button',
+    body: 'Tap the purple + button (bottom right) from any tab to open the Quick Log. Select an activity, enter a value if it\'s a duration type, then confirm. XP instantly goes into your domain, the daily meter updates, and the log entry appears in today\'s activity feed. This is the action you\'ll use most every day.',
   },
+
   {
-    id: 'dashboard-progress',
+    id: 'daily-meters',
     category: 'core',
     tab: 'dashboard',
     highlight: 'tab-dashboard',
     icon: 'scroll', color: '#60a5fa',
-    title: 'Dashboard — today\'s progress',
-    body: 'Your dashboard shows today\'s XP for each domain. Hit the daily minimum in all four to grow your Consistency Streak. The domain meters reset each day — XP keeps going toward your level forever.',
+    title: 'Daily Meters & Goals',
+    body: 'The dashboard shows today\'s XP per domain as bar charts. Each bar has a daily goal (default 100 XP). The bars reset to 0 at midnight — but the XP still counts toward your level permanently. Think of the bar as "how much did I invest in this domain today", not a cap on earning.',
   },
+
   {
-    id: 'streaks',
+    id: 'consistency-streak',
     category: 'core',
     tab: 'dashboard',
     highlight: null,
     icon: 'flame', color: '#fb923c',
-    title: 'Streaks & Power Streak',
-    body: 'Your Consistency Streak grows every day you hit the minimum in all four domains. Keep it alive for 15+ days and a Power Streak unlocks on top — earning you bonus coins at milestones. One missed day resets both.',
+    title: 'Consistency Streak',
+    body: 'Your Consistency Streak increases by 1 every day you hit the minimum XP threshold in ALL four domains (default: 50 XP each). Miss one domain — even by 1 XP — and you don\'t count that day. Miss a full day entirely and the streak resets to 0. It\'s the core habit loop: do something in every area of life, every day.',
   },
+
   {
-    id: 'level-tab',
+    id: 'rest-tokens',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'shield', color: '#34d399',
+    title: 'Rest Day Tokens 🛡️',
+    body: 'Every 7 consecutive days of hitting your streak, you earn a Rest Day Token. If you miss a day while holding a token, it\'s automatically consumed to protect your streak — no reset. Think of it as a shield earned through consistency. Tokens are shown on your dashboard when you have them.',
+  },
+
+  {
+    id: 'power-streak',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'star', color: '#fbbf24',
+    title: 'Power Streak',
+    body: 'After 15 consecutive consistency days, a Power Streak unlocks and begins climbing alongside your main streak. It earns bonus coins at milestones (every 10 power days by default). If you ever break your consistency streak, the power streak resets too — and you need another 15 days to reactivate it. Day 15 unlocks it; Day 16 is Power Streak day 1.',
+  },
+
+  {
+    id: 'streak-warning',
+    category: 'core',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'flame', color: '#fb923c',
+    title: 'Streak at Risk Warning',
+    body: 'After 8 PM, if you haven\'t completed your day\'s requirements yet, an amber warning appears at the top of the dashboard. In Standard Mode it fires if any domain is below the minimum. In Daily Quest Mode it fires if your mission is below 100%. It vanishes the moment you\'ve met the day\'s target.',
+  },
+
+  {
+    id: 'levels-and-xp',
     category: 'core',
     tab: 'character',
     highlight: 'tab-character',
     icon: 'shield', color: '#34d399',
-    title: 'Level & Boss Gates',
-    body: 'XP accumulates toward levels in each domain. Every few levels, a Boss Gate blocks you from advancing in rank until you complete a real-world challenge you set yourself. Defeating it earns coins based on how well you did.',
+    title: 'Levels, Ranks & Boss Gates',
+    body: 'XP accumulates into levels for each domain. Levels are continuous — you never stop earning. Every 10 levels, a Boss Gate appears and locks your rank advancement until you defeat it. Gates are challenges you write for yourself (e.g. "Run 5km without stopping"). Defeat it and choose your tier: B (done), A (exceeded), S (exceptional) — higher tier = more coins.',
   },
+
   {
-    id: 'quests-tab',
+    id: 'boss-gate-detail',
+    category: 'core',
+    tab: 'character',
+    highlight: null,
+    icon: 'trophy', color: '#fbbf24',
+    title: 'How Boss Gates Work',
+    body: 'On the Character tab, each domain shows its active boss gates as pills. A glowing pill = gate available to challenge now. Gold = already defeated. Grey = not yet reached. Tap a glowing gate to open the challenge. Read what you set as the challenge, go do it in real life, then return and rate your performance. The rank unlock and coin reward fire immediately.',
+  },
+
+  {
+    id: 'quests-intro',
     category: 'core',
     tab: 'quests',
     highlight: 'tab-quests',
     icon: 'target', color: '#818cf8',
     title: 'Quests — longer-term goals',
-    body: 'Quests are goals with a deadline, like "Finish an online course in 30 days". Set an XP reward, track progress with a slider or checkpoints, and claim the reward when you complete it.',
+    body: 'Quests are goals with a deadline. Create one by naming it, choosing a domain, setting a deadline (in days), and an XP reward. Progress is tracked with a manual slider or automatic checkpoints. When progress hits 100%, the XP and coins are awarded and the quest moves to your archive. Quests are your campaigns.',
   },
+
   {
-    id: 'rewards-tab',
+    id: 'quest-deadline-urgency',
+    category: 'core',
+    tab: 'quests',
+    highlight: null,
+    icon: 'target', color: '#818cf8',
+    title: 'Quest Deadlines & Urgency',
+    body: 'Quest cards color-code their deadline: grey means more than 7 days remain, amber means 7 days or fewer, and red with a pulsing border means the quest is overdue. Overdue quests don\'t auto-fail — they stay active until you either complete or delete them. You can also manually archive a quest using the → button.',
+  },
+
+  {
+    id: 'rewards-intro',
     category: 'core',
     tab: 'rewards',
     highlight: 'tab-rewards',
     icon: 'gift', color: '#f472b6',
     title: 'Rewards — spend your coins',
-    body: 'Create real rewards with prices you decide — a meal out, a gaming session, a new purchase. Spend the coins you earn from XP, streaks, and boss battles. Redeem a reward as a ticket and use it when you\'re ready.',
+    body: 'Create rewards with prices you set — a meal out, a game session, a purchase, a day off. When you can afford one, buy it to receive a Ticket. Tickets sit in your wallet until you\'re ready to redeem them. Sell a ticket back for 50% if you change your mind. The Rewards tab also shows your all-time coins earned so spending feels like victory, not loss.',
   },
-  // ── ADVANCED ──────────────────────────────────────────
+
+  // ══════════════════════════════════════════════════
+  // ADVANCED — powerful once you know the basics
+  // ══════════════════════════════════════════════════
+
   {
     id: 'daily-quest-mode',
     category: 'advanced',
@@ -2600,44 +2695,79 @@ const FEATURE_REGISTRY = [
     highlight: null,
     icon: 'scroll', color: '#a78bfa',
     title: 'Daily Quest Mode',
-    body: 'Switch the dashboard from domain meters to a mission-style view. Build a specific checklist of activities for the day. Hit 100% by midnight and it counts toward your streak — more structured than the standard mode.',
+    body: 'Switch the dashboard from HRCF meters to a mission checklist. Build today\'s mission by adding activities from your library. Checking off an activity immediately awards its XP to the relevant domain — whether or not you finish the full mission. At midnight, if you hit 100%, it counts as a consistency day (just like hitting domain minimums in Standard Mode). Drop below 100% and it doesn\'t count.',
   },
+
   {
-    id: 'quest-benchmarks',
+    id: 'daily-quest-lock',
+    category: 'advanced',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'lock', color: '#fb923c',
+    title: 'Mission Lock & Templates',
+    body: 'Enable "Lock mission after first completion" in Settings to freeze your mission list the moment you check off the first activity — no adding or removing after you\'ve started. Save any mission as a Template (📋 button) so you can reload your "Morning Routine" or "Gym Day" in one tap the next time you want it.',
+  },
+
+  {
+    id: 'quest-chains',
     category: 'advanced',
     tab: 'quests',
     highlight: null,
-    icon: 'check', color: '#34d399',
-    title: 'Quest Benchmarks',
-    body: 'When creating a quest, add named checkpoints (e.g. "Finish Module 1 — 7 days"). Checking them off automatically drives the quest\'s progress percentage instead of using the manual slider.',
+    icon: 'target', color: '#818cf8',
+    title: 'Quest Chains',
+    body: 'Link quests into a campaign where Quest 2 is locked until Quest 1 is completed. When Quest 1 archives, Quest 2 automatically unlocks with a "Chain continues" notification. Create a chain with the ⛓ New chain button, then edit it using the Edit button inside the chain header. Deleting the head quest automatically promotes the next one.',
   },
+
   {
-    id: 'gate-tiers',
+    id: 'quest-archive',
+    category: 'advanced',
+    tab: 'quests',
+    highlight: null,
+    icon: 'trophy', color: '#fbbf24',
+    title: 'Quest Archive & Restore',
+    body: 'Completed quests move to the Archive instead of disappearing. Tap "Archive (N)" in the Quests tab to see them — each shows completion date, XP earned, and gold earned. You can restore an archived quest to active status if you want to redo it, but the XP and coins from the original completion will be reversed to prevent farming.',
+  },
+
+  {
+    id: 'achievements',
     category: 'advanced',
     tab: 'character',
     highlight: null,
     icon: 'trophy', color: '#fbbf24',
-    title: 'Gate Tiers — B / A / S',
-    body: 'When you defeat a boss gate, you rate how well you performed: B (completed), A (exceeded expectations), S (exceptional). Each tier multiplies the coin reward. You set the challenge descriptions yourself in Settings.',
+    title: 'Achievements & Titles',
+    body: 'Achievements unlock automatically as you hit milestones: first log, 100 activities, 30-day streak, 5 boss gates, and more. A purple dot appears on the Character tab when new ones unlock. Each achievement can unlock a cosmetic Title — equip one from the Identity section on the Character tab and it displays next to your name.',
   },
+
   {
-    id: 'mini-gates',
+    id: 'class-mastery',
     category: 'advanced',
     tab: 'character',
     highlight: null,
-    icon: 'shield', color: '#60a5fa',
-    title: 'Mini Gates — levels 5, 15, 25…',
-    body: 'In addition to the main boss gates every 10 levels, you can enable mini gates at the in-between levels (5, 15, 25…). They use C/B/A tiers with a smaller base reward — more frequent checkpoints for tighter progression.',
+    icon: 'shield', color: '#a78bfa',
+    title: 'Class Mastery',
+    body: 'Five classes accumulate mastery in parallel with your activity logging: Warrior (Health XP), Scholar (Career XP), Guardian (Relationships XP), Treasurer (Finance XP), Creator (any activity tagged "Creative"). Mastery earns cosmetic badges at Bronze (500 XP), Silver (2000 XP), and Gold (5000 XP). No gameplay advantage — purely identity.',
   },
+
   {
-    id: 'random-challenges',
+    id: 'yearly-legacy',
     category: 'advanced',
-    tab: 'settings',
+    tab: 'character',
     highlight: null,
-    icon: 'zap', color: '#a78bfa',
-    title: 'Random Challenges',
-    body: 'Build a library of surprise side-challenges in Settings → Random Challenges. Each day has a configurable chance to spawn one on the dashboard. The reward stays hidden until you complete it — a blind incentive to do something unplanned.',
+    icon: 'calendar', color: '#60a5fa',
+    title: 'Yearly Legacy',
+    body: 'The Identity section on your Character tab builds a yearly record: XP earned, coins earned, activities logged, quests completed, gates cleared, best streak, and top domain — all per calendar year. It updates in real time as you play. Years from now you\'ll be able to look back and see exactly who you were and what you achieved.',
   },
+
+  {
+    id: 'domain-balance',
+    category: 'advanced',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'scroll', color: '#60a5fa',
+    title: 'HRCF Balance Indicator',
+    body: 'The dashboard shows a 7-day bar chart comparing your XP across all four domains. A "Lopsided" score means one domain is being neglected — which matters because neglected domains level slower and their boss gates stay locked longer. The indicator is purely informational. No penalty, just a mirror.',
+  },
+
   {
     id: 'power-values',
     category: 'advanced',
@@ -2645,17 +2775,39 @@ const FEATURE_REGISTRY = [
     highlight: null,
     icon: 'star', color: '#fbbf24',
     title: 'Power Values',
-    body: 'Set 3 personal values with a name and emoji symbol in Settings. Their symbols stay permanently visible in the app header as a constant reminder of what matters most to you — a subtle but persistent focus anchor.',
+    body: 'In Settings, set 3 personal values — each gets a name and an emoji. Their symbols stay visible in the top bar at all times. Clicking the icons opens the Power Values editor directly. This is about anchoring your identity in the app: every time you open it, your core values are right there. Pick emojis that resonate deeply, not just look cool.',
   },
+
   {
-    id: 'economy-config',
+    id: 'random-challenges',
     category: 'advanced',
     tab: 'settings',
-    highlight: 'settings-tutorial-btn',
-    icon: 'coins', color: '#fbbf24',
-    title: 'Economy Config',
-    body: 'Every number behind the game is configurable in Settings → Economy: daily XP goals, consistency minimums, streak bonus amounts and intervals, gate base coins, tier multipliers, and challenge reward ranges. Nothing is hardcoded.',
+    highlight: null,
+    icon: 'zap', color: '#a78bfa',
+    title: 'Random Challenges',
+    body: 'Build a library of surprise side-challenges in Settings → Advanced → Random Challenges. Set a daily spawn chance (1%–50%). When one spawns on the dashboard, the reward is hidden until you complete it — a blind incentive for unplanned action. Set a tier (C/B/A/S) on each challenge in your library to scale the reward multiplier.',
   },
+
+  {
+    id: 'difficulty-and-advanced',
+    category: 'advanced',
+    tab: 'settings',
+    highlight: null,
+    icon: 'settings', color: '#9896b0',
+    title: 'Difficulty & Advanced Settings',
+    body: 'Settings has a Difficulty preset at the top: Relaxed (lower goals, more forgiving), Balanced (default), or Ambitious (harder targets, longer power streak lock). Advanced Settings unlock at combined rank 10 and give you full control: daily XP goals, consistency minimums, streak coin amounts, gate coin bases, tier multipliers, and challenge reward ranges.',
+  },
+
+  {
+    id: 'calendar',
+    category: 'advanced',
+    tab: 'dashboard',
+    highlight: null,
+    icon: 'calendar', color: '#fb923c',
+    title: 'Streak Calendar',
+    body: 'Tap the 🔥 or ⭐ chips in the top bar to open your streak calendar. Green days = consistency met. Tap any day to see a breakdown: which domains you hit, how much XP each got, and every individual activity you logged that day with its XP. A permanent record of every active day.',
+  },
+
 ];
 
 const CORE_STEPS = FEATURE_REGISTRY.filter(f => f.category === 'core');
