@@ -1061,7 +1061,10 @@ function RPGLife({ user, onSignOut }) {
   function toggleQuestActivityComplete(activityId) {
     setState(prev => {
       const plan = getTodayQuestPlan(prev);
-      if (plan.locked && !plan.completedIds.includes(activityId)) return prev; // can't add new completions once locked... but unchecking is also a structural change
+      const activity = (prev.activities || []).find(a => a.id === activityId);
+      if (!activity) return prev;
+      if (plan.locked && !plan.completedIds.includes(activityId)) return prev;
+
       const wasComplete = plan.completedIds.includes(activityId);
       const completedIds = wasComplete
         ? plan.completedIds.filter(id => id !== activityId)
@@ -1069,11 +1072,62 @@ function RPGLife({ user, onSignOut }) {
 
       const dailyQuestPlans = { ...(prev.dailyQuestPlans || {}) };
       const lockEnabled = !!prev.dailyQuestLockEnabled;
-      // Lock fires the moment the FIRST completion happens, if enabled
       const locked = plan.locked || (lockEnabled && !wasComplete && completedIds.length > 0);
       dailyQuestPlans[today] = { ...plan, completedIds, locked };
-      return { ...prev, dailyQuestPlans };
+
+      // Award XP to the activity's domain when marking complete.
+      // Reverse it when unchecking. This ensures daily mission activity
+      // always contributes to domain progression regardless of overall
+      // mission completion — the workout counts even if the full day wasn't finished.
+      let next = { ...prev, dailyQuestPlans };
+      let xpGain = 0;
+      if (activity.type === 'fixed' || activity.type === 'milestone') xpGain = activity.xp || 0;
+      else if (activity.type === 'duration') xpGain = computeDurationXp(activity.curve, 30); // assume 30 min default for mission check-off
+      const domain = activity.domain;
+
+      if (!wasComplete) {
+        // Marking complete → award XP
+        next.domains = { ...next.domains };
+        next.domains[domain] = { ...next.domains[domain], totalXp: next.domains[domain].totalXp + xpGain };
+        next.dailyLogs = { ...next.dailyLogs };
+        next.dailyLogs[today] = { ...(next.dailyLogs[today] || {}) };
+        next.dailyLogs[today][domain] = (next.dailyLogs[today][domain] || 0) + xpGain;
+        next.activityLog = [
+          { id: uid('log'), activityName: activity.name, domain, xp: xpGain, overflow: 0, timestamp: Date.now(), detail: 'Daily mission' },
+          ...next.activityLog,
+        ].slice(0, 30);
+        // Class mastery
+        const classMastery = { ...(next.classMastery || {}) };
+        if (domain === 'health') classMastery.warrior = (classMastery.warrior || 0) + xpGain;
+        if (domain === 'career') classMastery.scholar = (classMastery.scholar || 0) + xpGain;
+        if (domain === 'relationships') classMastery.guardian = (classMastery.guardian || 0) + xpGain;
+        if (domain === 'finance') classMastery.treasurer = (classMastery.treasurer || 0) + xpGain;
+        if ((activity.tags || []).some(t => t.toLowerCase() === 'creative')) classMastery.creator = (classMastery.creator || 0) + xpGain;
+        next.classMastery = classMastery;
+        // Yearly legacy
+        const year = String(new Date().getFullYear());
+        const yearlyLegacy = { ...(next.yearlyLegacy || {}) };
+        const le = { ...(yearlyLegacy[year] || {}) };
+        le.xpEarned = (le.xpEarned || 0) + xpGain;
+        le.activitiesLogged = (le.activitiesLogged || 0) + 1;
+        yearlyLegacy[year] = le;
+        next.yearlyLegacy = yearlyLegacy;
+        next = checkStreaks(next, next.dailyLogs[today], prev);
+        next = checkAchievements(next);
+      } else {
+        // Unchecking → reverse the XP (can't reverse log entry cleanly, just subtract from totals)
+        next.domains = { ...next.domains };
+        next.domains[domain] = { ...next.domains[domain], totalXp: Math.max(0, next.domains[domain].totalXp - xpGain) };
+        next.dailyLogs = { ...next.dailyLogs };
+        next.dailyLogs[today] = { ...(next.dailyLogs[today] || {}) };
+        next.dailyLogs[today][domain] = Math.max(0, (next.dailyLogs[today][domain] || 0) - xpGain);
+      }
+
+      return next;
     });
+    const activity = (state.activities || []).find(a => a.id === activityId);
+    const wasComplete = (getTodayQuestPlan(state).completedIds || []).includes(activityId);
+    if (activity) showToast(wasComplete ? `${activity.name} unchecked` : `✓ ${activity.name} — XP awarded`);
   }
 
   // Called once per day, on day-open, for the PREVIOUS day's quest plan (if
@@ -2385,6 +2439,7 @@ function RPGLife({ user, onSignOut }) {
     streakCalendar && h(StreakCalendarModal, {
       mode: streakCalendar,
       dailyLogs: state.dailyLogs,
+      activityLog: state.activityLog || [],
       economy: state.economy,
       onClose: () => setStreakCalendar(null),
     }),
@@ -4955,8 +5010,9 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
 
 // ---------- Streak calendar ----------
 
-function StreakCalendarModal({ mode, dailyLogs, economy, onClose }) {
+function StreakCalendarModal({ mode, dailyLogs, activityLog, economy, onClose }) {
   const [monthOffset, setMonthOffset] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' | null
   const now = new Date();
   const viewDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
   const year = viewDate.getFullYear();
@@ -4965,17 +5021,18 @@ function StreakCalendarModal({ mode, dailyLogs, economy, onClose }) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = viewDate.getDay();
   const todayKeyStr = dateKey(now);
+  const dailyGoal = eco({ economy }, 'dailyGoal');
+  const consistencyMin = eco({ economy }, 'consistencyMin');
 
   const cells = [];
   for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const log = dailyLogs[key];
-    const status = dayStatus(log, eco({ economy }, 'dailyGoal'), eco({ economy }, 'consistencyMin'));
-    cells.push({ day: d, status, key, isToday: key === todayKeyStr });
+    const status = dayStatus(log, dailyGoal, consistencyMin);
+    cells.push({ day: d, status, key, isToday: key === todayKeyStr, hasData: !!log });
   }
 
-  // Color logic
   function cellColor(status, isToday) {
     if (mode === 'power') {
       if (status === 'power') return { bg: '#fbbf24', fg: '#13131a', border: '#fbbf24' };
@@ -4983,18 +5040,26 @@ function StreakCalendarModal({ mode, dailyLogs, economy, onClose }) {
       if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: '#9ca3af', border: '#2a2a35' };
       return { bg: 'transparent', fg: '#5e5e6b', border: '#22222e' };
     }
-    // consistency mode
     if (status === 'consistency' || status === 'power') return { bg: '#22c55e', fg: '#13131a', border: '#22c55e' };
     if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: '#9ca3af', border: '#2a2a35' };
     return { bg: 'transparent', fg: '#5e5e6b', border: '#22222e' };
   }
 
+  // Build day detail from dailyLogs + activityLog entries for that day
+  const selectedLog = selectedDay ? (dailyLogs[selectedDay] || null) : null;
+  const selectedActivities = selectedDay
+    ? (activityLog || []).filter(l => {
+        const d = new Date(l.timestamp);
+        return dateKey(d) === selectedDay;
+      })
+    : [];
+
   const dayLabels = ['S','M','T','W','T','F','S'];
   const title = mode === 'power' ? 'Power streak' : 'Day streak';
 
-  return h(ModalShell, { title, onClose, width: 380 },
+  return h(ModalShell, { title, onClose, width: 420 },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
-      h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => setMonthOffset(o => o - 1) },
+      h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => { setMonthOffset(o => o - 1); setSelectedDay(null); } },
         h(Icon, { name: 'chevronLeft', size: 14 })
       ),
       h('span', { style: { fontSize: 14, fontWeight: 600, color: '#f4f1ea' } }, monthName),
@@ -5002,7 +5067,7 @@ function StreakCalendarModal({ mode, dailyLogs, economy, onClose }) {
         className: 'rpg-btn',
         style: { ...styles.iconBtn, opacity: monthOffset >= 0 ? 0.3 : 1, cursor: monthOffset >= 0 ? 'not-allowed' : 'pointer' },
         disabled: monthOffset >= 0,
-        onClick: () => setMonthOffset(o => Math.min(0, o + 1)),
+        onClick: () => { setMonthOffset(o => Math.min(0, o + 1)); setSelectedDay(null); },
       },
         h(Icon, { name: 'chevronRight', size: 14 })
       )
@@ -5014,34 +5079,88 @@ function StreakCalendarModal({ mode, dailyLogs, economy, onClose }) {
       cells.map((c, i) => {
         if (!c) return h('div', { key: `e${i}` });
         const colors = cellColor(c.status, c.isToday);
-        return h('div', {
+        const isSelected = selectedDay === c.key;
+        return h('button', {
           key: c.key,
+          className: 'rpg-btn',
+          onClick: () => setSelectedDay(isSelected ? null : c.key),
           style: {
-            aspectRatio: '1',
+            aspectRatio: '1', width: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12, fontWeight: 600,
-            background: colors.bg,
-            color: colors.fg,
-            border: `1px solid ${colors.border}`,
+            background: isSelected ? 'rgba(167,139,250,0.25)' : colors.bg,
+            color: isSelected ? '#c4b5fd' : colors.fg,
+            border: `1px solid ${isSelected ? '#a78bfa' : colors.border}`,
             borderRadius: 8,
             outline: c.isToday ? '2px solid #a78bfa' : 'none',
             outlineOffset: -2,
+            cursor: c.hasData ? 'pointer' : 'default',
           },
-          title: `${c.key} — ${c.status}`,
         }, c.day);
       })
     ),
+
+    // Day detail panel — shown when a day is selected
+    selectedDay && h('div', { style: { marginTop: 16, background: '#0d0d1a', border: '1px solid rgba(167,139,250,0.25)', borderRadius: 6, padding: '14px 16px' } },
+      h('div', { style: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#a78bfa', marginBottom: 10 } },
+        new Date(selectedDay + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+      ),
+      selectedLog
+        ? h('div', null,
+            // Domain XP breakdown
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: selectedActivities.length > 0 ? 12 : 0 } },
+              DOMAIN_KEYS.map(k => {
+                const d = DOMAINS[k];
+                const xp = selectedLog[k] || 0;
+                if (xp === 0) return null;
+                const pct = Math.min(100, Math.round((xp / dailyGoal) * 100));
+                return h('div', { key: k },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 3 } },
+                    h('span', { style: { fontSize: 11.5, color: d.color, fontWeight: 600 } }, d.name),
+                    h('span', { style: { fontSize: 11.5, color: '#9896b0' } },
+                      xp >= consistencyMin
+                        ? h('span', { style: { color: '#5de8a0' } }, `${xp} XP ✓`)
+                        : `${xp} XP`
+                    )
+                  ),
+                  h('div', { style: { height: 4, background: '#0e0e14', borderRadius: 2, overflow: 'hidden' } },
+                    h('div', { style: { height: '100%', width: `${pct}%`, background: d.color, borderRadius: 2 } })
+                  )
+                );
+              })
+            ),
+            // Individual activity log entries for this day
+            selectedActivities.length > 0 && h('div', null,
+              h('div', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4a4868', marginBottom: 6 } }, 'Activities logged'),
+              h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                selectedActivities.map(l =>
+                  h('div', { key: l.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' } },
+                    h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: DOMAINS[l.domain]?.color || '#a78bfa', flexShrink: 0 } }),
+                    h('span', { style: { flex: 1, fontSize: 12, color: '#eceaf6' } }, l.activityName),
+                    l.detail && h('span', { style: { fontSize: 11, color: '#4a4868' } }, l.detail),
+                    h('span', { style: { fontSize: 12, fontWeight: 700, color: DOMAINS[l.domain]?.color || '#a78bfa' } }, `+${l.xp}`)
+                  )
+                )
+              )
+            )
+          )
+        : h('div', { style: { fontSize: 12, color: '#4a4868', textAlign: 'center', padding: '8px 0' } },
+            'No activity logged on this day.'
+          )
+    ),
+
     h('div', { style: { marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, color: '#9ca3af' } },
       mode === 'power'
         ? [
-            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#fbbf24', borderRadius: 3, display: 'inline-block' } }), 'Power day (all 4 hit 100/100)'),
-            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 3, display: 'inline-block' } }), 'Consistency day only'),
-            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity, below threshold'),
+            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#fbbf24', borderRadius: 3, display: 'inline-block' } }), 'Power day'),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 3, display: 'inline-block' } }), 'Consistency day'),
+            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
           ]
         : [
-            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#22c55e', borderRadius: 3, display: 'inline-block' } }), 'Consistency met (all 4 ≥ 50 XP)'),
-            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity, below threshold'),
-          ]
+            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#22c55e', borderRadius: 3, display: 'inline-block' } }), `Consistency met (all 4 ≥ ${consistencyMin} XP)`),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
+          ],
+      h('div', { key: 'tap', style: { fontSize: 10.5, color: '#4a4868', marginTop: 2 } }, 'Tap any day to see what you logged')
     )
   );
 }
