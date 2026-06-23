@@ -251,6 +251,325 @@ function uid(prefix='id') {
   return `${prefix}_${Math.random().toString(36).slice(2,9)}`;
 }
 
+// ==========================================================
+// SOUND ENGINE
+// Procedural audio via Web Audio API — no external files.
+// All sounds generated from oscillators, envelopes, and filters.
+// Three style modes: fantasy, digital, atmospheric.
+// ==========================================================
+
+const SoundEngine = (() => {
+  let ctx = null;
+  let masterGain = null;
+  let enabled = true;
+  let volume = 0.6;
+  let style = 'fantasy';
+
+  function getCtx() {
+    if (!ctx) {
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = ctx.createGain();
+        masterGain.gain.value = volume;
+        masterGain.connect(ctx.destination);
+      } catch (e) { return null; }
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function setSettings(s) {
+    enabled = s.enabled !== false;
+    volume = typeof s.volume === 'number' ? s.volume : 0.6;
+    style = s.style || 'fantasy';
+    try {
+      if (masterGain && ctx) masterGain.gain.setTargetAtTime(volume, ctx.currentTime, 0.01);
+    } catch (e) { /* non-fatal */ }
+  }
+
+  // ── Low-level primitives ────────────────────────────────
+
+  function osc(freq, type, startT, dur, gainPeak, gainEnd = 0) {
+    const c = getCtx(); if (!c || !masterGain) return;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, startT);
+    g.gain.setValueAtTime(0, startT);
+    g.gain.linearRampToValueAtTime(gainPeak, startT + dur * 0.1);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gainEnd), startT + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(startT); o.stop(startT + dur + 0.05);
+  }
+
+  function oscFreqSweep(freqStart, freqEnd, type, startT, dur, gainPeak) {
+    const c = getCtx(); if (!c || !masterGain) return;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freqStart, startT);
+    o.frequency.exponentialRampToValueAtTime(freqEnd, startT + dur);
+    g.gain.setValueAtTime(0, startT);
+    g.gain.linearRampToValueAtTime(gainPeak, startT + dur * 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(startT); o.stop(startT + dur + 0.05);
+  }
+
+  function noise(startT, dur, gainPeak, filterFreq = 800) {
+    const c = getCtx(); if (!c || !masterGain) return;
+    const bufSize = c.sampleRate * dur;
+    const buf = c.createBuffer(1, bufSize, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const filter = c.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = filterFreq;
+    filter.Q.value = 1.5;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, startT);
+    g.gain.linearRampToValueAtTime(gainPeak, startT + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
+    src.connect(filter); filter.connect(g); g.connect(masterGain);
+    src.start(startT); src.stop(startT + dur + 0.05);
+  }
+
+  // ── FANTASY style ───────────────────────────────────────
+
+  const FANTASY = {
+    click() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(880, 'sine', t, 0.06, 0.15);
+      osc(1320, 'sine', t, 0.04, 0.08);
+    },
+    nav() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(440, 'sine', t, 0.08, 0.12);
+      osc(660, 'sine', t + 0.04, 0.1, 0.1);
+    },
+    logActivity() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(523, 'sine', t,        0.18, 0.2);
+      osc(659, 'sine', t + 0.07, 0.18, 0.2);
+      osc(784, 'sine', t + 0.14, 0.25, 0.25);
+    },
+    levelUp() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(392, 'sine', t,        0.35, 0.3);
+      osc(523, 'sine', t + 0.12, 0.35, 0.3);
+      osc(659, 'sine', t + 0.24, 0.35, 0.3);
+      osc(784, 'sine', t + 0.36, 0.5,  0.4);
+      osc(1047,'sine', t + 0.36, 0.6,  0.35);
+    },
+    bossDefeated() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(110, 'triangle', t,        0.7, 0.4);
+      osc(220, 'sine',     t,        0.8, 0.3);
+      osc(330, 'sine',     t + 0.1,  0.6, 0.2);
+      osc(440, 'sine',     t + 0.2,  0.5, 0.25);
+      osc(880, 'sine',     t + 0.3,  0.4, 0.3);
+      osc(1320,'sine',     t + 0.35, 0.4, 0.25);
+    },
+    achievement() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.06, 0.12, 0.18, 0.24].forEach((delay, i) => {
+        osc(880 + i * 220, 'sine', t + delay, 0.2, 0.2 - i * 0.02);
+      });
+    },
+    questComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(523, 'sine', t,        0.3, 0.25);
+      osc(659, 'sine', t + 0.1,  0.3, 0.25);
+      osc(784, 'sine', t + 0.2,  0.4, 0.3);
+      osc(1046,'sine', t + 0.3,  0.4, 0.35);
+    },
+    streakMilestone() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(659, 'sine', t,        0.3, 0.25);
+      osc(880, 'sine', t + 0.1,  0.3, 0.25);
+      osc(1046,'sine', t + 0.2,  0.35, 0.3);
+      osc(1318,'sine', t + 0.1,  0.25, 0.2);
+    },
+    coinPurchase() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.05, 0.1].forEach((d, i) => osc(1046 + i * 200, 'sine', t + d, 0.1, 0.18));
+    },
+    tutorial() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(523, 'sine', t, 0.1, 0.12);
+      osc(784, 'sine', t + 0.06, 0.1, 0.1);
+    },
+    streakRisk() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(220, 'triangle', t,       0.4, 0.2);
+      osc(196, 'triangle', t + 0.2, 0.4, 0.2);
+      osc(220, 'triangle', t + 0.4, 0.4, 0.15);
+    },
+    dayComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [392, 494, 587, 740, 880, 1047].forEach((f, i) => osc(f, 'sine', t + i * 0.09, 0.35, 0.3));
+      osc(1318, 'sine', t + 0.54, 0.5, 0.45);
+    },
+  };
+
+  // ── DIGITAL style ───────────────────────────────────────
+
+  const DIGITAL = {
+    click() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(800, 400, 'square', t, 0.05, 0.1);
+    },
+    nav() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(300, 600, 'square', t, 0.07, 0.12);
+    },
+    logActivity() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(440, 'square', t,        0.08, 0.15);
+      osc(880, 'square', t + 0.06, 0.08, 0.15);
+      noise(t + 0.1, 0.06, 0.08, 1200);
+    },
+    levelUp() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [220, 330, 440, 550, 660].forEach((f, i) => osc(f, 'square', t + i*0.07, 0.18, 0.2));
+      noise(t + 0.35, 0.15, 0.12, 2000);
+    },
+    bossDefeated() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(80, 200, 'square', t, 0.4, 0.3);
+      noise(t, 0.1, 0.2, 400);
+      osc(440, 'square', t + 0.2, 0.3, 0.25);
+      osc(660, 'square', t + 0.3, 0.3, 0.25);
+      oscFreqSweep(880, 440, 'square', t + 0.4, 0.3, 0.2);
+    },
+    achievement() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0,0.04,0.08,0.12,0.16].forEach((d,i) => {
+        oscFreqSweep(400 + i*100, 800 + i*100, 'square', t+d, 0.1, 0.15);
+      });
+    },
+    questComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [440,550,660,880].forEach((f,i) => osc(f,'square',t+i*0.07, 0.12, 0.18));
+    },
+    streakMilestone() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      noise(t, 0.05, 0.15, 1000);
+      osc(880, 'square', t + 0.05, 0.2, 0.2);
+      osc(1100,'square', t + 0.15, 0.2, 0.2);
+    },
+    coinPurchase() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0,0.04,0.08].forEach(d => oscFreqSweep(600,1200,'square',t+d,0.07,0.12));
+    },
+    tutorial() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(400, 600, 'square', t, 0.06, 0.1);
+    },
+    streakRisk() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.15, 0.3].forEach(d => oscFreqSweep(200, 150, 'square', t+d, 0.1, 0.15));
+    },
+    dayComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [220,330,440,550,660,880].forEach((f,i) => osc(f,'square',t+i*0.06,0.12,0.18));
+      noise(t + 0.36, 0.2, 0.15, 2000);
+    },
+  };
+
+  // ── ATMOSPHERIC style ───────────────────────────────────
+
+  const ATMOSPHERIC = {
+    click() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(180, 'sine', t, 0.08, 0.1);
+      noise(t, 0.04, 0.04, 600);
+    },
+    nav() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(120, 'sine', t, 0.15, 0.08);
+      oscFreqSweep(300, 200, 'sine', t, 0.12, 0.06);
+    },
+    logActivity() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(130, 'sine', t,        0.5,  0.15);
+      osc(196, 'sine', t + 0.1,  0.4,  0.12);
+      osc(260, 'sine', t + 0.2,  0.35, 0.1);
+      noise(t, 0.15, 0.05, 300);
+    },
+    levelUp() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(65,  'sine', t,       0.8, 0.3);
+      osc(130, 'sine', t,       0.6, 0.25);
+      osc(195, 'sine', t + 0.3, 0.5, 0.25);
+      osc(260, 'sine', t + 0.6, 0.5, 0.3);
+      noise(t + 0.5, 0.4, 0.08, 200);
+    },
+    bossDefeated() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(55,  'sine', t,       1.0, 0.4);
+      osc(82,  'sine', t,       0.8, 0.3);
+      osc(110, 'sine', t + 0.2, 0.7, 0.3);
+      noise(t, 0.3, 0.15, 150);
+      osc(220, 'sine', t + 0.5, 0.8, 0.4);
+    },
+    achievement() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0,0.1,0.2,0.3].forEach((d,i) => {
+        osc(220 * (i+1), 'sine', t+d, 0.5, 0.15);
+        noise(t+d, 0.08, 0.04, 400 + i*200);
+      });
+    },
+    questComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(110, 'sine', t,       0.6, 0.25);
+      osc(165, 'sine', t + 0.2, 0.5, 0.25);
+      osc(220, 'sine', t + 0.4, 0.6, 0.3);
+      noise(t + 0.3, 0.2, 0.06, 250);
+    },
+    streakMilestone() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(110, 'sine', t,       0.5, 0.2);
+      osc(165, 'sine', t + 0.2, 0.4, 0.2);
+      noise(t + 0.1, 0.3, 0.08, 180);
+    },
+    coinPurchase() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0,0.06,0.12].forEach((d,i) => osc(260 + i*40, 'sine', t+d, 0.1, 0.12));
+    },
+    tutorial() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(196, 'sine', t, 0.2, 0.1);
+      noise(t, 0.1, 0.04, 500);
+    },
+    streakRisk() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(55, 'sine', t,       0.6, 0.15);
+      osc(52, 'sine', t + 0.3, 0.6, 0.12);
+      noise(t + 0.1, 0.5, 0.06, 100);
+    },
+    dayComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [55,82,110,165,220,330].forEach((f,i) => osc(f,'sine',t+i*0.12, 0.6, 0.3));
+      noise(t + 0.5, 0.5, 0.1, 200);
+    },
+  };
+
+  const STYLES = { fantasy: FANTASY, digital: DIGITAL, atmospheric: ATMOSPHERIC };
+
+  function play(event) {
+    if (!enabled) return;
+    try {
+      const s = STYLES[style] || FANTASY;
+      if (s[event]) s[event]();
+    } catch (e) { /* audio errors are non-fatal */ }
+  }
+
+  return { play, setSettings };
+})();
+
 function buildInitialState() {
   const domainState = {};
   DOMAIN_KEYS.forEach(k => {
@@ -313,11 +632,16 @@ function buildInitialState() {
       warrior: 0, scholar: 0, guardian: 0, treasurer: 0, creator: 0,
     },
     yearlyLegacy: {},
-    restDayTokens: 0,          // earned every 7 consistency days, protects streak on one missed day
-    difficultyPreset: 'balanced', // 'easy' | 'balanced' | 'ambitious'
-    advancedSettingsUnlocked: false, // unlocked at level 10 total combined rank
-    totalCoinsEarnedAllTime: 0,  // running total, never decremented
-    newAchievementsSince: null,  // timestamp — Character tab shows dot when achievements unlocked after this
+    restDayTokens: 0,
+    difficultyPreset: 'balanced',
+    advancedSettingsUnlocked: false,
+    totalCoinsEarnedAllTime: 0,
+    newAchievementsSince: null,
+    soundSettings: {
+      enabled: true,
+      volume: 0.6,
+      style: 'fantasy',
+    },
   };
 }
 
@@ -830,6 +1154,19 @@ function RPGLife({ user, onSignOut }) {
   // load/day-open rather than waiting for the next qualifying day to lazily
   // overwrite the stale count. Runs once per day per client, same pattern as
   // the challenge check above.
+  // Sync SoundEngine settings whenever state.soundSettings changes
+  useEffect(() => {
+    if (!loaded || !state || !state.soundSettings) return;
+    SoundEngine.setSettings(state.soundSettings);
+  }, [loaded, state && state.soundSettings]);
+
+  function saveSoundSettings(patch) {
+    setState(prev => ({
+      ...prev,
+      soundSettings: { ...(prev.soundSettings || {}), ...patch },
+    }));
+  }
+
   const lastStreakCheckRef = useRef(null);
   useEffect(() => {
     if (!loaded || !state) return;
@@ -940,6 +1277,7 @@ function RPGLife({ user, onSignOut }) {
       next.goldHistory = { ...(next.goldHistory || {}) };
       next.goldHistory[dateStr] = (next.goldHistory[dateStr] || 0) + totalBonus;
       next.pendingBonuses = [...(next.pendingBonuses || []), ...bonuses.map(b => ({ ...b, id: uid('bonus'), at: Date.now() }))];
+      setTimeout(() => SoundEngine.play('streakMilestone'), 300);
     }
 
     return next;
@@ -1022,6 +1360,7 @@ function RPGLife({ user, onSignOut }) {
     });
 
     showToast(`+${xpGain} XP — ${activity.name}`);
+    SoundEngine.play('logActivity');
   }
 
   // ---------- Daily Quest Mode actions ----------
@@ -1187,9 +1526,9 @@ function RPGLife({ user, onSignOut }) {
     // (it's stripped by JSON.stringify on the next save since it starts with _).
     // Actually Firestore will save it — use a ref instead.
     if (def) {
-      // Schedule popup outside the setState cycle using a setTimeout(0) trick
       setTimeout(() => {
         setAchievementQueue(q => [...q, { id, ...def }]);
+        SoundEngine.play('achievement');
       }, 0);
     }
     return { ...prev, achievements };
@@ -1465,6 +1804,7 @@ function RPGLife({ user, onSignOut }) {
       next.goldHistory = { ...(next.goldHistory || {}) };
       next.goldHistory[today] = (next.goldHistory[today] || 0) + goldGain;
       showToast(`Quest complete! +${quest.xpReward} XP, +${goldGain} gold — archived`);
+      SoundEngine.play('questComplete');
       // Auto-archive on completion
       next.quests = next.quests.filter(q => q.id !== quest.id);
       next.archivedQuests = [
@@ -1576,6 +1916,8 @@ function RPGLife({ user, onSignOut }) {
       return { ...after, yearlyLegacy: _yearlyLegacy };
     });
     showToast(`Boss defeated! Rank unlocked.`);
+    SoundEngine.play('bossDefeated');
+    setTimeout(() => SoundEngine.play('levelUp'), 600);
     // #4 Reward proximity hint — show if a reward is now affordable
     setState(prev => {
       const cheapest = (prev.rewards || []).filter(r => r.cost <= prev.gold).sort((a,b) => b.cost - a.cost)[0];
@@ -1604,6 +1946,7 @@ function RPGLife({ user, onSignOut }) {
       };
     });
     showToast(`Bought ticket: ${reward.name}`);
+    SoundEngine.play('coinPurchase');
   }
 
   function useTicket(id) {
@@ -2278,7 +2621,7 @@ function RPGLife({ user, onSignOut }) {
           h('button', {
             key: tab.id,
             className: `rpg-nav-item rpg-btn${activeTab === tab.id ? ' active' : ''}`,
-            onClick: () => setActiveTab(tab.id),
+            onClick: () => { setActiveTab(tab.id); SoundEngine.play('nav'); },
             'data-tutorial-id': `tab-${tab.id}`,
           },
             h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 18, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
@@ -2398,6 +2741,7 @@ function RPGLife({ user, onSignOut }) {
         onSetDailyQuestLock: setDailyQuestLockEnabled,
         onOpenTutorial: () => setTutorialStep(0),
         onSetDifficulty: setDifficultyPreset,
+        onSaveSoundSettings: saveSoundSettings,
       })
       ) // close rpg-content main
       , // mobile nav inside rpg-main
@@ -2414,7 +2758,7 @@ function RPGLife({ user, onSignOut }) {
             h('button', {
               key: tab.id,
               className: `rpg-mobile-nav-item rpg-btn${activeTab === tab.id ? ' active' : ''}`,
-              onClick: () => setActiveTab(tab.id),
+              onClick: () => { setActiveTab(tab.id); SoundEngine.play('nav'); },
             },
               h(Icon, { name: tab.icon, size: 22, color: activeTab === tab.id ? '#a78bfa' : '#4a4868' }),
               tab.label
@@ -2488,6 +2832,7 @@ function RPGLife({ user, onSignOut }) {
     tutorialStep !== null && h(TutorialOverlay, {
       step: tutorialStep,
       onNext: (nextStep, tab) => {
+        SoundEngine.play('tutorial');
         if (tab) setActiveTab(tab);
         setTutorialStep(nextStep);
       },
@@ -3422,6 +3767,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     if (allDomainsComplete && !dayCompleteCelebrated) {
       setDayCompleteCelebrated(true);
       setDayCompleteShown(true);
+      SoundEngine.play('dayComplete');
       setTimeout(() => setDayCompleteShown(false), 3000);
     }
   }, [allDomainsComplete]);
@@ -3440,6 +3786,15 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     ? questPct >= 100
     : DOMAIN_KEYS.every(k => (todayLog[k] || 0) >= consistencyMin);
   const streakAtRisk = state.consistencyStreak > 0 && currentHour >= 20 && !dayDoneForStreak;
+
+  const streakRiskSoundedRef = React.useRef(false);
+  useEffect(() => {
+    if (streakAtRisk && !streakRiskSoundedRef.current) {
+      streakRiskSoundedRef.current = true;
+      SoundEngine.play('streakRisk');
+    }
+    if (!streakAtRisk) streakRiskSoundedRef.current = false;
+  }, [streakAtRisk]);
 
   function requestModeSwitch(target) {
     if (target === dayMode) return;
@@ -5106,7 +5461,7 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
 function FAB({ onClick }) {
   return h('button', {
     className: 'rpg-btn',
-    onClick,
+    onClick: () => { SoundEngine.play('click'); onClick(); },
     style: styles.fab,
     title: 'Quick log',
     'aria-label': 'Quick log',
@@ -5488,7 +5843,7 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
   );
 }
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial, onSetDifficulty }) {
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial, onSetDifficulty, onSaveSoundSettings }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -5644,6 +5999,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
       }, h(Icon, { name: 'trash2', size: 14 }), ' Reset entire character')
     ),
 
+    h(SoundSettingsSection, { state, onSave: onSaveSoundSettings }),
     h(PowerValuesSection, { state, onSave: onSavePowerValues }),
 
     // Advanced Settings — visible when unlocked (rank 10+) or always available
@@ -5675,6 +6031,144 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
 }
 
 // ---------- Power Values (#new) ----------
+
+function SoundSettingsSection({ state, onSave }) {
+  const ss = state.soundSettings || { enabled: true, volume: 0.6, style: 'fantasy' };
+  const [open, setOpen] = React.useState(false);
+
+  const STYLES = [
+    { id: 'fantasy',     label: 'Fantasy',     desc: 'Chimes, bells, resonant tones',    icon: '⚔️' },
+    { id: 'digital',     label: 'Digital',      desc: 'Blips, pulses, synth bleeps',       icon: '⚡' },
+    { id: 'atmospheric', label: 'Atmospheric',  desc: 'Drones, pads, ethereal textures',   icon: '🌑' },
+  ];
+
+  const PROMINENCE = [
+    { label: 'Subtle',   volume: 0.25 },
+    { label: 'Moderate', volume: 0.6  },
+    { label: 'Bold',     volume: 1.0  },
+  ];
+
+  function previewStyle(styleId) {
+    SoundEngine.setSettings({ ...ss, style: styleId, enabled: true });
+    SoundEngine.play('logActivity');
+    // Restore
+    setTimeout(() => SoundEngine.setSettings({ ...ss, style: styleId }), 600);
+    onSave({ style: styleId });
+  }
+
+  function previewEvent(event) {
+    SoundEngine.setSettings({ ...ss, enabled: true });
+    SoundEngine.play(event);
+  }
+
+  const EVENTS = [
+    { id: 'click',          label: 'Button click'    },
+    { id: 'logActivity',    label: 'Log activity'    },
+    { id: 'levelUp',        label: 'Level up'        },
+    { id: 'bossDefeated',   label: 'Boss defeated'   },
+    { id: 'questComplete',  label: 'Quest complete'  },
+    { id: 'achievement',    label: 'Achievement'     },
+    { id: 'streakMilestone',label: 'Streak bonus'    },
+    { id: 'coinPurchase',   label: 'Purchase'        },
+    { id: 'dayComplete',    label: 'Day complete'    },
+    { id: 'streakRisk',     label: 'Streak at risk'  },
+  ];
+
+  return h('section', { style: { marginBottom: 24 } },
+    h('button', {
+      className: 'rpg-btn',
+      onClick: () => setOpen(o => !o),
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, color: C.textHi },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h('span', { style: { fontSize: 15 } }, '🔊'),
+        h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Sound Effects'),
+        h('span', { style: { fontSize: 11, color: C.textLo } },
+          ss.enabled ? `— ${STYLES.find(s => s.id === ss.style)?.label || 'Fantasy'}, ${PROMINENCE.find(p => Math.abs(p.volume - ss.volume) < 0.2)?.label || 'Moderate'}` : '— Disabled'
+        )
+      ),
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
+        h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
+      )
+    ),
+
+    open && h('div', { style: { background: C.raised, border: '1px solid ' + C.borderDim, borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 18 } },
+
+      // Enable / disable
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+        h('div', null,
+          h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, 'Sound effects'),
+          h('div', { style: { fontSize: 11, color: C.textLo } }, 'All game sounds on/off')
+        ),
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => { onSave({ enabled: !ss.enabled }); },
+          style: { padding: '6px 16px', borderRadius: 4, border: `1px solid ${ss.enabled ? C.accent : C.borderMid}`, background: ss.enabled ? C.accentDim : 'transparent', color: ss.enabled ? C.accent : C.textMid, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
+        }, ss.enabled ? 'On' : 'Off')
+      ),
+
+      // Volume + prominence
+      h('div', null,
+        h('div', { style: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 } }, 'Prominence'),
+        h('div', { style: { display: 'flex', gap: 6, marginBottom: 10 } },
+          PROMINENCE.map(p =>
+            h('button', {
+              key: p.label, className: 'rpg-btn',
+              onClick: () => onSave({ volume: p.volume }),
+              style: { flex: 1, padding: '8px 0', borderRadius: 4, border: `1px solid ${Math.abs(ss.volume - p.volume) < 0.2 ? C.accent : C.borderDim}`, background: Math.abs(ss.volume - p.volume) < 0.2 ? C.accentDim : 'transparent', color: Math.abs(ss.volume - p.volume) < 0.2 ? C.accent : C.textMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s' },
+            }, p.label)
+          )
+        ),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+          h('span', { style: { fontSize: 11, color: C.textLo } }, '🔈'),
+          h('input', {
+            type: 'range', min: 0, max: 1, step: 0.05,
+            value: ss.volume,
+            onChange: e => onSave({ volume: parseFloat(e.target.value) }),
+            style: { flex: 1, accentColor: C.accent },
+          }),
+          h('span', { style: { fontSize: 11, color: C.textLo } }, '🔊'),
+          h('span', { style: { fontSize: 11, fontWeight: 700, color: C.textMid, minWidth: 30, textAlign: 'right' } }, `${Math.round(ss.volume * 100)}%`)
+        )
+      ),
+
+      // Style selector
+      h('div', null,
+        h('div', { style: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 } }, 'Sound Style'),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+          STYLES.map(s =>
+            h('button', {
+              key: s.id, className: 'rpg-btn',
+              onClick: () => previewStyle(s.id),
+              style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 4, border: `1px solid ${ss.style === s.id ? C.accent : C.borderDim}`, background: ss.style === s.id ? C.accentDim : 'transparent', cursor: 'pointer', transition: 'all 0.12s', textAlign: 'left' },
+            },
+              h('span', { style: { fontSize: 18, flexShrink: 0 } }, s.icon),
+              h('div', { style: { flex: 1 } },
+                h('div', { style: { fontSize: 12.5, fontWeight: 700, color: ss.style === s.id ? C.accent : C.textHi } }, s.label),
+                h('div', { style: { fontSize: 11, color: C.textLo, marginTop: 1 } }, s.desc)
+              ),
+              ss.style === s.id && h('span', { style: { fontSize: 10, color: C.accent, fontWeight: 700 } }, 'Active — tap to preview')
+            )
+          )
+        )
+      ),
+
+      // Per-event preview
+      h('div', null,
+        h('div', { style: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 } }, 'Preview sounds'),
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+          EVENTS.map(ev =>
+            h('button', {
+              key: ev.id, className: 'rpg-btn',
+              onClick: () => previewEvent(ev.id),
+              style: { padding: '6px 12px', borderRadius: 4, border: '1px solid ' + C.borderDim, background: 'transparent', color: C.textMid, fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s' },
+            }, ev.label)
+          )
+        )
+      )
+    )
+  );
+}
 
 function PowerValuesSection({ state, onSave }) {
   const [open, setOpen] = useState(false);
