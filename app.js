@@ -3274,10 +3274,20 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     }
   }, [allDomainsComplete]);
 
-  // #3 Streak-at-risk: hour >= 20 and minimum not hit in all domains
+  // #3 Streak-at-risk: hour >= 20 and day not yet "done"
+  // In Standard mode: done = all domains hit consistency minimum
+  // In Quest mode: done = mission completion is 100% (pending validation)
+  // The warning disappears the moment the threshold is reached and reappears
+  // if the user adds a new activity (dropping pct below 100%) or unchecks one.
   const currentHour = new Date().getHours();
-  const streakAtRisk = state.consistencyStreak > 0 && currentHour >= 20 &&
-    DOMAIN_KEYS.some(k => (todayLog[k] || 0) < consistencyMin);
+  const todayPlan = (state.dailyQuestPlans && state.dailyQuestPlans[today]) || { activityIds: [], completedIds: [] };
+  const questPct = todayPlan.activityIds.length > 0
+    ? Math.round((todayPlan.completedIds.length / todayPlan.activityIds.length) * 100)
+    : 0;
+  const dayDoneForStreak = dayMode === 'quest'
+    ? questPct >= 100
+    : DOMAIN_KEYS.every(k => (todayLog[k] || 0) >= consistencyMin);
+  const streakAtRisk = state.consistencyStreak > 0 && currentHour >= 20 && !dayDoneForStreak;
 
   function requestModeSwitch(target) {
     if (target === dayMode) return;
