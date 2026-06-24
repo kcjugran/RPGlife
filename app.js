@@ -2896,11 +2896,10 @@ function RPGLife({ user, onSignOut }) {
             return h('button', {
               className: 'rpg-hud-chip rpg-btn',
               onClick: () => setPvPopupOpen(true),
-              title: 'Power values — click to view',
               style: { gap: 5, cursor: 'pointer' },
             },
               h('span', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4a4868' } }, 'P'),
-              pv.map((v, i) => h('span', { key: i, style: { fontSize: 20 } }, v.symbol))
+              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 20 } }, v.symbol))
             );
           })()
         )
@@ -6302,6 +6301,9 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
 function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial, onSetDifficulty, onSaveSoundSettings, onSaveTheme }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+
+  const ss = state.soundSettings || { enabled: true, volume: 0.6, style: 'fantasy' };
 
   const PRESETS = [
     { id: 'easy',      label: 'Relaxed',   desc: 'Lower daily goals, more forgiving streak rules', icon: '🌿' },
@@ -6309,10 +6311,15 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
     { id: 'ambitious', label: 'Ambitious', desc: 'Harder goals, longer streak lock, fewer coins', icon: '⚔️' },
   ];
 
+  const pv = (state.powerValues || []).filter(v => v && v.name);
+  const pvSummary = pv.length > 0
+    ? pv.map(v => `${v.symbol} ${v.name}`).join(' · ')
+    : 'Not set yet';
+
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
 
-    // Help
-    h('section', { style: { marginBottom: 24 } },
+    // ── Help ──────────────────────────────────────────────
+    h('section', { style: { marginBottom: 20 } },
       h(SectionLabel, { text: 'Help' }),
       h('button', {
         className: 'rpg-btn',
@@ -6322,8 +6329,8 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
       }, '? Replay guide')
     ),
 
-    // #13 Difficulty preset
-    h('section', { style: { marginBottom: 24 } },
+    // ── Difficulty ────────────────────────────────────────
+    h('section', { style: { marginBottom: 20 } },
       h(SectionLabel, { text: 'Difficulty' }),
       h('div', { style: { display: 'flex', gap: 8 } },
         PRESETS.map(p =>
@@ -6333,171 +6340,188 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
             style: {
               flex: 1, padding: '12px 10px', borderRadius: 4, cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, textAlign: 'center',
-              background: (state.difficultyPreset || 'balanced') === p.id ? 'rgba(167,139,250,0.12)' : '#12121f',
-              border: `1px solid ${(state.difficultyPreset || 'balanced') === p.id ? '#a78bfa' : 'rgba(255,255,255,0.055)'}`,
+              background: (state.difficultyPreset || 'balanced') === p.id ? C.accentDim : C.raised,
+              border: `1px solid ${(state.difficultyPreset || 'balanced') === p.id ? C.accent : C.borderDim}`,
               transition: 'all 0.15s',
             },
           },
             h('span', { style: { fontSize: 20 } }, p.icon),
-            h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.difficultyPreset || 'balanced') === p.id ? '#c4b5fd' : '#eceaf6' } }, p.label),
-            h('span', { style: { fontSize: 10, color: '#4a4868', lineHeight: 1.3 } }, p.desc)
+            h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.difficultyPreset || 'balanced') === p.id ? C.accent : C.textHi } }, p.label),
+            h('span', { style: { fontSize: 10, color: C.textLo, lineHeight: 1.3 } }, p.desc)
           )
         )
       )
     ),
 
-    // Theme selector
-    h('section', { style: { marginBottom: 24 } },
-      h(SectionLabel, { text: 'Theme' }),
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 } },
-        Object.entries(THEMES).map(([id, t]) => {
-          const active = (state.theme || 'default') === id;
-          return h('button', {
-            key: id, className: 'rpg-btn',
-            onClick: () => onSaveTheme(id),
-            style: { padding: '12px 10px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: active ? 'rgba(167,139,250,0.12)' : C.raised, border: `1px solid ${active ? C.accent : C.borderDim}`, transition: 'all 0.15s' },
-          },
-            h('span', { style: { fontSize: 22 } }, t.icon),
-            h('div', { style: { fontSize: 12, fontWeight: 700, color: active ? C.accent : C.textHi } }, t.label),
-            h('div', { style: { fontSize: 10, color: C.textLo, lineHeight: 1.3, textAlign: 'center' } }, t.desc),
-            active && h('div', { style: { fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.accent, marginTop: 2 } }, 'Active')
-          );
-        })
-      )
-    ),
+    // ── Power Values — collapsible with glanceable summary ─
+    h(PowerValuesSection, {
+      state, onSave: onSavePowerValues,
+      headerExtra: h('span', { style: { fontSize: 11, color: C.textLo, marginLeft: 6, fontStyle: 'italic' } }, pvSummary)
+    }),
 
-    // Level gates & boss battles section
-    h('section', { style: { marginBottom: 24 } },
-      h(SectionLabel, { text: 'Level gates & boss battles' }),
-      h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
-        'Boss gates lock your rank advancement every 10 levels by default. You can enable the in-between gates (5, 15, 25, 35, 45) to create tighter challenges.'
-      ),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        DOMAIN_KEYS.map(k => {
-          const d = DOMAINS[k];
-          const isOpen = expandedDomain === k;
-          const customCount = state.customBosses && state.customBosses[k]
-            ? Object.keys(state.customBosses[k]).filter(lvl => {
-                const ch = state.customBosses[k][lvl];
-                return ch && ch.filter(c => c && c.trim()).length > 0;
-              }).length
-            : 0;
-          const enabled = activeBossLevelsFor(state, k);
-          return h('div', { key: k, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, overflow: 'hidden' } },
-            h('button', {
-              className: 'rpg-btn',
-              onClick: () => setExpandedDomain(isOpen ? null : k),
-              style: { width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', color: '#e5e7eb' },
-            },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-                h(Icon, { name: d.icon, size: 16, color: d.color }),
-                h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, d.name),
-                h('span', { style: { fontSize: 11, color: '#7c7c8a' } },
-                  `· ${enabled.length} gate${enabled.length === 1 ? '' : 's'} active`,
-                  customCount > 0 ? `, ${customCount} customized` : ''
-                )
-              ),
-              h('div', { style: { transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' } },
-                h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' })
-              )
-            ),
-            isOpen && h('div', { style: { padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 6 } },
-              BOSS_LEVELS_ALL.map(bl => {
-                const isDefault = BOSS_LEVELS_DEFAULT.indexOf(bl) >= 0; // mults of 10
-                const isEnabled = enabled.indexOf(bl) >= 0;
-                const custom = state.customBosses && state.customBosses[k] && state.customBosses[k][bl];
-                const isCustom = custom && custom.filter(c => c && c.trim()).length > 0;
-                return h('div', { key: bl, style: { ...styles.bossLevelRow, borderColor: isEnabled ? (isCustom ? hexToRgba(d.color, 0.3) : '#2a2a35') : '#22222e', opacity: isEnabled ? 1 : 0.55 } },
-                  h('div', { style: { flex: 1, display: 'flex', alignItems: 'center', gap: 8 } },
-                    h('span', { style: { fontSize: 13, color: '#e5e7eb', fontWeight: 600 } }, `Level ${bl}`),
-                    isDefault
-                      ? h('span', { style: { fontSize: 10, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Default')
-                      : h('span', { style: { fontSize: 10, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Optional'),
-                    isCustom && h('span', { style: { fontSize: 10, color: d.color, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Custom')
-                  ),
-                  // Toggle: default gates can be turned off too (user choice).
-                  h('button', {
-                    className: 'rpg-btn',
-                    onClick: () => onToggleGate(k, bl),
-                    style: { ...styles.toggleSwitch, background: isEnabled ? d.color : '#2a2a35' },
-                    title: isEnabled ? 'Disable this gate' : 'Enable this gate',
-                  },
-                    h('span', { style: { ...styles.toggleKnob, left: isEnabled ? 18 : 2 } })
-                  ),
-                  h('button', {
-                    className: 'rpg-btn',
-                    onClick: () => onEditBoss(k, bl),
-                    style: { ...styles.iconBtn, opacity: isEnabled ? 1 : 0.5 },
-                    title: 'Edit challenges',
-                  },
-                    h(Icon, { name: 'edit2', size: 12 })
-                  )
-                );
-              })
-            )
-          );
-        })
-      )
-    ),
-
-    h('section', { style: { marginBottom: 24 } },
-      h(SectionLabel, { text: 'Reset progress' }),
-      h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
-        'Resets erase XP, levels, and boss completions for the chosen scope. Activity templates and rewards are kept.'
-      ),
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-        DOMAIN_KEYS.map(k => {
-          const d = DOMAINS[k];
-          const totalXp = state.domains[k] ? state.domains[k].totalXp : 0;
-          return h('div', { key: k, style: { ...styles.rewardCard } },
-            h('div', { style: { flex: 1, display: 'flex', alignItems: 'center', gap: 10 } },
-              h(Icon, { name: d.icon, size: 16, color: d.color }),
-              h('div', null,
-                h('div', { style: { fontSize: 13, fontWeight: 600, color: '#f4f1ea' } }, `Reset ${d.name}`),
-                h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, `Currently ${totalXp.toLocaleString()} total XP`)
-              )
-            ),
-            h('button', { className: 'rpg-btn', style: styles.dangerBtnSmall, onClick: () => onResetDomain(k) }, 'Reset')
-          );
-        })
-      )
-    ),
-
-    h('section', null,
-      h(SectionLabel, { text: 'Danger zone' }),
-      h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 12 } },
-        'Wipes everything except your saved activity templates, rewards, and custom bosses. Requires typing RESET to confirm.'
-      ),
+    // ── Reset Progress — collapsible ──────────────────────
+    h('section', { style: { marginBottom: 20 } },
       h('button', {
         className: 'rpg-btn',
-        style: { ...styles.dangerBtn, width: '100%', justifyContent: 'center', padding: '12px 0', fontSize: 13 },
-        onClick: onResetAll,
-      }, h(Icon, { name: 'trash2', size: 14 }), ' Reset entire character')
+        onClick: () => setResetOpen(o => !o),
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(224,92,92,0.2)', borderRadius: 4, color: C.textHi, transition: 'border-color 0.15s' },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h(Icon, { name: 'trash2', size: 14, color: C.danger }),
+          h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Reset Progress'),
+          h('span', { style: { fontSize: 11, color: C.textLo } }, '— erase XP, levels, completions')
+        ),
+        h('div', { style: { transform: resetOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
+          h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
+        )
+      ),
+      resetOpen && h('div', { style: { background: C.raised, border: '1px solid rgba(224,92,92,0.15)', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '14px' } },
+        h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 12 } },
+          'Resets erase XP, levels, and boss completions. Activity templates and rewards are kept.'
+        ),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 } },
+          DOMAIN_KEYS.map(k => {
+            const d = DOMAINS[k];
+            const totalXp = state.domains[k] ? state.domains[k].totalXp : 0;
+            return h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 4 } },
+              h(Icon, { name: d.icon, size: 14, color: d.color }),
+              h('div', { style: { flex: 1 } },
+                h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, d.name),
+                h('div', { style: { fontSize: 11, color: C.textMid } }, `${totalXp.toLocaleString()} XP`)
+              ),
+              h('button', { className: 'rpg-btn', style: styles.dangerBtnSmall, onClick: () => onResetDomain(k) }, 'Reset')
+            );
+          })
+        ),
+        h('button', {
+          className: 'rpg-btn',
+          style: { ...styles.dangerBtn, width: '100%', justifyContent: 'center', padding: '11px 0', fontSize: 13 },
+          onClick: onResetAll,
+        }, h(Icon, { name: 'trash2', size: 13 }), ' Reset entire character')
+      )
     ),
 
-    h(SoundSettingsSection, { state, onSave: onSaveSoundSettings }),
-    h(PowerValuesSection, { state, onSave: onSavePowerValues }),
+    // ── SFX on/off — standalone, simple toggle ────────────
+    h('section', { style: { marginBottom: 20 } },
+      h('label', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4 } },
+        h('input', {
+          type: 'checkbox',
+          checked: ss.enabled !== false,
+          onChange: e => onSaveSoundSettings({ enabled: e.target.checked }),
+          style: { width: 15, height: 15, accentColor: C.accent, cursor: 'pointer', flexShrink: 0 },
+        }),
+        h('div', null,
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: C.textHi } }, 'Sound effects'),
+          h('div', { style: { fontSize: 11, color: C.textLo } }, 'Play audio cues for logging, achievements, streaks, and more')
+        )
+      )
+    ),
 
-    // Advanced Settings — visible when unlocked (rank 10+) or always available
+    // ── Advanced Settings (paywall zone) ─────────────────
     h('section', { style: { marginBottom: 24 } },
       h('button', {
         className: 'rpg-btn',
         onClick: () => setAdvancedOpen(o => !o),
-        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: '#12121f', border: `1px solid ${state.advancedSettingsUnlocked ? 'rgba(167,139,250,0.3)' : 'rgba(255,255,255,0.055)'}`, borderRadius: 4, color: '#eceaf6' },
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: C.raised, border: `1px solid ${state.advancedSettingsUnlocked ? 'rgba(167,139,250,0.3)' : C.borderDim}`, borderRadius: 4, color: C.textHi },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', null, state.advancedSettingsUnlocked ? '🔓' : '🔒'),
           h('span', { style: { fontSize: 13, fontWeight: 600 } }, 'Advanced Settings'),
-          !state.advancedSettingsUnlocked && h('span', { style: { fontSize: 10, color: '#4a4868' } }, '— unlocks at combined rank 10')
+          !state.advancedSettingsUnlocked && h('span', { style: { fontSize: 10, color: C.textLo } }, '— unlocks at combined rank 10')
         ),
         h('div', { style: { transform: advancedOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
-          h(Icon, { name: 'chevronRight', size: 14, color: '#4a4868' })
+          h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
         )
       ),
       advancedOpen && h('div', { style: { marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 } },
-        !state.advancedSettingsUnlocked && h('div', { style: { fontSize: 12, color: '#4a4868', padding: '8px 0' } },
-          'These settings are available for preview. They unlock permanently at combined rank 10 — when you\'ve built enough experience to tune the system meaningfully.'
+        !state.advancedSettingsUnlocked && h('div', { style: { fontSize: 12, color: C.textLo, padding: '8px 12px', background: C.void, borderRadius: 4, border: '1px solid ' + C.borderDim } },
+          'Preview mode — these settings unlock permanently at combined rank 10.'
         ),
+
+        // Theme
+        h('div', null,
+          h(SectionLabel, { text: 'Theme' }),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 } },
+            Object.entries(THEMES).map(([id, t]) => {
+              const active = (state.theme || 'default') === id;
+              return h('button', {
+                key: id, className: 'rpg-btn',
+                onClick: () => onSaveTheme(id),
+                style: { padding: '10px 8px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: active ? C.accentDim : C.void, border: `1px solid ${active ? C.accent : C.borderDim}`, transition: 'all 0.15s' },
+              },
+                h('span', { style: { fontSize: 20 } }, t.icon),
+                h('div', { style: { fontSize: 11.5, fontWeight: 700, color: active ? C.accent : C.textHi } }, t.label),
+                h('div', { style: { fontSize: 10, color: C.textLo, lineHeight: 1.3 } }, t.desc),
+                active && h('div', { style: { fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.accent, marginTop: 1 } }, '✓ Active')
+              );
+            })
+          )
+        ),
+
+        // Sound style + volume (full panel, minus the on/off toggle)
+        h(SoundSettingsSection, { state, onSave: onSaveSoundSettings }),
+
+        // Level gates
+        h('div', null,
+          h(SectionLabel, { text: 'Level gates & boss battles' }),
+          h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 10 } },
+            'Boss gates lock rank advancement every 10 levels. Enable optional in-between gates for tighter progression.'
+          ),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+            DOMAIN_KEYS.map(k => {
+              const d = DOMAINS[k];
+              const isOpen = expandedDomain === k;
+              const customCount = state.customBosses && state.customBosses[k]
+                ? Object.keys(state.customBosses[k]).filter(lvl => { const ch = state.customBosses[k][lvl]; return ch && ch.filter(c => c && c.trim()).length > 0; }).length
+                : 0;
+              const enabled = activeBossLevelsFor(state, k);
+              return h('div', { key: k, style: { background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 4, overflow: 'hidden' } },
+                h('button', {
+                  className: 'rpg-btn',
+                  onClick: () => setExpandedDomain(isOpen ? null : k),
+                  style: { width: '100%', padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', color: C.textHi },
+                },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                    h(Icon, { name: d.icon, size: 15, color: d.color }),
+                    h('span', { style: { fontSize: 13, fontWeight: 600 } }, d.name),
+                    h('span', { style: { fontSize: 11, color: C.textMid } }, `· ${enabled.length} gates${customCount > 0 ? `, ${customCount} custom` : ''}`)
+                  ),
+                  h('div', { style: { transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' } },
+                    h(Icon, { name: 'chevronRight', size: 13, color: C.textLo })
+                  )
+                ),
+                isOpen && h('div', { style: { padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 6 } },
+                  BOSS_LEVELS_ALL.map(bl => {
+                    const isDefault = BOSS_LEVELS_DEFAULT.indexOf(bl) >= 0;
+                    const isEnabled = enabled.indexOf(bl) >= 0;
+                    const custom = state.customBosses && state.customBosses[k] && state.customBosses[k][bl];
+                    const isCustom = custom && custom.filter(c => c && c.trim()).length > 0;
+                    return h('div', { key: bl, style: { ...styles.bossLevelRow, borderColor: isEnabled ? (isCustom ? hexToRgba(d.color, 0.3) : C.borderDim) : 'transparent', opacity: isEnabled ? 1 : 0.5 } },
+                      h('div', { style: { flex: 1, display: 'flex', alignItems: 'center', gap: 8 } },
+                        h('span', { style: { fontSize: 12.5, color: C.textHi, fontWeight: 600 } }, `Level ${bl}`),
+                        h('span', { style: { fontSize: 10, color: C.textMid, textTransform: 'uppercase', letterSpacing: 0.5 } }, isDefault ? 'Default' : 'Optional'),
+                        isCustom && h('span', { style: { fontSize: 10, color: d.color, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Custom')
+                      ),
+                      h('button', {
+                        className: 'rpg-btn',
+                        onClick: () => onToggleGate(k, bl),
+                        style: { ...styles.toggleSwitch, background: isEnabled ? d.color : C.borderDim },
+                        title: isEnabled ? 'Disable gate' : 'Enable gate',
+                      }, h('span', { style: { ...styles.toggleKnob, left: isEnabled ? 18 : 2 } })),
+                      h('button', {
+                        className: 'rpg-btn',
+                        onClick: () => onEditBoss(k, bl),
+                        style: { ...styles.iconBtn, opacity: isEnabled ? 1 : 0.5 },
+                        title: 'Edit challenges',
+                      }, h(Icon, { name: 'edit2', size: 12 }))
+                    );
+                  })
+                )
+              );
+            })
+          )
+        ),
+
         h(DailyQuestSettingsSection, { state, onSetLock: onSetDailyQuestLock }),
         h(EconomySettingsSection, { state, onSave: onSaveEconomy }),
         h(ChallengeLibrarySection, { state, onSaveLibrary: onSaveChallengeLibrary, onSaveSpawnChance })
@@ -6570,19 +6594,6 @@ function SoundSettingsSection({ state, onSave }) {
 
     open && h('div', { style: { background: C.raised, border: '1px solid ' + C.borderDim, borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 18 } },
 
-      // Enable / disable
-      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
-        h('div', null,
-          h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, 'Sound effects'),
-          h('div', { style: { fontSize: 11, color: C.textLo } }, 'All game sounds on/off')
-        ),
-        h('button', {
-          className: 'rpg-btn',
-          onClick: () => { onSave({ enabled: !ss.enabled }); },
-          style: { padding: '6px 16px', borderRadius: 4, border: `1px solid ${ss.enabled ? C.accent : C.borderMid}`, background: ss.enabled ? C.accentDim : 'transparent', color: ss.enabled ? C.accent : C.textMid, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
-        }, ss.enabled ? 'On' : 'Off')
-      ),
-
       // Volume + prominence
       h('div', null,
         h('div', { style: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 } }, 'Prominence'),
@@ -6646,7 +6657,7 @@ function SoundSettingsSection({ state, onSave }) {
   );
 }
 
-function PowerValuesSection({ state, onSave }) {
+function PowerValuesSection({ state, onSave, headerExtra }) {
   const [open, setOpen] = useState(false);
   const initial = (state.powerValues && state.powerValues.length === 3)
     ? state.powerValues.map(v => ({ name: '', symbol: '', desc: '', ...v }))
@@ -6689,9 +6700,10 @@ function PowerValuesSection({ state, onSave }) {
       onClick: () => setOpen(o => !o),
       style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, color: C.textHi },
     },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' } },
         h(Icon, { name: 'star', size: 15, color: '#c9a84c' }),
-        h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Power Values')
+        h('span', { style: { fontSize: 12.5, fontWeight: 600, flexShrink: 0 } }, 'Power Values'),
+        headerExtra || null
       ),
       h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
         h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
