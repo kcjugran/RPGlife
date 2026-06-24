@@ -598,6 +598,168 @@ const SoundEngine = (() => {
   return { play, setSettings };
 })();
 
+// ==========================================================
+// THEMES
+// Each theme overrides the :root CSS variables from the
+// default dark RPG system. The `fonts` field injects a
+// Google Fonts import. The `bodyClass` is added to <body>.
+// ==========================================================
+
+const THEMES = {
+  default: {
+    label: 'Dark RPG',
+    icon: '⚔️',
+    desc: 'The original — deep void black, purple accents, gold highlights',
+    fonts: null,
+    css: '', // base is the default — no override needed
+  },
+  girly: {
+    label: 'Girly',
+    icon: '🌸',
+    desc: 'Soft pinks, warm rose tones, rounded feel',
+    fonts: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap',
+    css: `
+      :root {
+        --bg-void:    #1a0f14;
+        --bg-panel:   #251420;
+        --bg-raised:  #2e1a26;
+        --bg-hover:   #3a2030;
+        --border-dim: rgba(255,180,200,0.09);
+        --border-mid: rgba(255,180,200,0.18);
+        --border-glow:rgba(255,130,170,0.45);
+        --gold:       #f48fb1;
+        --gold-dim:   rgba(244,143,177,0.15);
+        --gold-glow:  rgba(244,143,177,0.3);
+        --accent:     #f06292;
+        --accent-dim: rgba(240,98,146,0.14);
+        --accent-glow:rgba(240,98,146,0.35);
+        --text-hi:    #fce4ec;
+        --text-mid:   #c2849a;
+        --text-lo:    #7d4e60;
+        --danger:     #e57373;
+        --success:    #80cbc4;
+      }
+      html, body, input, select, textarea, button { font-family: 'DM Sans', sans-serif !important; }
+      .rpg-nav-item, .rpg-mobile-nav-item { border-radius: 12px !important; }
+      .rpg-card, .rpg-modal, .rpg-sidebar { border-radius: 12px !important; }
+      .rpg-nav-item::before { background: var(--accent) !important; box-shadow: 0 0 8px var(--accent-glow) !important; }
+      .rpg-sidebar { background: linear-gradient(180deg, #1e0e18, #1a0f14) !important; }
+      .rpg-topbar { background: rgba(26,15,20,0.9) !important; }
+    `,
+  },
+  minimal: {
+    label: 'Minimal',
+    icon: '○',
+    desc: 'Clean off-white, almost no colour, extreme clarity',
+    fonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+    css: `
+      :root {
+        --bg-void:    #f5f4f0;
+        --bg-panel:   #eeede8;
+        --bg-raised:  #ffffff;
+        --bg-hover:   #f0efe9;
+        --border-dim: rgba(0,0,0,0.07);
+        --border-mid: rgba(0,0,0,0.14);
+        --border-glow:rgba(0,0,0,0.25);
+        --gold:       #4a4a4a;
+        --gold-dim:   rgba(0,0,0,0.06);
+        --gold-glow:  rgba(0,0,0,0.15);
+        --accent:     #1a1a1a;
+        --accent-dim: rgba(0,0,0,0.07);
+        --accent-glow:rgba(0,0,0,0.15);
+        --text-hi:    #111111;
+        --text-mid:   #555550;
+        --text-lo:    #aaa9a0;
+        --danger:     #c0392b;
+        --success:    #27ae60;
+      }
+      html, body { background: var(--bg-void) !important; }
+      html, body, input, select, textarea, button { font-family: 'Inter', sans-serif !important; font-weight: 400 !important; }
+      body::after { display: none !important; }
+      .rpg-sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border-dim) !important; }
+      .rpg-topbar { background: var(--bg-panel) !important; backdrop-filter: none !important; border-bottom: 1px solid var(--border-dim) !important; }
+      .rpg-nav-item::before { background: var(--accent) !important; box-shadow: none !important; }
+      .rpg-nav-item.active { background: rgba(0,0,0,0.06) !important; }
+      .rpg-hud-chip { background: transparent !important; border-color: var(--border-dim) !important; color: var(--text-hi) !important; }
+      .rpg-hud-chip.gold-chip, .rpg-hud-chip.streak-chip, .rpg-hud-chip.power-chip { color: var(--text-mid) !important; }
+    `,
+  },
+  retro: {
+    label: 'Game Boy',
+    icon: '🎮',
+    desc: 'Green phosphor on dark — classic handheld aesthetic',
+    fonts: 'https://fonts.googleapis.com/css2?family=VT323&display=swap',
+    css: `
+      :root {
+        --bg-void:    #0f1f0a;
+        --bg-panel:   #162b0e;
+        --bg-raised:  #1a3312;
+        --bg-hover:   #1f3d16;
+        --border-dim: rgba(74,200,50,0.18);
+        --border-mid: rgba(74,200,50,0.35);
+        --border-glow:rgba(74,200,50,0.6);
+        --gold:       #8bdc5a;
+        --gold-dim:   rgba(139,220,90,0.15);
+        --gold-glow:  rgba(139,220,90,0.35);
+        --accent:     #4ac832;
+        --accent-dim: rgba(74,200,50,0.15);
+        --accent-glow:rgba(74,200,50,0.4);
+        --text-hi:    #c8f0a0;
+        --text-mid:   #5a9040;
+        --text-lo:    #2a5018;
+        --danger:     #dc2828;
+        --success:    #4ac832;
+      }
+      html, body, input, select, textarea, button { font-family: 'VT323', monospace !important; font-size: 16px !important; letter-spacing: 0.5px !important; }
+      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 1px,rgba(0,0,0,0.15) 1px,rgba(0,0,0,0.15) 2px) !important; }
+      .rpg-sidebar { border-right: 2px solid var(--accent-dim) !important; }
+      .rpg-hud-chip { font-family: 'VT323', monospace !important; font-size: 16px !important; }
+      .rpg-nav-item { font-size: 16px !important; font-family: 'VT323', monospace !important; letter-spacing: 1px !important; }
+      .rpg-sidebar-logo-title { font-family: 'VT323', monospace !important; letter-spacing: 3px !important; }
+      * { border-radius: 0 !important; }
+    `,
+  },
+  cyberpunk: {
+    label: 'Cyberpunk',
+    icon: '⚡',
+    desc: 'Neon cyan and magenta on near-black — night city aesthetic',
+    fonts: 'https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap',
+    css: `
+      :root {
+        --bg-void:    #050508;
+        --bg-panel:   #080a10;
+        --bg-raised:  #0c0e18;
+        --bg-hover:   #101320;
+        --border-dim: rgba(0,255,220,0.1);
+        --border-mid: rgba(0,255,220,0.2);
+        --border-glow:rgba(0,255,220,0.5);
+        --gold:       #ff0080;
+        --gold-dim:   rgba(255,0,128,0.12);
+        --gold-glow:  rgba(255,0,128,0.4);
+        --accent:     #00ffdc;
+        --accent-dim: rgba(0,255,220,0.1);
+        --accent-glow:rgba(0,255,220,0.4);
+        --text-hi:    #e0fff8;
+        --text-mid:   #4a9090;
+        --text-lo:    #1a4040;
+        --danger:     #ff0055;
+        --success:    #00ffdc;
+      }
+      html, body, input, select, textarea, button { font-family: 'Rajdhani', sans-serif !important; font-weight: 500 !important; letter-spacing: 0.5px !important; }
+      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,220,0.015) 3px,rgba(0,255,220,0.015) 4px) !important; }
+      .rpg-sidebar { border-right: 1px solid rgba(0,255,220,0.15) !important; }
+      .rpg-sidebar-logo-title { color: var(--accent) !important; text-shadow: 0 0 10px var(--accent-glow) !important; }
+      .rpg-nav-item.active { background: rgba(0,255,220,0.07) !important; text-shadow: 0 0 8px var(--accent) !important; }
+      .rpg-nav-item::before { background: var(--accent) !important; box-shadow: 0 0 12px var(--accent) !important; }
+      .rpg-hud-chip { border-color: rgba(0,255,220,0.2) !important; }
+      .rpg-hud-chip.gold-chip { color: var(--gold) !important; text-shadow: 0 0 8px var(--gold) !important; }
+      .rpg-hud-chip.streak-chip { text-shadow: 0 0 8px currentColor !important; }
+      .rpg-topbar { border-bottom: 1px solid rgba(0,255,220,0.1) !important; }
+      * { text-rendering: geometricPrecision !important; }
+    `,
+  },
+};
+
 function buildInitialState() {
   const domainState = {};
   DOMAIN_KEYS.forEach(k => {
@@ -670,6 +832,7 @@ function buildInitialState() {
       volume: 0.6,
       style: 'fantasy',
     },
+    theme: 'default', // 'default' | 'girly' | 'minimal' | 'retro' | 'cyberpunk'
   };
 }
 
@@ -872,6 +1035,7 @@ function RPGLife({ user, onSignOut }) {
   const [bossModal, setBossModal] = useState(null);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [streakCalendar, setStreakCalendar] = useState(null); // 'consistency' | 'power' | null
+  const [pvPopupOpen, setPvPopupOpen] = useState(false);
   const [resetPrompt, setResetPrompt] = useState(null); // 'all' | domainKey | null
   const [bossEditor, setBossEditor] = useState(null); // { domain, level } | null
   const [buyConfirm, setBuyConfirm] = useState(null); // reward object | null
@@ -1193,6 +1357,10 @@ function RPGLife({ user, onSignOut }) {
       ...prev,
       soundSettings: { ...(prev.soundSettings || {}), ...patch },
     }));
+  }
+
+  function saveTheme(themeId) {
+    setState(prev => ({ ...prev, theme: themeId }));
   }
 
   const lastStreakCheckRef = useRef(null);
@@ -2184,6 +2352,8 @@ function RPGLife({ user, onSignOut }) {
   return h('div', { style: styles.app },
     h('style', null, `
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+      ${THEMES[state.theme || 'default']?.fonts ? `@import url('${THEMES[state.theme].fonts}');` : ''}
+      ${THEMES[state.theme || 'default']?.css || ''}
 
       :root {
         --bg-void:    #080810;
@@ -2596,7 +2766,7 @@ function RPGLife({ user, onSignOut }) {
     h('aside', { className: 'rpg-sidebar' },
       h('div', { className: 'rpg-sidebar-logo' },
         h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, paddingBottom: 4 } },
-          // Adventure Log sword-and-circle logo — dark variant sized for sidebar
+          // RPGLife sword-and-circle logo — dark variant sized for sidebar
           h('svg', {
             width: '160', height: '160',
             viewBox: '0 0 680 720',
@@ -2645,14 +2815,14 @@ function RPGLife({ user, onSignOut }) {
             // Wordmark — only the sword+circle portion is used inline (no text, text shown below in DOM)
           ),
           h('div', { style: { textAlign: 'center', marginTop: 2 } },
-            h('div', { className: 'rpg-sidebar-logo-title' }, 'Adventure Log'),
+            h('div', { className: 'rpg-sidebar-logo-title' }, 'RPGLife'),
             h('div', { className: 'rpg-sidebar-logo-sub' }, 'Live · Grow · Level Up')
           )
         )
       ),
       h('nav', { className: 'rpg-nav-list' },
         [
-          { id: 'dashboard',  label: 'Adventure Log', icon: 'scroll'   },
+          { id: 'dashboard',  label: 'RPGLife', icon: 'scroll'   },
           { id: 'activities', label: 'Activities',     icon: 'zap'      },
           { id: 'quests',     label: 'Quests',         icon: 'target'   },
           { id: 'character',  label: 'Character',      icon: 'shield'   },
@@ -2699,7 +2869,7 @@ function RPGLife({ user, onSignOut }) {
       // Top bar (contextual — shows HUD stats for current tab)
       h('div', { className: 'rpg-topbar' },
         h('div', { className: 'rpg-topbar-title' },
-          { dashboard: 'Adventure Log', activities: 'Activities', quests: 'Quests', character: 'Character', rewards: 'Rewards', settings: 'Settings' }[activeTab] || activeTab
+          { dashboard: 'RPGLife', activities: 'Activities', quests: 'Quests', character: 'Character', rewards: 'Rewards', settings: 'Settings' }[activeTab] || activeTab
         ),
         h('div', { className: 'rpg-topbar-chips' },
           // Pending bonuses bell
@@ -2719,18 +2889,18 @@ function RPGLife({ user, onSignOut }) {
           h('button', { className: 'rpg-hud-chip gold-chip rpg-btn', onClick: () => setActiveTab('rewards'), title: 'Gold' },
             h(Icon, { name: 'coins', size: 17, color: '#c9a84c' }), state.gold
           ),
-          // Power values — clickable, opens settings → Power Values
+          // Power values — clickable, opens popup showing name + description
           (() => {
             const pv = (state.powerValues || []).filter(v => v && v.symbol);
             if (!pv.length) return null;
             return h('button', {
               className: 'rpg-hud-chip rpg-btn',
-              onClick: () => { setActiveTab('settings'); },
-              title: 'Power values — click to edit',
+              onClick: () => setPvPopupOpen(true),
+              title: 'Power values — click to view',
               style: { gap: 5, cursor: 'pointer' },
             },
               h('span', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4a4868' } }, 'P'),
-              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 20 } }, v.symbol))
+              pv.map((v, i) => h('span', { key: i, style: { fontSize: 20 } }, v.symbol))
             );
           })()
         )
@@ -2784,6 +2954,7 @@ function RPGLife({ user, onSignOut }) {
         onOpenTutorial: () => setTutorialStep(0),
         onSetDifficulty: setDifficultyPreset,
         onSaveSoundSettings: saveSoundSettings,
+        onSaveTheme: saveTheme,
       })
       ) // close rpg-content main
       , // mobile nav inside rpg-main
@@ -2822,6 +2993,11 @@ function RPGLife({ user, onSignOut }) {
       activities: state.activities,
       onSelect: (act) => { setShowQuickLog(false); setLogModal(act); },
       onClose: () => setShowQuickLog(false),
+    }),
+    pvPopupOpen && h(PowerValuesPopup, {
+      values: (state.powerValues || []).filter(v => v && v.symbol),
+      onClose: () => setPvPopupOpen(false),
+      onEdit: () => { setPvPopupOpen(false); setActiveTab('settings'); },
     }),
     streakCalendar && h(StreakCalendarModal, {
       mode: streakCalendar,
@@ -2920,7 +3096,7 @@ const FEATURE_REGISTRY = [
     tab: 'dashboard',
     highlight: null,
     icon: 'sword', color: '#a78bfa',
-    title: 'Welcome to Adventure Log',
+    title: 'Welcome to RPGLife',
     body: 'This app turns your real life into an RPG. Every workout, study session, social call, or financial action earns XP — just like a game. You gain levels, defeat bosses, complete quests, and spend coins on real rewards. The goal: build a life you\'re proud of, one logged action at a time.',
   },
 
@@ -3501,7 +3677,7 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
     h('div', { style: styles.headerLeft },
       h('div', { style: styles.logoMark }, h(Icon, { name: 'sword', size: 20, color: '#a78bfa' })),
       h('div', null,
-        h('div', { style: styles.title }, 'Adventure log'),
+        h('div', { style: styles.title }, 'RPGLife'),
         syncStatus === 'offline'
           ? h('button', {
               className: 'rpg-btn',
@@ -3750,14 +3926,14 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
         h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, fontSize: 12, padding: '6px 10px' }, onClick: () => setTemplatePickerOpen(v => !v) },
           '📋 Use template'
         ),
-        templatePickerOpen && h('div', { style: { ...styles.questPickerDropdown, zIndex: 50 } },
-          h('div', { style: { fontSize: 11, color: '#7c7c8a', padding: '8px 12px 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Mission templates'),
-          templates.map(tmpl => h('div', { key: tmpl.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' } },
-            h('button', { className: 'rpg-btn', onClick: () => applyTemplate(tmpl), style: { flex: 1, background: 'transparent', border: 'none', textAlign: 'left', color: '#e5e7eb', fontSize: 13, cursor: 'pointer', padding: 0 } },
-              tmpl.name,
-              h('span', { style: { fontSize: 10, color: '#7c7c8a', marginLeft: 6 } }, `${tmpl.activityIds.length} activities · ${tmpl.type}`)
+        templatePickerOpen && h('div', { style: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 260, zIndex: 50, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, maxHeight: 240, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' } },
+          h('div', { style: { fontSize: 10, color: C.textLo, padding: '8px 12px 4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 } }, 'Mission templates'),
+          templates.map(tmpl => h('div', { key: tmpl.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid ' + C.borderDim } },
+            h('button', { className: 'rpg-btn', onClick: () => applyTemplate(tmpl), style: { flex: 1, background: 'transparent', border: 'none', textAlign: 'left', color: C.textHi, fontSize: 13, cursor: 'pointer', padding: 0 } },
+              h('div', { style: { fontWeight: 600 } }, tmpl.name),
+              h('div', { style: { fontSize: 10, color: C.textMid, marginTop: 2 } }, `${tmpl.activityIds.length} activities · ${tmpl.type}`)
             ),
-            h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDeleteTemplate(tmpl.id) }, h(Icon, { name: 'x', size: 11 }))
+            h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => { onDeleteTemplate(tmpl.id); if (templates.length <= 1) setTemplatePickerOpen(false); } }, h(Icon, { name: 'x', size: 11 }))
           ))
         )
       ),
@@ -5734,6 +5910,30 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
 
 // ---------- Streak calendar ----------
 
+function PowerValuesPopup({ values, onClose, onEdit }) {
+  return h(ModalShell, { title: 'Power Values', onClose, width: 380 },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+      h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 4 } },
+        'Your three highest personal values — the principles that anchor every decision.'
+      ),
+      values.map((v, i) =>
+        h('div', { key: i, style: { display: 'flex', gap: 14, alignItems: 'flex-start', padding: '12px 14px', background: C.void, borderRadius: 4, border: '1px solid ' + C.borderDim } },
+          h('div', { style: { fontSize: 32, lineHeight: 1, flexShrink: 0 } }, v.symbol),
+          h('div', { style: { flex: 1 } },
+            h('div', { style: { fontSize: 14, fontWeight: 700, color: C.textHi, marginBottom: v.desc ? 4 : 0 } }, v.name || '—'),
+            v.desc && h('div', { style: { fontSize: 12.5, color: C.textMid, lineHeight: 1.5 } }, v.desc)
+          )
+        )
+      ),
+      h('button', {
+        className: 'rpg-btn',
+        onClick: onEdit,
+        style: { ...styles.secondaryBtn, width: '100%', justifyContent: 'center', padding: '8px 0', marginTop: 4 },
+      }, h(Icon, { name: 'edit2', size: 12 }), ' Edit values')
+    )
+  );
+}
+
 function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, economy, onClose }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' | null
@@ -6099,7 +6299,7 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
   );
 }
 
-function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial, onSetDifficulty, onSaveSoundSettings }) {
+function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGate, onSaveEconomy, onSaveChallengeLibrary, onSaveSpawnChance, onSavePowerValues, onSetDailyQuestLock, onOpenTutorial, onSetDifficulty, onSaveSoundSettings, onSaveTheme }) {
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -6143,6 +6343,26 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
             h('span', { style: { fontSize: 10, color: '#4a4868', lineHeight: 1.3 } }, p.desc)
           )
         )
+      )
+    ),
+
+    // Theme selector
+    h('section', { style: { marginBottom: 24 } },
+      h(SectionLabel, { text: 'Theme' }),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 } },
+        Object.entries(THEMES).map(([id, t]) => {
+          const active = (state.theme || 'default') === id;
+          return h('button', {
+            key: id, className: 'rpg-btn',
+            onClick: () => onSaveTheme(id),
+            style: { padding: '12px 10px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: active ? 'rgba(167,139,250,0.12)' : C.raised, border: `1px solid ${active ? C.accent : C.borderDim}`, transition: 'all 0.15s' },
+          },
+            h('span', { style: { fontSize: 22 } }, t.icon),
+            h('div', { style: { fontSize: 12, fontWeight: 700, color: active ? C.accent : C.textHi } }, t.label),
+            h('div', { style: { fontSize: 10, color: C.textLo, lineHeight: 1.3, textAlign: 'center' } }, t.desc),
+            active && h('div', { style: { fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.accent, marginTop: 2 } }, 'Active')
+          );
+        })
       )
     ),
 
@@ -6429,8 +6649,8 @@ function SoundSettingsSection({ state, onSave }) {
 function PowerValuesSection({ state, onSave }) {
   const [open, setOpen] = useState(false);
   const initial = (state.powerValues && state.powerValues.length === 3)
-    ? state.powerValues
-    : [{ name: '', symbol: '' }, { name: '', symbol: '' }, { name: '', symbol: '' }];
+    ? state.powerValues.map(v => ({ name: '', symbol: '', desc: '', ...v }))
+    : [{ name: '', symbol: '', desc: '' }, { name: '', symbol: '', desc: '' }, { name: '', symbol: '', desc: '' }];
   const [values, setValues] = useState(initial);
   const [saved, setSaved] = useState(false);
 
@@ -6488,12 +6708,20 @@ function PowerValuesSection({ state, onSave }) {
             h('div', { style: { width: 46, height: 40, borderRadius: 4, background: C.panel, border: '1px solid ' + C.borderMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 } },
               v.symbol || '·'
             ),
-            h('input', {
-              value: v.name,
-              onChange: e => update(i, 'name', e.target.value),
-              style: { ...styles.input, flex: 1 },
-              placeholder: `Name (e.g. Discipline)`,
-            })
+            h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 6 } },
+              h('input', {
+                value: v.name,
+                onChange: e => update(i, 'name', e.target.value),
+                style: { ...styles.input, flex: 1 },
+                placeholder: `Name (e.g. Discipline)`,
+              }),
+              h('input', {
+                value: v.desc || '',
+                onChange: e => update(i, 'desc', e.target.value),
+                style: { ...styles.input, fontSize: 12 },
+                placeholder: `What this value means to you…`,
+              })
+            )
           ),
           h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
             EMOJI_OPTIONS.map(emoji =>
