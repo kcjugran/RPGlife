@@ -196,11 +196,39 @@ const ACHIEVEMENTS = {
 };
 
 const DEFAULT_REWARDS = [
-  { id: 'r1', name: 'Special meal', cost: 50, desc: 'Treat yourself to a meal out' },
-  { id: 'r2', name: 'Day off', cost: 200, desc: 'A guilt-free rest day' },
-  { id: 'r3', name: 'Hobby purchase', cost: 100, desc: 'Buy something for a hobby' },
-  { id: 'r4', name: 'Entertainment', cost: 60, desc: 'Movie, game, or show night' },
+  { id: 'r1', name: 'Special meal',   cost: 50,  desc: 'Treat yourself to a meal out',  requirements: [] },
+  { id: 'r2', name: 'Day off',        cost: 200, desc: 'A guilt-free rest day',          requirements: [] },
+  { id: 'r3', name: 'Hobby purchase', cost: 100, desc: 'Buy something for a hobby',      requirements: [] },
+  { id: 'r4', name: 'Entertainment',  cost: 60,  desc: 'Movie, game, or show night',     requirements: [] },
 ];
+
+// Evaluate whether a reward's requirements are all met.
+// Requirements can reference activities, streaks, or quests that may have
+// been deleted — those are simply treated as fulfilled (removed from the check).
+function canAffordReward(reward, state) {
+  const gold = state.gold || 0;
+  const reqs = reward.requirements || [];
+  const goldCost = reward.cost || 0;
+  if (gold < goldCost) return false;
+  for (const req of reqs) {
+    if (req.type === 'activity') {
+      // Count how many times this activity has been logged (by name, since id could be deleted)
+      const activityExists = (state.activities || []).some(a => a.id === req.activityId);
+      if (!activityExists) continue; // deleted — skip this requirement
+      const count = (state.activityLog || []).filter(l => l.activityName === req.activityName).length;
+      if (count < req.count) return false;
+    } else if (req.type === 'streak') {
+      if ((state.consistencyStreak || 0) < req.days) return false;
+    } else if (req.type === 'quest') {
+      const questExists = (state.quests || []).some(q => q.id === req.questId) ||
+                          (state.archivedQuests || []).some(q => q.id === req.questId);
+      if (!questExists) continue; // deleted — skip
+      const completed = (state.archivedQuests || []).some(q => q.id === req.questId);
+      if (!completed) return false;
+    }
+  }
+  return true;
+}
 
 // Title registry — cosmetic titles unlocked by reaching certain achievements.
 // One title may be equipped at a time; displayed next to player name in CharacterView.
@@ -1929,7 +1957,7 @@ function RPGLife({ user, onSignOut }) {
 
   function buyTicket(reward) {
     setState(prev => {
-      if (prev.gold < reward.cost) return prev;
+      if (!canAffordReward(reward, prev)) return prev;
       const ticket = {
         id: uid('tkt'),
         rewardId: reward.id,
@@ -1941,7 +1969,7 @@ function RPGLife({ user, onSignOut }) {
       };
       return {
         ...prev,
-        gold: prev.gold - reward.cost,
+        gold: prev.gold - (reward.cost || 0),
         tickets: [...(prev.tickets || []), ticket],
       };
     });
@@ -2083,6 +2111,19 @@ function RPGLife({ user, onSignOut }) {
     });
     setBossEditor(null);
     showToast('Boss challenges saved');
+  }
+
+  function saveMissionNote(noteText) {
+    setState(prev => {
+      const plan = (prev.dailyQuestPlans && prev.dailyQuestPlans[today]) || { activityIds: [], completedIds: [], locked: false };
+      return {
+        ...prev,
+        dailyQuestPlans: {
+          ...(prev.dailyQuestPlans || {}),
+          [today]: { ...plan, note: noteText },
+        },
+      };
+    });
   }
 
   function saveEconomy(newEconomy) {
@@ -2705,6 +2746,7 @@ function RPGLife({ user, onSignOut }) {
         onToggleQuestComplete: toggleQuestActivityComplete,
         onSaveTemplate: saveMissionTemplate,
         onDeleteTemplate: deleteMissionTemplate,
+        onSaveMissionNote: saveMissionNote,
         dismissedReminders,
         onDismissReminder: (domain) => setDismissedReminders(d => [...d, domain]),
       }),
@@ -2771,7 +2813,8 @@ function RPGLife({ user, onSignOut }) {
     h(FAB, { onClick: () => setShowQuickLog(true) }),
     buyConfirm && h(BuyConfirmModal, {
       reward: buyConfirm,
-      canAfford: state.gold >= buyConfirm.cost,
+      canAfford: canAffordReward(buyConfirm, state),
+      state,
       onConfirm: () => { buyTicket(buyConfirm); setBuyConfirm(null); },
       onCancel: () => setBuyConfirm(null),
     }),
@@ -2784,6 +2827,7 @@ function RPGLife({ user, onSignOut }) {
       mode: streakCalendar,
       dailyLogs: state.dailyLogs,
       activityLog: state.activityLog || [],
+      dailyQuestPlans: state.dailyQuestPlans || {},
       economy: state.economy,
       onClose: () => setStreakCalendar(null),
     }),
@@ -2818,6 +2862,7 @@ function RPGLife({ user, onSignOut }) {
     }),
     showRewardForm && h(RewardFormModal, {
       reward: typeof showRewardForm === 'object' ? showRewardForm : null,
+      state,
       onClose: () => setShowRewardForm(false),
       onSave: saveReward,
     }),
@@ -3613,14 +3658,16 @@ function ModeSwitchConfirmModal({ targetMode, onConfirm, onCancel }) {
 
 // ---------- Daily Quest Panel ----------
 
-function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSaveTemplate, onDeleteTemplate }) {
+function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSaveTemplate, onDeleteTemplate, onSaveNote }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState('');
   const [saveTemplateType, setSaveTemplateType] = useState('routine');
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
 
   const plan = (state.dailyQuestPlans && state.dailyQuestPlans[today]) || { activityIds: [], completedIds: [], locked: false };
+  const noteText = plan.note || '';
   const templates = state.missionTemplates || [];
   const allActivities = state.activities || [];
 
@@ -3664,14 +3711,37 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
           total === 0 ? 'Add activities to build today\'s mission' : `${doneCount} of ${total} complete`
         )
       ),
-      h('div', { style: { textAlign: 'right' } },
-        h('div', { style: { fontSize: 22, fontWeight: 800, color: isComplete ? '#fbbf24' : '#a78bfa' } }, `${pct}%`),
-        isComplete && h('div', { style: { fontSize: 10.5, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Pending validation')
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        // Notes button — 📝 with dot indicator if note exists
+        h('button', {
+          className: 'rpg-btn',
+          onClick: () => setNoteOpen(o => !o),
+          title: 'Mission notes',
+          style: { ...styles.iconBtn, position: 'relative', background: noteOpen ? 'rgba(167,139,250,0.15)' : undefined, borderColor: noteOpen ? '#a78bfa' : undefined },
+        },
+          h(Icon, { name: 'edit2', size: 13, color: noteOpen ? '#a78bfa' : '#9896b0' }),
+          noteText && h('span', { style: { position: 'absolute', top: -3, right: -3, width: 7, height: 7, borderRadius: '50%', background: '#a78bfa' } })
+        ),
+        h('div', { style: { textAlign: 'right' } },
+          h('div', { style: { fontSize: 22, fontWeight: 800, color: isComplete ? '#fbbf24' : '#a78bfa' } }, `${pct}%`),
+          isComplete && h('div', { style: { fontSize: 10.5, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: 0.5 } }, 'Pending validation')
+        )
       )
     ),
 
-    h('div', { style: { ...styles.meterTrack, height: 10, marginBottom: 16 } },
+    h('div', { style: { ...styles.meterTrack, height: 10, marginBottom: noteOpen ? 12 : 16 } },
       h('div', { style: { ...styles.meterFill, width: `${pct}%`, background: isComplete ? '#fbbf24' : '#a78bfa' } })
+    ),
+
+    // Inline note editor — stays open until dismissed
+    noteOpen && h('div', { style: { marginBottom: 14 } },
+      h('textarea', {
+        value: noteText,
+        onChange: e => onSaveNote && onSaveNote(e.target.value),
+        placeholder: 'Notes for today\'s mission — intentions, how you feel, what you want to focus on…',
+        style: { ...styles.input, minHeight: 72, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 },
+        autoFocus: true,
+      })
     ),
 
     // Template actions row
@@ -3752,7 +3822,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
   );
 }
 
-function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate, dismissedReminders, onDismissReminder }) {
+function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate, onSaveMissionNote, dismissedReminders, onDismissReminder }) {
   const dailyGoal = eco({ economy }, 'dailyGoal');
   const consistencyMin = eco({ economy }, 'consistencyMin');
   const dayMode = state.dayMode || 'standard';
@@ -3888,6 +3958,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
             onToggleComplete: onToggleQuestComplete,
             onSaveTemplate,
             onDeleteTemplate,
+            onSaveNote: onSaveMissionNote,
           })
         : h('div', { style: styles.bigMetersGrid },
         DOMAIN_KEYS.map(k => {
@@ -4768,26 +4839,51 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
       state.rewards.map(r => {
         const estimate = haveEstimate ? formatEstimate(Math.max(0, r.cost - state.gold), avgPerDay) : null;
-        const canAfford = state.gold >= r.cost;
-        return h('div', { key: r.id, style: styles.rewardCard },
-          h('div', { style: { flex: 1, minWidth: 0 } },
-            h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, r.name),
-            r.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, r.desc),
-            estimate && !canAfford && h('div', { style: { fontSize: 11.5, color: '#a78bfa', marginTop: 4 } }, `Est. ${estimate}`),
-            canAfford && h('div', { style: { fontSize: 11.5, color: '#86efac', marginTop: 4 } }, '✓ Affordable')
-          ),
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-            h('span', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 } },
-              h(Icon, { name: 'coins', size: 13 }), ` ${r.cost}`
+        const canAfford = canAffordReward(r, state);
+        const reqs = r.requirements || [];
+        const hasReqs = reqs.length > 0 || (r.cost || 0) > 0;
+        return h('div', { key: r.id, style: { ...styles.rewardCard, flexDirection: 'column', alignItems: 'stretch', gap: 10 } },
+          h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 12 } },
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, r.name),
+              r.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, r.desc),
+              canAfford
+                ? h('div', { style: { fontSize: 11.5, color: '#5de8a0', marginTop: 4 } }, '✓ All requirements met')
+                : estimate && h('div', { style: { fontSize: 11.5, color: '#a78bfa', marginTop: 4 } }, `Est. ${estimate}`)
             ),
-            h('button', {
-              className: 'rpg-btn',
-              style: { ...styles.primaryBtn, opacity: !canAfford ? 0.4 : 1, cursor: !canAfford ? 'not-allowed' : 'pointer' },
-              disabled: !canAfford,
-              onClick: () => onBuy(r),
-            }, 'Buy ticket'),
-            h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(r) }, h(Icon, { name: 'edit2', size: 12 })),
-            h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(r.id) }, h(Icon, { name: 'trash2', size: 12 }))
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 } },
+              h('button', {
+                className: 'rpg-btn',
+                style: { ...styles.primaryBtn, opacity: !canAfford ? 0.4 : 1, cursor: !canAfford ? 'not-allowed' : 'pointer' },
+                disabled: !canAfford,
+                onClick: () => onBuy(r),
+              }, 'Buy ticket'),
+              h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => onEdit(r) }, h(Icon, { name: 'edit2', size: 12 })),
+              h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDelete(r.id) }, h(Icon, { name: 'trash2', size: 12 }))
+            )
+          ),
+          // Requirements breakdown chips
+          hasReqs && h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+            (r.cost || 0) > 0 && h('div', { style: { fontSize: 11, padding: '3px 8px', borderRadius: 3, background: (state.gold || 0) >= (r.cost || 0) ? 'rgba(93,232,160,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${(state.gold || 0) >= (r.cost || 0) ? 'rgba(93,232,160,0.3)' : 'rgba(255,255,255,0.08)'}`, color: (state.gold || 0) >= (r.cost || 0) ? '#5de8a0' : '#9896b0' } },
+              `🪙 ${r.cost} gold`
+            ),
+            reqs.map((req, i) => {
+              let met = false, label = '';
+              if (req.type === 'activity') {
+                const actExists = (state.activities || []).some(a => a.id === req.activityId);
+                if (!actExists) { met = true; label = `${req.activityName} (removed)`; }
+                else { const cnt = (state.activityLog || []).filter(l => l.activityName === req.activityName).length; met = cnt >= req.count; label = `🏃 ${req.count}× ${req.activityName}`; }
+              } else if (req.type === 'streak') {
+                met = (state.consistencyStreak || 0) >= req.days; label = `🔥 ${req.days}-day streak`;
+              } else if (req.type === 'quest') {
+                const qExists = (state.quests || []).some(q => q.id === req.questId) || (state.archivedQuests || []).some(q => q.id === req.questId);
+                if (!qExists) { met = true; label = `${req.questName} (removed)`; }
+                else { met = (state.archivedQuests || []).some(q => q.id === req.questId); label = `🎯 ${req.questName}`; }
+              }
+              return h('div', { key: i, style: { fontSize: 11, padding: '3px 8px', borderRadius: 3, background: met ? 'rgba(93,232,160,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${met ? 'rgba(93,232,160,0.3)' : 'rgba(255,255,255,0.08)'}`, color: met ? '#5de8a0' : '#9896b0' } },
+                `${label}${met ? ' ✓' : ''}`
+              );
+            })
           )
         );
       })
@@ -5145,30 +5241,141 @@ function QuestFormModal({ onClose, onSave, existingQuest }) {
   );
 }
 
-function RewardFormModal({ reward, onClose, onSave }) {
+function RewardFormModal({ reward, state, onClose, onSave }) {
   const [name, setName] = useState(reward ? reward.name : '');
-  const [cost, setCost] = useState(reward ? reward.cost : 50);
-  const [desc, setDesc] = useState(reward ? reward.desc : '');
+  const [cost, setCost] = useState(reward ? (reward.cost || 0) : 50);
+  const [desc, setDesc] = useState(reward ? (reward.desc || '') : '');
+  const [reqs, setReqs] = useState(reward ? (reward.requirements || []) : []);
+  const [addingReq, setAddingReq] = useState(null); // 'activity' | 'streak' | 'quest' | null
+
+  // For activity picker
+  const [reqActivity, setReqActivity] = useState('');
+  const [reqActivityCount, setReqActivityCount] = useState(10);
+  // For streak picker
+  const [reqStreakDays, setReqStreakDays] = useState(7);
+  // For quest picker
+  const [reqQuest, setReqQuest] = useState('');
+
+  const activities = state ? (state.activities || []) : [];
+  const quests = [
+    ...(state ? (state.quests || []) : []),
+    ...(state ? (state.archivedQuests || []) : []),
+  ];
+
+  function addReq() {
+    if (addingReq === 'activity') {
+      const act = activities.find(a => a.id === reqActivity);
+      if (!act) return;
+      setReqs(r => [...r, { type: 'activity', activityId: act.id, activityName: act.name, count: reqActivityCount }]);
+    } else if (addingReq === 'streak') {
+      setReqs(r => [...r, { type: 'streak', days: reqStreakDays }]);
+    } else if (addingReq === 'quest') {
+      const q = quests.find(q => q.id === reqQuest);
+      if (!q) return;
+      setReqs(r => [...r, { type: 'quest', questId: q.id, questName: q.name }]);
+    }
+    setAddingReq(null);
+    setReqActivity(''); setReqQuest('');
+  }
+
+  function removeReq(i) { setReqs(r => r.filter((_, idx) => idx !== i)); }
 
   function handleSave() {
     if (!name.trim()) return;
-    onSave({ id: reward ? reward.id : undefined, name: name.trim(), cost, desc: desc.trim() });
+    onSave({ id: reward ? reward.id : undefined, name: name.trim(), cost, desc: desc.trim(), requirements: reqs });
   }
 
-  return h(ModalShell, { title: reward ? 'Edit reward' : 'New reward', onClose },
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+  const REQ_LABELS = {
+    activity: '🏃 Activity count',
+    streak: '🔥 Streak days',
+    quest: '🎯 Quest completed',
+  };
+
+  return h(ModalShell, { title: reward ? 'Edit reward' : 'New reward', onClose, width: 500 },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
       h('div', null,
         h('label', { style: styles.label }, 'Reward name'),
-        h('input', { value: name, onChange: e => setName(e.target.value), style: styles.input, placeholder: 'e.g. Movie night' })
-      ),
-      h('div', null,
-        h('label', { style: styles.label }, 'Gold cost'),
-        h('input', { type: 'number', value: cost, min: 1, onChange: e => setCost(parseInt(e.target.value)||0), style: styles.input })
+        h('input', { value: name, onChange: e => setName(e.target.value), style: styles.input, placeholder: 'e.g. New TV' })
       ),
       h('div', null,
         h('label', { style: styles.label }, 'Description (optional)'),
-        h('textarea', { value: desc, onChange: e => setDesc(e.target.value), style: { ...styles.input, minHeight: 50 } })
+        h('textarea', { value: desc, onChange: e => setDesc(e.target.value), style: { ...styles.input, minHeight: 48 }, placeholder: 'What does this reward mean to you?' })
       ),
+
+      // Requirements section
+      h('div', null,
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+          h('label', { style: { ...styles.label, marginBottom: 0 } }, 'Requirements to unlock'),
+          h('div', { style: { fontSize: 11, color: '#4a4868' } }, 'Any combination — all must be met')
+        ),
+
+        // Gold cost (always shown, can be 0)
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 } },
+          h('span', { style: { fontSize: 13 } }, '🪙'),
+          h('span', { style: { fontSize: 12, color: '#9896b0', flex: 1 } }, 'Gold coins'),
+          h('input', { type: 'number', min: 0, value: cost, onChange: e => setCost(parseInt(e.target.value) || 0), style: { ...styles.input, width: 80, textAlign: 'right', padding: '4px 8px', fontSize: 13 } })
+        ),
+
+        // Existing additional requirements
+        reqs.map((req, i) =>
+          h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 } },
+            h('span', { style: { fontSize: 12, flex: 1, color: '#9896b0' } },
+              req.type === 'activity' ? `🏃 ${req.count}× ${req.activityName}` :
+              req.type === 'streak'   ? `🔥 ${req.days}-day streak` :
+              req.type === 'quest'    ? `🎯 Complete: ${req.questName}` : ''
+            ),
+            h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, width: 24, height: 24 }, onClick: () => removeReq(i) }, h(Icon, { name: 'x', size: 10 }))
+          )
+        ),
+
+        // Add requirement buttons
+        !addingReq && h('div', { style: { display: 'flex', gap: 6, marginTop: 6 } },
+          ['activity', 'streak', 'quest'].map(type =>
+            h('button', { key: type, className: 'rpg-btn', onClick: () => setAddingReq(type), style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', fontSize: 11, padding: '6px 0' } },
+              `+ ${REQ_LABELS[type]}`
+            )
+          )
+        ),
+
+        // Inline requirement builder
+        addingReq === 'activity' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(167,139,250,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
+          h('select', { value: reqActivity, onChange: e => setReqActivity(e.target.value), style: styles.input },
+            h('option', { value: '' }, '— Choose activity —'),
+            activities.map(a => h('option', { key: a.id, value: a.id }, a.name))
+          ),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', { style: { fontSize: 12, color: '#9896b0' } }, 'Times logged:'),
+            h('input', { type: 'number', min: 1, value: reqActivityCount, onChange: e => setReqActivityCount(parseInt(e.target.value) || 1), style: { ...styles.input, width: 80 } })
+          ),
+          h('div', { style: { display: 'flex', gap: 6 } },
+            h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center' }, onClick: () => setAddingReq(null) }, 'Cancel'),
+            h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center' }, onClick: addReq, disabled: !reqActivity }, 'Add')
+          )
+        ),
+
+        addingReq === 'streak' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(251,146,60,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', { style: { fontSize: 12, color: '#9896b0' } }, 'Consistency streak (days):'),
+            h('input', { type: 'number', min: 1, value: reqStreakDays, onChange: e => setReqStreakDays(parseInt(e.target.value) || 1), style: { ...styles.input, width: 80 } })
+          ),
+          h('div', { style: { display: 'flex', gap: 6 } },
+            h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center' }, onClick: () => setAddingReq(null) }, 'Cancel'),
+            h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center' }, onClick: addReq }, 'Add')
+          )
+        ),
+
+        addingReq === 'quest' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(129,140,248,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
+          h('select', { value: reqQuest, onChange: e => setReqQuest(e.target.value), style: styles.input },
+            h('option', { value: '' }, '— Choose quest —'),
+            quests.map(q => h('option', { key: q.id, value: q.id }, q.name + (q.archivedAt ? ' ✓' : '')))
+          ),
+          h('div', { style: { display: 'flex', gap: 6 } },
+            h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center' }, onClick: () => setAddingReq(null) }, 'Cancel'),
+            h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center' }, onClick: addReq, disabled: !reqQuest }, 'Add')
+          )
+        )
+      ),
+
       h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave }, h(Icon, { name: 'check', size: 14 }), ' Save reward')
     )
   );
@@ -5527,7 +5734,7 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
 
 // ---------- Streak calendar ----------
 
-function StreakCalendarModal({ mode, dailyLogs, activityLog, economy, onClose }) {
+function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, economy, onClose }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' | null
   const now = new Date();
@@ -5624,6 +5831,16 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, economy, onClose })
       ),
       selectedLog
         ? h('div', null,
+            // Mission note for this day (if one was written)
+            (() => {
+              const plan = dailyQuestPlans && dailyQuestPlans[selectedDay];
+              const note = plan && plan.note;
+              if (!note) return null;
+              return h('div', { style: { marginBottom: 12, padding: '8px 10px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 4 } },
+                h('div', { style: { fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#a78bfa', marginBottom: 4 } }, '📝 Mission note'),
+                h('div', { style: { fontSize: 12, color: '#9896b0', lineHeight: 1.5, whiteSpace: 'pre-wrap' } }, note)
+              );
+            })(),
             // Domain XP breakdown
             h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: selectedActivities.length > 0 ? 12 : 0 } },
               DOMAIN_KEYS.map(k => {
@@ -5814,8 +6031,31 @@ function BossEditorModal({ domain, level, existing, onSave, onClose }) {
 
 // ---------- Settings view ----------
 
-function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
-  return h(ModalShell, { title: 'Buy ticket?', onClose: onCancel, width: 380 },
+function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
+  const reqs = reward.requirements || [];
+
+  function reqStatus(req) {
+    if (!state) return { met: false, label: '…' };
+    if (req.type === 'activity') {
+      const activityExists = (state.activities || []).some(a => a.id === req.activityId);
+      if (!activityExists) return { met: true, label: `${req.activityName} (removed from library)`, skipped: true };
+      const count = (state.activityLog || []).filter(l => l.activityName === req.activityName).length;
+      return { met: count >= req.count, label: `🏃 ${req.activityName}: ${count} / ${req.count} times` };
+    }
+    if (req.type === 'streak') {
+      const current = state.consistencyStreak || 0;
+      return { met: current >= req.days, label: `🔥 Streak: ${current} / ${req.days} days` };
+    }
+    if (req.type === 'quest') {
+      const questExists = (state.quests || []).some(q => q.id === req.questId) || (state.archivedQuests || []).some(q => q.id === req.questId);
+      if (!questExists) return { met: true, label: `${req.questName} (removed)`, skipped: true };
+      const completed = (state.archivedQuests || []).some(q => q.id === req.questId);
+      return { met: completed, label: `🎯 ${req.questName}: ${completed ? 'completed ✓' : 'not yet done'}` };
+    }
+    return { met: true, label: '' };
+  }
+
+  return h(ModalShell, { title: 'Buy ticket?', onClose: onCancel, width: 420 },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 } },
       h('div', { style: { ...styles.bossIcon, background: 'rgba(167,139,250,0.15)', borderColor: 'rgba(167,139,250,0.35)', width: 40, height: 40 } }, h(Icon, { name: 'gift', size: 18, color: '#a78bfa' })),
       h('div', { style: { flex: 1, minWidth: 0 } },
@@ -5823,13 +6063,29 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
         reward.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, reward.desc)
       )
     ),
-    h('div', { style: { fontSize: 13, color: '#d1d5db', lineHeight: 1.6, marginBottom: 14 } },
-      `Buy a ticket for `, h('span', { style: { fontWeight: 700, color: '#fbbf24' } }, `${reward.cost} gold`),
-      `? You can use the ticket whenever you're ready, or sell it later for `, h('span', { style: { fontWeight: 700, color: '#fbbf24' } }, `${Math.floor(reward.cost * SELL_REFUND_RATIO)} gold`),
-      ` (50% refund — pick wisely).`
+
+    // Requirements breakdown
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 } },
+      // Gold cost row
+      (reward.cost || 0) > 0 && h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 4 } },
+        h('span', { style: { fontSize: 12, color: '#9ca3af' } }, `🪙 ${reward.cost} gold`),
+        h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.gold || 0) >= (reward.cost || 0) ? '#5de8a0' : '#e05c5c' } },
+          `${state.gold || 0} available ${(state.gold || 0) >= (reward.cost || 0) ? '✓' : '✗'}`
+        )
+      ),
+      // Other requirements
+      reqs.map((req, i) => {
+        const { met, label, skipped } = reqStatus(req);
+        return h('div', { key: i, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 4, opacity: skipped ? 0.5 : 1 } },
+          h('span', { style: { fontSize: 12, color: '#9ca3af' } }, label),
+          h('span', { style: { fontSize: 13, color: met ? '#5de8a0' : '#e05c5c' } }, met ? '✓' : '✗')
+        );
+      }),
+      reqs.length === 0 && (reward.cost || 0) === 0 && h('div', { style: { fontSize: 12, color: '#4a4868', padding: '6px 0' } }, 'No requirements — free to claim')
     ),
-    !canAfford && h('div', { style: { fontSize: 12, color: '#f09595', background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 12 } },
-      'Not enough gold yet.'
+
+    !canAfford && h('div', { style: { fontSize: 12, color: '#f09595', background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 4, padding: '8px 12px', marginBottom: 12 } },
+      'Requirements not yet met.'
     ),
     h('div', { style: { display: 'flex', gap: 8 } },
       h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0' }, onClick: onCancel }, 'Cancel'),
@@ -5838,7 +6094,7 @@ function BuyConfirmModal({ reward, canAfford, onConfirm, onCancel }) {
         disabled: !canAfford,
         style: { ...styles.primaryBtn, flex: 1, justifyContent: 'center', padding: '10px 0', opacity: canAfford ? 1 : 0.4, cursor: canAfford ? 'pointer' : 'not-allowed' },
         onClick: () => canAfford && onConfirm(),
-      }, h(Icon, { name: 'check', size: 14 }), ' Confirm buy')
+      }, h(Icon, { name: 'check', size: 14 }), ' Confirm')
     )
   );
 }
