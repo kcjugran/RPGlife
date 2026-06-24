@@ -606,159 +606,628 @@ const SoundEngine = (() => {
 // ==========================================================
 
 const THEMES = {
+
+  // ══════════════════════════════════════════════════════════════
+  // DEFAULT — Obsidian & Amethyst
+  // Deep space black, violet-purple accent, burnished gold.
+  // Reference: Hades II UI meets a premium watch brand.
+  // ══════════════════════════════════════════════════════════════
   default: {
-    label: 'Dark RPG',
-    icon: '⚔️',
-    desc: 'The original — deep void black, purple accents, gold highlights',
-    fonts: null,
-    css: '', // base is the default — no override needed
-  },
-  girly: {
-    label: 'Girly',
-    icon: '🌸',
-    desc: 'Soft pinks, warm rose tones, rounded feel',
-    fonts: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap',
+    label: 'Obsidian',
+    icon: '💎',
+    desc: 'Deep void black, amethyst accents, burnished gold',
+    fonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap',
     css: `
       :root {
-        --bg-void:    #1a0f14;
-        --bg-panel:   #251420;
-        --bg-raised:  #2e1a26;
-        --bg-hover:   #3a2030;
-        --border-dim: rgba(255,180,200,0.09);
-        --border-mid: rgba(255,180,200,0.18);
-        --border-glow:rgba(255,130,170,0.45);
-        --gold:       #f48fb1;
-        --gold-dim:   rgba(244,143,177,0.15);
-        --gold-glow:  rgba(244,143,177,0.3);
-        --accent:     #f06292;
-        --accent-dim: rgba(240,98,146,0.14);
-        --accent-glow:rgba(240,98,146,0.35);
-        --text-hi:    #fce4ec;
-        --text-mid:   #c2849a;
-        --text-lo:    #7d4e60;
-        --danger:     #e57373;
-        --success:    #80cbc4;
+        --bg-void:     #06060d;
+        --bg-panel:    #0b0b16;
+        --bg-raised:   #10101e;
+        --bg-hover:    #181828;
+        --border-dim:  rgba(167,139,250,0.07);
+        --border-mid:  rgba(167,139,250,0.16);
+        --border-glow: rgba(167,139,250,0.5);
+        --gold:        #d4a843;
+        --gold-dim:    rgba(212,168,67,0.12);
+        --gold-glow:   rgba(212,168,67,0.35);
+        --accent:      #a78bfa;
+        --accent-dim:  rgba(167,139,250,0.11);
+        --accent-glow: rgba(167,139,250,0.32);
+        --text-hi:     #f0eeff;
+        --text-mid:    #8b88aa;
+        --text-lo:     #3d3b55;
+        --danger:      #e05c5c;
+        --success:     #4ade80;
       }
-      html, body, input, select, textarea, button { font-family: 'DM Sans', sans-serif !important; }
-      .rpg-nav-item, .rpg-mobile-nav-item { border-radius: 12px !important; }
-      .rpg-card, .rpg-modal, .rpg-sidebar { border-radius: 12px !important; }
-      .rpg-nav-item::before { background: var(--accent) !important; box-shadow: 0 0 8px var(--accent-glow) !important; }
-      .rpg-sidebar { background: linear-gradient(180deg, #1e0e18, #1a0f14) !important; }
-      .rpg-topbar { background: rgba(26,15,20,0.9) !important; }
+
+      html, body { background: var(--bg-void); }
+
+      /* Sidebar — subtle left-edge gradient */
+      .rpg-sidebar {
+        background: linear-gradient(180deg, #0e0e1c 0%, #080814 100%) !important;
+        border-right: 1px solid rgba(167,139,250,0.08) !important;
+      }
+
+      /* Active nav — filled bar + subtle bg wash */
+      .rpg-nav-item.active {
+        background: linear-gradient(90deg, rgba(167,139,250,0.12) 0%, transparent 100%) !important;
+      }
+      .rpg-nav-item.active::before { height: 26px !important; box-shadow: 0 0 12px rgba(167,139,250,0.6) !important; }
+      .rpg-nav-item:hover { background: rgba(167,139,250,0.06) !important; }
+
+      /* Topbar — thinner, nearly invisible */
+      .rpg-topbar {
+        background: rgba(6,6,13,0.92) !important;
+        border-bottom: 1px solid rgba(167,139,250,0.06) !important;
+        height: 56px !important;
+      }
+
+      /* HUD chips — jewel-like */
+      .rpg-hud-chip {
+        background: rgba(167,139,250,0.05) !important;
+        border: 1px solid rgba(167,139,250,0.12) !important;
+        border-radius: 6px !important;
+      }
+      .rpg-hud-chip:hover { background: rgba(167,139,250,0.1) !important; }
+
+      /* FAB — glowing amethyst */
+      .rpg-fab {
+        background: linear-gradient(135deg, #b29afa, #7c5ff5) !important;
+        box-shadow: 0 4px 24px rgba(167,139,250,0.45), 0 0 0 1px rgba(167,139,250,0.3) !important;
+        border-radius: 14px !important;
+      }
+      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(167,139,250,0.6), 0 0 0 1px rgba(167,139,250,0.5) !important; }
+
+      /* Cards */
+      .rpg-card {
+        background: linear-gradient(145deg, #111120, #0c0c1a) !important;
+        border: 1px solid rgba(167,139,250,0.08) !important;
+        border-radius: 8px !important;
+      }
+      .rpg-card:hover { border-color: rgba(167,139,250,0.18) !important; }
+
+      /* Toast */
+      .rpg-toast {
+        border-left: 3px solid #a78bfa !important;
+        background: #10101e !important;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(167,139,250,0.1) !important;
+      }
+
+      /* Modals */
+      .rpg-modal-overlay { background: rgba(3,3,8,0.92) !important; }
+
+      /* Primary button glow */
+      .rpg-primary-btn:hover { box-shadow: 0 0 20px rgba(167,139,250,0.4) !important; }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.2) !important; border-radius: 3px !important; }
     `,
   },
-  minimal: {
-    label: 'Minimal',
-    icon: '○',
-    desc: 'Clean off-white, almost no colour, extreme clarity',
-    fonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
+
+  // ══════════════════════════════════════════════════════════════
+  // EMBER — Onyx & Crimson
+  // Jet black, blood-red accent, molten gold.
+  // Reference: Dark Souls III menu × Diablo IV.
+  // ══════════════════════════════════════════════════════════════
+  ember: {
+    label: 'Ember',
+    icon: '🔥',
+    desc: 'Onyx black, crimson fire, molten gold — warrior aesthetic',
+    fonts: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap',
     css: `
       :root {
-        --bg-void:    #f5f4f0;
-        --bg-panel:   #eeede8;
-        --bg-raised:  #ffffff;
-        --bg-hover:   #f0efe9;
-        --border-dim: rgba(0,0,0,0.07);
-        --border-mid: rgba(0,0,0,0.14);
-        --border-glow:rgba(0,0,0,0.25);
-        --gold:       #4a4a4a;
-        --gold-dim:   rgba(0,0,0,0.06);
-        --gold-glow:  rgba(0,0,0,0.15);
-        --accent:     #1a1a1a;
-        --accent-dim: rgba(0,0,0,0.07);
-        --accent-glow:rgba(0,0,0,0.15);
-        --text-hi:    #111111;
-        --text-mid:   #555550;
-        --text-lo:    #aaa9a0;
-        --danger:     #c0392b;
-        --success:    #27ae60;
+        --bg-void:     #080608;
+        --bg-panel:    #0f0a0a;
+        --bg-raised:   #160e0e;
+        --bg-hover:    #1e1212;
+        --border-dim:  rgba(200,60,40,0.08);
+        --border-mid:  rgba(200,60,40,0.2);
+        --border-glow: rgba(220,80,50,0.55);
+        --gold:        #e8a430;
+        --gold-dim:    rgba(232,164,48,0.12);
+        --gold-glow:   rgba(232,164,48,0.4);
+        --accent:      #d94f35;
+        --accent-dim:  rgba(217,79,53,0.12);
+        --accent-glow: rgba(217,79,53,0.35);
+        --text-hi:     #f5ede0;
+        --text-mid:    #957060;
+        --text-lo:     #4a3030;
+        --danger:      #e05c5c;
+        --success:     #5dba80;
       }
-      html, body { background: var(--bg-void) !important; }
-      html, body, input, select, textarea, button { font-family: 'Inter', sans-serif !important; font-weight: 400 !important; }
+
+      html, body, input, select, textarea, button { font-family: 'Inter', sans-serif !important; }
+      .rpg-sidebar-logo-title, .rpg-topbar-title { font-family: 'Cinzel', serif !important; letter-spacing: 3px !important; }
+
+      html, body { background: var(--bg-void); }
+
+      /* Sidebar — dark ember gradient with subtle left edge */
+      .rpg-sidebar {
+        background: linear-gradient(180deg, #120a0a 0%, #080608 100%) !important;
+        border-right: 1px solid rgba(200,60,40,0.1) !important;
+      }
+
+      /* Nav active — blood orange bar */
+      .rpg-nav-item.active {
+        background: linear-gradient(90deg, rgba(217,79,53,0.14) 0%, transparent 100%) !important;
+        color: #f5ede0 !important;
+      }
+      .rpg-nav-item::before { background: #d94f35 !important; box-shadow: 0 0 10px rgba(217,79,53,0.7) !important; }
+      .rpg-nav-item:hover { background: rgba(200,60,40,0.07) !important; }
+
+      /* Logo title — cinzel gives it gravitas */
+      .rpg-sidebar-logo-title { color: #e8a430 !important; font-size: 13px !important; }
+      .rpg-sidebar-logo-sub { color: rgba(200,80,60,0.5) !important; }
+
+      /* Topbar */
+      .rpg-topbar {
+        background: rgba(8,6,8,0.95) !important;
+        border-bottom: 1px solid rgba(200,60,40,0.07) !important;
+        height: 56px !important;
+      }
+      .rpg-topbar-title { font-family: 'Cinzel', serif !important; letter-spacing: 2px !important; color: rgba(200,120,80,0.6) !important; }
+
+      /* HUD chips */
+      .rpg-hud-chip {
+        background: rgba(217,79,53,0.06) !important;
+        border: 1px solid rgba(200,60,40,0.15) !important;
+        border-radius: 5px !important;
+      }
+      .rpg-hud-chip.gold-chip { color: #e8a430 !important; }
+      .rpg-hud-chip.streak-chip { color: #e87040 !important; }
+
+      /* FAB — molten */
+      .rpg-fab {
+        background: linear-gradient(135deg, #e05030, #b02810) !important;
+        box-shadow: 0 4px 24px rgba(217,79,53,0.5), 0 0 0 1px rgba(217,79,53,0.25) !important;
+        border-radius: 12px !important;
+      }
+      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(217,79,53,0.65) !important; }
+
+      /* Cards */
+      .rpg-card {
+        background: linear-gradient(145deg, #180d0d, #110808) !important;
+        border: 1px solid rgba(200,60,40,0.09) !important;
+        border-radius: 6px !important;
+      }
+      .rpg-card:hover { border-color: rgba(200,60,40,0.22) !important; }
+
+      /* Toast */
+      .rpg-toast {
+        border-left: 3px solid #d94f35 !important;
+        background: #160e0e !important;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.8) !important;
+      }
+
+      /* Scanlines — slightly redder tint */
+      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(30,0,0,0.04) 2px,rgba(30,0,0,0.04) 4px) !important; }
+
+      /* Primary button */
+      .rpg-primary-btn { border-color: #d94f35 !important; color: #d94f35 !important; background: rgba(217,79,53,0.1) !important; }
+      .rpg-primary-btn:hover { box-shadow: 0 0 20px rgba(217,79,53,0.4) !important; }
+
+      ::-webkit-scrollbar-thumb { background: rgba(200,60,40,0.25) !important; }
+    `,
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // GILDED — Ivory & 24K Gold
+  // Near-white ivory surfaces, warm blacks, pure liquid gold.
+  // Reference: a Rolex catalogue × Apple Vision Pro UI.
+  // ══════════════════════════════════════════════════════════════
+  gilded: {
+    label: 'Gilded',
+    icon: '✦',
+    desc: 'Ivory white, warm charcoal, liquid 24K gold — luxury minimalism',
+    fonts: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap',
+    css: `
+      :root {
+        --bg-void:     #f7f4ef;
+        --bg-panel:    #f0ece4;
+        --bg-raised:   #ffffff;
+        --bg-hover:    #f5f1ea;
+        --border-dim:  rgba(60,40,10,0.07);
+        --border-mid:  rgba(60,40,10,0.16);
+        --border-glow: rgba(180,140,40,0.5);
+        --gold:        #b8910a;
+        --gold-dim:    rgba(184,145,10,0.1);
+        --gold-glow:   rgba(184,145,10,0.3);
+        --accent:      #8a6d00;
+        --accent-dim:  rgba(138,109,0,0.08);
+        --accent-glow: rgba(138,109,0,0.25);
+        --text-hi:     #1a140a;
+        --text-mid:    #7a6540;
+        --text-lo:     #c0aa80;
+        --danger:      #c0392b;
+        --success:     #27864a;
+      }
+
+      html, body, input, select, textarea, button { font-family: 'Inter', sans-serif !important; }
+      .rpg-sidebar-logo-title, .rpg-topbar-title, .rpg-nav-item, .rpg-modal-title {
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+        font-weight: 600 !important;
+        letter-spacing: 1.5px !important;
+      }
+
+      html, body { background: var(--bg-void) !important; color: var(--text-hi) !important; }
+
+      /* No scanlines on a light theme */
       body::after { display: none !important; }
-      .rpg-sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border-dim) !important; }
-      .rpg-topbar { background: var(--bg-panel) !important; backdrop-filter: none !important; border-bottom: 1px solid var(--border-dim) !important; }
+
+      /* Sidebar */
+      .rpg-sidebar {
+        background: linear-gradient(180deg, #ede8df 0%, #f0ece4 100%) !important;
+        border-right: 1px solid rgba(60,40,10,0.08) !important;
+        box-shadow: 2px 0 20px rgba(60,40,10,0.06) !important;
+      }
+
+      /* Nav */
+      .rpg-nav-item { color: var(--text-mid) !important; font-size: 15px !important; }
+      .rpg-nav-item.active {
+        color: var(--accent) !important;
+        background: linear-gradient(90deg, rgba(138,109,0,0.08) 0%, transparent 100%) !important;
+        font-weight: 600 !important;
+      }
       .rpg-nav-item::before { background: var(--accent) !important; box-shadow: none !important; }
-      .rpg-nav-item.active { background: rgba(0,0,0,0.06) !important; }
-      .rpg-hud-chip { background: transparent !important; border-color: var(--border-dim) !important; color: var(--text-hi) !important; }
-      .rpg-hud-chip.gold-chip, .rpg-hud-chip.streak-chip, .rpg-hud-chip.power-chip { color: var(--text-mid) !important; }
+      .rpg-nav-item:hover { background: rgba(138,109,0,0.05) !important; color: var(--text-hi) !important; }
+
+      /* Logo */
+      .rpg-sidebar-logo { border-bottom: 1px solid rgba(60,40,10,0.08) !important; }
+      .rpg-sidebar-logo-title { color: var(--accent) !important; font-family: 'Cormorant Garamond', serif !important; font-size: 15px !important; font-weight: 700 !important; letter-spacing: 3px !important; }
+      .rpg-sidebar-logo-sub { color: var(--text-lo) !important; }
+
+      /* Topbar */
+      .rpg-topbar {
+        background: rgba(247,244,239,0.96) !important;
+        backdrop-filter: blur(20px) !important;
+        border-bottom: 1px solid rgba(60,40,10,0.07) !important;
+        height: 56px !important;
+      }
+      .rpg-topbar-title { color: var(--text-lo) !important; }
+
+      /* Chips */
+      .rpg-hud-chip {
+        background: rgba(255,255,255,0.8) !important;
+        border: 1px solid rgba(60,40,10,0.1) !important;
+        border-radius: 8px !important;
+        color: var(--text-hi) !important;
+        box-shadow: 0 1px 4px rgba(60,40,10,0.05) !important;
+      }
+      .rpg-hud-chip.gold-chip { color: var(--gold) !important; }
+      .rpg-hud-chip.streak-chip { color: #d97706 !important; }
+      .rpg-hud-chip.power-chip { color: #b8910a !important; }
+      .rpg-hud-chip:hover { background: rgba(255,255,255,1) !important; box-shadow: 0 2px 8px rgba(60,40,10,0.1) !important; }
+
+      /* FAB */
+      .rpg-fab {
+        background: linear-gradient(135deg, #c9a832, #9a7800) !important;
+        box-shadow: 0 4px 24px rgba(180,140,40,0.4), 0 0 0 1px rgba(180,140,40,0.2) !important;
+        border-radius: 14px !important;
+      }
+      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(180,140,40,0.55) !important; }
+
+      /* Cards */
+      .rpg-card {
+        background: #ffffff !important;
+        border: 1px solid rgba(60,40,10,0.07) !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 6px rgba(60,40,10,0.05) !important;
+      }
+      .rpg-card:hover { border-color: rgba(138,109,0,0.2) !important; box-shadow: 0 4px 16px rgba(60,40,10,0.08) !important; }
+
+      /* Toast */
+      .rpg-toast {
+        border-left: 3px solid var(--gold) !important;
+        background: #ffffff !important;
+        color: var(--text-hi) !important;
+        box-shadow: 0 8px 40px rgba(60,40,10,0.15) !important;
+        border: 1px solid rgba(60,40,10,0.08) !important;
+      }
+
+      /* Modal */
+      .rpg-modal-overlay { background: rgba(100,80,40,0.35) !important; backdrop-filter: blur(12px) !important; }
+
+      /* Primary button */
+      .rpg-primary-btn {
+        border-color: var(--accent) !important; color: var(--accent) !important;
+        background: rgba(138,109,0,0.07) !important;
+        font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
+      }
+      .rpg-primary-btn:hover { background: rgba(138,109,0,0.13) !important; box-shadow: 0 0 16px rgba(138,109,0,0.2) !important; }
+
+      .rpg-secondary-btn { border-color: rgba(60,40,10,0.15) !important; color: var(--text-mid) !important; }
+      .rpg-secondary-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+      input, textarea, select {
+        background: rgba(255,255,255,0.9) !important;
+        border: 1px solid rgba(60,40,10,0.12) !important;
+        color: var(--text-hi) !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 3px rgba(138,109,0,0.1) !important;
+      }
+
+      ::-webkit-scrollbar-track { background: rgba(60,40,10,0.04) !important; }
+      ::-webkit-scrollbar-thumb { background: rgba(60,40,10,0.12) !important; border-radius: 3px !important; }
     `,
   },
-  retro: {
-    label: 'Game Boy',
-    icon: '🎮',
-    desc: 'Green phosphor on dark — classic handheld aesthetic',
-    fonts: 'https://fonts.googleapis.com/css2?family=VT323&display=swap',
+
+  // ══════════════════════════════════════════════════════════════
+  // SAKURA — Moonlit Japan
+  // Ink-black, soft cherry blossom pink, silver mist.
+  // Reference: Ghost of Tsushima × Muji premium.
+  // ══════════════════════════════════════════════════════════════
+  sakura: {
+    label: 'Sakura',
+    icon: '🌸',
+    desc: 'Moonlit ink black, cherry blossom pink, silver mist',
+    fonts: 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap',
     css: `
       :root {
-        --bg-void:    #0f1f0a;
-        --bg-panel:   #162b0e;
-        --bg-raised:  #1a3312;
-        --bg-hover:   #1f3d16;
-        --border-dim: rgba(74,200,50,0.18);
-        --border-mid: rgba(74,200,50,0.35);
-        --border-glow:rgba(74,200,50,0.6);
-        --gold:       #8bdc5a;
-        --gold-dim:   rgba(139,220,90,0.15);
-        --gold-glow:  rgba(139,220,90,0.35);
-        --accent:     #4ac832;
-        --accent-dim: rgba(74,200,50,0.15);
-        --accent-glow:rgba(74,200,50,0.4);
-        --text-hi:    #c8f0a0;
-        --text-mid:   #5a9040;
-        --text-lo:    #2a5018;
-        --danger:     #dc2828;
-        --success:    #4ac832;
+        --bg-void:     #09080c;
+        --bg-panel:    #0f0d14;
+        --bg-raised:   #161320;
+        --bg-hover:    #1d1a28;
+        --border-dim:  rgba(240,180,200,0.07);
+        --border-mid:  rgba(240,180,200,0.15);
+        --border-glow: rgba(235,150,180,0.45);
+        --gold:        #e8c4d4;
+        --gold-dim:    rgba(232,196,212,0.1);
+        --gold-glow:   rgba(232,196,212,0.3);
+        --accent:      #e890b0;
+        --accent-dim:  rgba(232,144,176,0.1);
+        --accent-glow: rgba(232,144,176,0.3);
+        --text-hi:     #f8f0f4;
+        --text-mid:    #9080a0;
+        --text-lo:     #3d3050;
+        --danger:      #e05070;
+        --success:     #70d090;
       }
-      html, body, input, select, textarea, button { font-family: 'VT323', monospace !important; font-size: 16px !important; letter-spacing: 0.5px !important; }
-      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 1px,rgba(0,0,0,0.15) 1px,rgba(0,0,0,0.15) 2px) !important; }
-      .rpg-sidebar { border-right: 2px solid var(--accent-dim) !important; }
-      .rpg-hud-chip { font-family: 'VT323', monospace !important; font-size: 16px !important; }
-      .rpg-nav-item { font-size: 16px !important; font-family: 'VT323', monospace !important; letter-spacing: 1px !important; }
-      .rpg-sidebar-logo-title { font-family: 'VT323', monospace !important; letter-spacing: 3px !important; }
-      * { border-radius: 0 !important; }
+
+      html, body, input, select, textarea { font-family: 'Inter', sans-serif !important; }
+      .rpg-sidebar-logo-title, .rpg-modal-title, .rpg-topbar-title {
+        font-family: 'Noto Serif JP', serif !important;
+        letter-spacing: 2px !important;
+        font-weight: 500 !important;
+      }
+      .rpg-nav-item { font-family: 'Inter', sans-serif !important; font-weight: 400 !important; letter-spacing: 0.3px !important; }
+
+      html, body { background: var(--bg-void); }
+
+      /* Sidebar — ink wash gradient */
+      .rpg-sidebar {
+        background: linear-gradient(180deg, #0e0c18 0%, #09080c 60%, #0c0a10 100%) !important;
+        border-right: 1px solid rgba(240,180,200,0.06) !important;
+      }
+
+      /* Nav active — petal pink bar */
+      .rpg-nav-item.active {
+        background: linear-gradient(90deg, rgba(232,144,176,0.1) 0%, transparent 100%) !important;
+      }
+      .rpg-nav-item::before {
+        background: linear-gradient(180deg, #e890b0, #c060a0) !important;
+        box-shadow: 0 0 10px rgba(232,144,176,0.5) !important;
+      }
+      .rpg-nav-item:hover { background: rgba(240,180,200,0.05) !important; }
+
+      /* Logo */
+      .rpg-sidebar-logo-title { color: #e8c4d4 !important; }
+      .rpg-sidebar-logo-sub { color: rgba(232,144,176,0.35) !important; }
+
+      /* Topbar */
+      .rpg-topbar {
+        background: rgba(9,8,12,0.94) !important;
+        border-bottom: 1px solid rgba(240,180,200,0.05) !important;
+      }
+      .rpg-topbar-title { color: rgba(200,160,180,0.45) !important; font-family: 'Noto Serif JP', serif !important; }
+
+      /* Chips */
+      .rpg-hud-chip {
+        background: rgba(232,144,176,0.05) !important;
+        border: 1px solid rgba(240,180,200,0.1) !important;
+        border-radius: 8px !important;
+      }
+      .rpg-hud-chip.gold-chip { color: #e8c4d4 !important; }
+      .rpg-hud-chip.streak-chip { color: #f0a060 !important; }
+      .rpg-hud-chip.power-chip { color: #e8c4d4 !important; }
+
+      /* FAB — blossom gradient */
+      .rpg-fab {
+        background: linear-gradient(135deg, #f0a0c0, #c06090) !important;
+        box-shadow: 0 4px 24px rgba(232,144,176,0.4), 0 0 0 1px rgba(232,144,176,0.2) !important;
+        border-radius: 16px !important;
+      }
+      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(232,144,176,0.55) !important; }
+
+      /* Cards */
+      .rpg-card {
+        background: linear-gradient(145deg, #191525, #120f1c) !important;
+        border: 1px solid rgba(240,180,200,0.07) !important;
+        border-radius: 10px !important;
+      }
+      .rpg-card:hover { border-color: rgba(240,180,200,0.16) !important; }
+
+      /* Toast */
+      .rpg-toast {
+        border-left: 3px solid #e890b0 !important;
+        background: #161320 !important;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.7) !important;
+      }
+
+      /* Modal */
+      .rpg-modal-overlay { background: rgba(4,3,8,0.88) !important; }
+
+      /* Primary button */
+      .rpg-primary-btn { border-color: #e890b0 !important; color: #e890b0 !important; background: rgba(232,144,176,0.08) !important; }
+      .rpg-primary-btn:hover { box-shadow: 0 0 18px rgba(232,144,176,0.35) !important; }
+
+      /* Subtle petal scanlines */
+      body::after {
+        background: repeating-linear-gradient(
+          0deg, transparent, transparent 3px,
+          rgba(80,0,40,0.025) 3px, rgba(80,0,40,0.025) 4px
+        ) !important;
+      }
+
+      ::-webkit-scrollbar-thumb { background: rgba(232,144,176,0.18) !important; }
     `,
   },
+
+  // ══════════════════════════════════════════════════════════════
+  // NEON NOIR — Cyberpunk Ultraviolet
+  // True void black, electric cyan primary, hot magenta accent.
+  // Reference: Cyberpunk 2077 UI meets Phantom Liberty DLC menus.
+  // ══════════════════════════════════════════════════════════════
   cyberpunk: {
-    label: 'Cyberpunk',
+    label: 'Neon Noir',
     icon: '⚡',
-    desc: 'Neon cyan and magenta on near-black — night city aesthetic',
-    fonts: 'https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap',
+    desc: 'Void black, electric cyan, hot magenta — Cyberpunk 2077 aesthetic',
+    fonts: 'https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap',
     css: `
       :root {
-        --bg-void:    #050508;
-        --bg-panel:   #080a10;
-        --bg-raised:  #0c0e18;
-        --bg-hover:   #101320;
-        --border-dim: rgba(0,255,220,0.1);
-        --border-mid: rgba(0,255,220,0.2);
-        --border-glow:rgba(0,255,220,0.5);
-        --gold:       #ff0080;
-        --gold-dim:   rgba(255,0,128,0.12);
-        --gold-glow:  rgba(255,0,128,0.4);
-        --accent:     #00ffdc;
-        --accent-dim: rgba(0,255,220,0.1);
-        --accent-glow:rgba(0,255,220,0.4);
-        --text-hi:    #e0fff8;
-        --text-mid:   #4a9090;
-        --text-lo:    #1a4040;
-        --danger:     #ff0055;
-        --success:    #00ffdc;
+        --bg-void:     #020408;
+        --bg-panel:    #060c14;
+        --bg-raised:   #0a1220;
+        --bg-hover:    #0e182c;
+        --border-dim:  rgba(0,240,255,0.08);
+        --border-mid:  rgba(0,240,255,0.18);
+        --border-glow: rgba(0,240,255,0.55);
+        --gold:        #ff2d78;
+        --gold-dim:    rgba(255,45,120,0.1);
+        --gold-glow:   rgba(255,45,120,0.4);
+        --accent:      #00f0ff;
+        --accent-dim:  rgba(0,240,255,0.08);
+        --accent-glow: rgba(0,240,255,0.4);
+        --text-hi:     #e0f8ff;
+        --text-mid:    #3a7890;
+        --text-lo:     #0f3040;
+        --danger:      #ff2d78;
+        --success:     #00f0ff;
       }
-      html, body, input, select, textarea, button { font-family: 'Rajdhani', sans-serif !important; font-weight: 500 !important; letter-spacing: 0.5px !important; }
-      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,220,0.015) 3px,rgba(0,255,220,0.015) 4px) !important; }
-      .rpg-sidebar { border-right: 1px solid rgba(0,255,220,0.15) !important; }
-      .rpg-sidebar-logo-title { color: var(--accent) !important; text-shadow: 0 0 10px var(--accent-glow) !important; }
-      .rpg-nav-item.active { background: rgba(0,255,220,0.07) !important; text-shadow: 0 0 8px var(--accent) !important; }
-      .rpg-nav-item::before { background: var(--accent) !important; box-shadow: 0 0 12px var(--accent) !important; }
-      .rpg-hud-chip { border-color: rgba(0,255,220,0.2) !important; }
-      .rpg-hud-chip.gold-chip { color: var(--gold) !important; text-shadow: 0 0 8px var(--gold) !important; }
-      .rpg-hud-chip.streak-chip { text-shadow: 0 0 8px currentColor !important; }
-      .rpg-topbar { border-bottom: 1px solid rgba(0,255,220,0.1) !important; }
-      * { text-rendering: geometricPrecision !important; }
+
+      html, body, input, select, textarea, button {
+        font-family: 'Rajdhani', sans-serif !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.8px !important;
+      }
+      .rpg-sidebar-logo-title, .rpg-topbar-title, .rpg-nav-item, .rpg-modal-title {
+        font-family: 'Rajdhani', sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: 2px !important;
+        text-transform: uppercase !important;
+      }
+      code, .rpg-stat-value { font-family: 'Share Tech Mono', monospace !important; }
+
+      html, body { background: var(--bg-void); }
+
+      /* Sidebar — dark grid panel */
+      .rpg-sidebar {
+        background: linear-gradient(180deg, #080f18 0%, #020408 100%) !important;
+        border-right: 1px solid rgba(0,240,255,0.1) !important;
+        box-shadow: 4px 0 30px rgba(0,240,255,0.04) !important;
+      }
+
+      /* Logo */
+      .rpg-sidebar-logo-title {
+        color: var(--accent) !important;
+        text-shadow: 0 0 12px rgba(0,240,255,0.7), 0 0 24px rgba(0,240,255,0.3) !important;
+        font-size: 14px !important;
+      }
+      .rpg-sidebar-logo-sub { color: rgba(0,200,220,0.3) !important; }
+
+      /* Nav */
+      .rpg-nav-item { color: var(--text-mid) !important; font-size: 13px !important; }
+      .rpg-nav-item.active {
+        color: var(--accent) !important;
+        background: rgba(0,240,255,0.05) !important;
+        text-shadow: 0 0 8px rgba(0,240,255,0.5) !important;
+      }
+      .rpg-nav-item::before {
+        background: var(--accent) !important;
+        box-shadow: 0 0 14px var(--accent), 0 0 28px rgba(0,240,255,0.3) !important;
+      }
+      .rpg-nav-item:hover { background: rgba(0,240,255,0.04) !important; color: var(--text-hi) !important; }
+      .rpg-nav-item.active::before { height: 28px !important; }
+
+      /* Topbar */
+      .rpg-topbar {
+        background: rgba(2,4,8,0.97) !important;
+        border-bottom: 1px solid rgba(0,240,255,0.08) !important;
+        height: 56px !important;
+      }
+      .rpg-topbar-title { color: rgba(0,200,220,0.4) !important; font-size: 10px !important; letter-spacing: 3px !important; }
+
+      /* HUD chips */
+      .rpg-hud-chip {
+        background: rgba(0,240,255,0.04) !important;
+        border: 1px solid rgba(0,240,255,0.14) !important;
+        border-radius: 3px !important;
+        font-family: 'Share Tech Mono', monospace !important;
+        font-size: 13px !important;
+        letter-spacing: 0 !important;
+      }
+      .rpg-hud-chip:hover { background: rgba(0,240,255,0.08) !important; border-color: rgba(0,240,255,0.3) !important; }
+      .rpg-hud-chip.gold-chip { color: #ff2d78 !important; text-shadow: 0 0 8px rgba(255,45,120,0.5) !important; }
+      .rpg-hud-chip.streak-chip { color: #ff8040 !important; text-shadow: 0 0 8px rgba(255,128,64,0.4) !important; }
+      .rpg-hud-chip.power-chip { color: #ffcc00 !important; text-shadow: 0 0 8px rgba(255,204,0,0.4) !important; }
+
+      /* FAB */
+      .rpg-fab {
+        background: linear-gradient(135deg, #00f0ff, #0080cc) !important;
+        box-shadow: 0 4px 24px rgba(0,240,255,0.4), 0 0 0 1px rgba(0,240,255,0.25), 0 0 60px rgba(0,240,255,0.1) !important;
+        border-radius: 4px !important;
+      }
+      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(0,240,255,0.6), 0 0 80px rgba(0,240,255,0.15) !important; }
+
+      /* Cards — angular, minimal */
+      .rpg-card {
+        background: linear-gradient(145deg, #0c1422, #070e1a) !important;
+        border: 1px solid rgba(0,240,255,0.08) !important;
+        border-radius: 4px !important;
+      }
+      .rpg-card:hover { border-color: rgba(0,240,255,0.2) !important; box-shadow: 0 0 20px rgba(0,240,255,0.05) !important; }
+
+      /* Toast */
+      .rpg-toast {
+        border-left: 3px solid var(--accent) !important;
+        background: #0a1220 !important;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.8), 0 0 20px rgba(0,240,255,0.06) !important;
+        border-radius: 3px !important;
+      }
+
+      /* Modal */
+      .rpg-modal-overlay { background: rgba(0,2,6,0.92) !important; backdrop-filter: blur(10px) !important; }
+
+      /* Primary button */
+      .rpg-primary-btn {
+        border-color: var(--accent) !important; color: var(--accent) !important;
+        background: rgba(0,240,255,0.07) !important;
+        border-radius: 3px !important;
+        text-shadow: 0 0 8px rgba(0,240,255,0.4) !important;
+      }
+      .rpg-primary-btn:hover { box-shadow: 0 0 20px rgba(0,240,255,0.35), 0 0 40px rgba(0,240,255,0.1) !important; }
+
+      /* Scanlines — cyan tint */
+      body::after {
+        background: repeating-linear-gradient(
+          0deg, transparent, transparent 3px,
+          rgba(0,30,40,0.06) 3px, rgba(0,30,40,0.06) 4px
+        ) !important;
+      }
+
+      /* Secondary button */
+      .rpg-secondary-btn { border-color: rgba(0,240,255,0.15) !important; border-radius: 3px !important; }
+      .rpg-secondary-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+      /* Section labels */
+      .rpg-section-label { letter-spacing: 3px !important; }
+
+      ::-webkit-scrollbar-thumb { background: rgba(0,240,255,0.2) !important; }
     `,
   },
+
 };
+
 
 function buildInitialState() {
   const domainState = {};
