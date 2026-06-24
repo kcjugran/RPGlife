@@ -2453,7 +2453,7 @@ function RPGLife({ user, onSignOut }) {
         transition: transform 0.25s ease;
       }
       .rpg-sidebar-logo {
-        padding: 24px 16px 20px;
+        padding: 16px 16px 14px;
         border-bottom: 1px solid var(--border-dim);
         display: flex; flex-direction: column; align-items: center;
       }
@@ -2765,16 +2765,14 @@ function RPGLife({ user, onSignOut }) {
     // ── Sidebar (desktop) ──────────────────────────────────
     h('aside', { className: 'rpg-sidebar' },
       h('div', { className: 'rpg-sidebar-logo' },
-        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, paddingBottom: 4 } },
-          // RPGLife sword-and-circle logo — dark variant sized for sidebar
+        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 } },
+          // RPGLife sword-and-circle logo — viewBox cropped to emblem only (no text area)
           h('svg', {
-            width: '160', height: '160',
-            viewBox: '0 0 680 720',
+            width: '200', height: '200',
+            viewBox: '140 55 400 415',
             xmlns: 'http://www.w3.org/2000/svg',
             style: { display: 'block' },
           },
-            // Background pill
-            h('rect', { width: '680', height: '720', fill: '#0d0d1a', rx: '18' }),
             // Outer ring
             h('circle', { cx: '340', cy: '248', r: '168', fill: 'none', stroke: '#a78bfa', strokeWidth: '1.2', opacity: '0.35' }),
             h('circle', { cx: '340', cy: '248', r: '152', fill: 'none', stroke: '#a78bfa', strokeWidth: '0.6', opacity: '0.2' }),
@@ -2822,7 +2820,7 @@ function RPGLife({ user, onSignOut }) {
       ),
       h('nav', { className: 'rpg-nav-list' },
         [
-          { id: 'dashboard',  label: 'RPGLife', icon: 'scroll'   },
+          { id: 'dashboard',  label: 'Adventure Log', icon: 'scroll'   },
           { id: 'activities', label: 'Activities',     icon: 'zap'      },
           { id: 'quests',     label: 'Quests',         icon: 'target'   },
           { id: 'character',  label: 'Character',      icon: 'shield'   },
@@ -3894,7 +3892,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
           title: 'Mission notes',
           style: { ...styles.iconBtn, position: 'relative', background: noteOpen ? 'rgba(167,139,250,0.15)' : undefined, borderColor: noteOpen ? '#a78bfa' : undefined },
         },
-          h(Icon, { name: 'edit2', size: 13, color: noteOpen ? '#a78bfa' : '#9896b0' }),
+          h(Icon, { name: 'scroll', size: 13, color: noteOpen ? '#a78bfa' : '#9896b0' }),
           noteText && h('span', { style: { position: 'absolute', top: -3, right: -3, width: 7, height: 7, borderRadius: '50%', background: '#a78bfa' } })
         ),
         h('div', { style: { textAlign: 'right' } },
@@ -5980,7 +5978,7 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
   const dayLabels = ['S','M','T','W','T','F','S'];
   const title = mode === 'power' ? 'Power streak' : 'Day streak';
 
-  return h(ModalShell, { title, onClose, width: 420 },
+  return h(ModalShell, { title, onClose, width: 680 },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 } },
       h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: () => { setMonthOffset(o => o - 1); setSelectedDay(null); } },
         h(Icon, { name: 'chevronLeft', size: 14 })
@@ -6359,61 +6357,17 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
       headerExtra: h('span', { style: { fontSize: 11, color: C.textLo, marginLeft: 6, fontStyle: 'italic' } }, pvSummary)
     }),
 
-    // ── Reset Progress — collapsible ──────────────────────
+    // ── SFX on/off — compact row with speaker icon ───────
     h('section', { style: { marginBottom: 20 } },
-      h('button', {
-        className: 'rpg-btn',
-        onClick: () => setResetOpen(o => !o),
-        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(224,92,92,0.2)', borderRadius: 4, color: C.textHi, transition: 'border-color 0.15s' },
-      },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h(Icon, { name: 'trash2', size: 14, color: C.danger }),
-          h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Reset Progress'),
-          h('span', { style: { fontSize: 11, color: C.textLo } }, '— erase XP, levels, completions')
-        ),
-        h('div', { style: { transform: resetOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
-          h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
-        )
-      ),
-      resetOpen && h('div', { style: { background: C.raised, border: '1px solid rgba(224,92,92,0.15)', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '14px' } },
-        h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 12 } },
-          'Resets erase XP, levels, and boss completions. Activity templates and rewards are kept.'
-        ),
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 } },
-          DOMAIN_KEYS.map(k => {
-            const d = DOMAINS[k];
-            const totalXp = state.domains[k] ? state.domains[k].totalXp : 0;
-            return h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 4 } },
-              h(Icon, { name: d.icon, size: 14, color: d.color }),
-              h('div', { style: { flex: 1 } },
-                h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, d.name),
-                h('div', { style: { fontSize: 11, color: C.textMid } }, `${totalXp.toLocaleString()} XP`)
-              ),
-              h('button', { className: 'rpg-btn', style: styles.dangerBtnSmall, onClick: () => onResetDomain(k) }, 'Reset')
-            );
-          })
-        ),
-        h('button', {
-          className: 'rpg-btn',
-          style: { ...styles.dangerBtn, width: '100%', justifyContent: 'center', padding: '11px 0', fontSize: 13 },
-          onClick: onResetAll,
-        }, h(Icon, { name: 'trash2', size: 13 }), ' Reset entire character')
-      )
-    ),
-
-    // ── SFX on/off — standalone, simple toggle ────────────
-    h('section', { style: { marginBottom: 20 } },
-      h('label', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4 } },
+      h('label', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 12px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4 } },
+        h('span', { style: { fontSize: 16, lineHeight: 1, flexShrink: 0 } }, '🔊'),
+        h('span', { style: { flex: 1, fontSize: 12.5, color: C.textMid } }, 'Sound effects'),
         h('input', {
           type: 'checkbox',
           checked: ss.enabled !== false,
           onChange: e => onSaveSoundSettings({ enabled: e.target.checked }),
           style: { width: 15, height: 15, accentColor: C.accent, cursor: 'pointer', flexShrink: 0 },
-        }),
-        h('div', null,
-          h('div', { style: { fontSize: 13, fontWeight: 600, color: C.textHi } }, 'Sound effects'),
-          h('div', { style: { fontSize: 11, color: C.textLo } }, 'Play audio cues for logging, achievements, streaks, and more')
-        )
+        })
       )
     ),
 
@@ -6525,6 +6479,48 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
         h(DailyQuestSettingsSection, { state, onSetLock: onSetDailyQuestLock }),
         h(EconomySettingsSection, { state, onSave: onSaveEconomy }),
         h(ChallengeLibrarySection, { state, onSaveLibrary: onSaveChallengeLibrary, onSaveSpawnChance })
+      )
+    ),
+
+    // ── Reset Progress — bottom of settings ──────────────
+    h('section', { style: { marginBottom: 8 } },
+      h('button', {
+        className: 'rpg-btn',
+        onClick: () => setResetOpen(o => !o),
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(224,92,92,0.2)', borderRadius: 4, color: C.textHi, transition: 'border-color 0.15s' },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h(Icon, { name: 'trash2', size: 14, color: C.danger }),
+          h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Reset Progress'),
+          h('span', { style: { fontSize: 11, color: C.textLo } }, '— erase XP, levels, completions')
+        ),
+        h('div', { style: { transform: resetOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
+          h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
+        )
+      ),
+      resetOpen && h('div', { style: { background: C.raised, border: '1px solid rgba(224,92,92,0.15)', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '14px' } },
+        h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 12 } },
+          'Resets erase XP, levels, and boss completions. Activity templates and rewards are kept.'
+        ),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 } },
+          DOMAIN_KEYS.map(k => {
+            const d = DOMAINS[k];
+            const totalXp = state.domains[k] ? state.domains[k].totalXp : 0;
+            return h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 4 } },
+              h(Icon, { name: d.icon, size: 14, color: d.color }),
+              h('div', { style: { flex: 1 } },
+                h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, d.name),
+                h('div', { style: { fontSize: 11, color: C.textMid } }, `${totalXp.toLocaleString()} XP`)
+              ),
+              h('button', { className: 'rpg-btn', style: styles.dangerBtnSmall, onClick: () => onResetDomain(k) }, 'Reset')
+            );
+          })
+        ),
+        h('button', {
+          className: 'rpg-btn',
+          style: { ...styles.dangerBtn, width: '100%', justifyContent: 'center', padding: '11px 0', fontSize: 13 },
+          onClick: onResetAll,
+        }, h(Icon, { name: 'trash2', size: 13 }), ' Reset entire character')
       )
     )
   );
