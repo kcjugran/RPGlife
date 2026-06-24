@@ -1974,6 +1974,31 @@ function RPGLife({ user, onSignOut }) {
     setState(prev => ({ ...prev, activities: prev.activities.filter(a => a.id !== id) }));
   }
 
+  function deleteLogEntry(logId) {
+    setState(prev => {
+      const entry = (prev.activityLog || []).find(l => l.id === logId);
+      if (!entry) return prev;
+      const activityLog = prev.activityLog.filter(l => l.id !== logId);
+      // Reverse the XP from the domain total
+      const domains = { ...prev.domains };
+      if (domains[entry.domain]) {
+        domains[entry.domain] = {
+          ...domains[entry.domain],
+          totalXp: Math.max(0, domains[entry.domain].totalXp - entry.xp),
+        };
+      }
+      // Reverse from today's daily log meter
+      const logDate = dateKey(new Date(entry.timestamp));
+      const dailyLogs = { ...prev.dailyLogs };
+      if (dailyLogs[logDate] && dailyLogs[logDate][entry.domain]) {
+        dailyLogs[logDate] = { ...dailyLogs[logDate] };
+        dailyLogs[logDate][entry.domain] = Math.max(0, dailyLogs[logDate][entry.domain] - entry.xp);
+      }
+      return { ...prev, activityLog, domains, dailyLogs };
+    });
+    showToast('Log entry removed');
+  }
+
   function saveQuest(questData) {
     setState(prev => {
       const quests = [...prev.quests];
@@ -2914,6 +2939,7 @@ function RPGLife({ user, onSignOut }) {
         onSaveTemplate: saveMissionTemplate,
         onDeleteTemplate: deleteMissionTemplate,
         onSaveMissionNote: saveMissionNote,
+        onDeleteLogEntry: deleteLogEntry,
         dismissedReminders,
         onDismissReminder: (domain) => setDismissedReminders(d => [...d, domain]),
       }),
@@ -3995,7 +4021,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
   );
 }
 
-function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate, onSaveMissionNote, dismissedReminders, onDismissReminder }) {
+function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onLogClick, onBossClick, economy, onCompleteChallenge, onDismissChallenge, onSwitchDayMode, onSetQuestActivities, onToggleQuestComplete, onSaveTemplate, onDeleteTemplate, onSaveMissionNote, onDeleteLogEntry, dismissedReminders, onDismissReminder }) {
   const dailyGoal = eco({ economy }, 'dailyGoal');
   const consistencyMin = eco({ economy }, 'consistencyMin');
   const dayMode = state.dayMode || 'standard';
@@ -4248,6 +4274,14 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
                 h('span', { style: { flex: 1, fontSize: 12.5, color: '#eceaf6' } }, log.activityName),
                 log.detail && h('span', { style: { fontSize: 11, color: '#4a4868' } }, log.detail),
                 h('span', { style: { fontSize: 12, fontWeight: 700, color: d.color } }, `+${log.xp}`),
+                onDeleteLogEntry && h('button', {
+                  className: 'rpg-btn',
+                  onClick: () => onDeleteLogEntry(log.id),
+                  title: 'Remove this log entry and reverse its XP',
+                  style: { width: 22, height: 22, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#3a3850', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s' },
+                  onMouseEnter: e => e.currentTarget.style.color = '#e05c5c',
+                  onMouseLeave: e => e.currentTarget.style.color = '#3a3850',
+                }, h(Icon, { name: 'x', size: 11 }))
               );
             })
           )
@@ -5119,7 +5153,7 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
 
 function ModalShell({ title, onClose, children, width = 420 }) {
   return h('div', { style: styles.modalOverlay, onClick: onClose },
-    h('div', { style: { ...styles.modalCard, maxWidth: width }, onClick: e => e.stopPropagation() },
+    h('div', { style: { ...styles.modal, maxWidth: width, width: '100%' }, onClick: e => e.stopPropagation() },
       h('div', { style: styles.modalHeader },
         h('span', { style: styles.modalTitle }, title),
         h('button', { className: 'rpg-btn', style: styles.iconBtn, onClick: onClose }, h(Icon, { name: 'x', size: 14 }))
