@@ -2967,7 +2967,7 @@ function RPGLife({ user, onSignOut }) {
       .rpg-nav-list {
         flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
       }
-      .rpg-nav-item {
+      button.rpg-nav-item {
         position: relative;
         display: flex; align-items: center; gap: 14px;
         padding: 14px 28px;
@@ -3202,7 +3202,7 @@ function RPGLife({ user, onSignOut }) {
       .rpg-mobile-nav-inner {
         display: flex; justify-content: space-around;
       }
-      .rpg-mobile-nav-item {
+      button.rpg-mobile-nav-item {
         display: flex; flex-direction: column; align-items: center; gap: 4px;
         padding: 8px 12px;
         font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
@@ -6347,7 +6347,7 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
 
 function FAB({ onClick }) {
   return h('button', {
-    className: 'rpg-btn',
+    className: 'rpg-btn rpg-fab',
     onClick: () => { SoundEngine.play('click'); onClick(); },
     style: styles.fab,
     title: 'Quick log',
