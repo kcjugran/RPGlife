@@ -744,7 +744,7 @@ const THEMES = {
       .rpg-nav-item:hover { background: rgba(200,60,40,0.07) !important; }
 
       /* Logo title — cinzel gives it gravitas */
-      .rpg-sidebar-logo-title { color: #e8a430 !important; font-size: 13px !important; }
+      .rpg-sidebar-logo-title { color: #e8a430 !important; font-size: 16px !important; }
       .rpg-sidebar-logo-sub { color: rgba(200,80,60,0.5) !important; }
 
       /* Topbar */
@@ -849,7 +849,7 @@ const THEMES = {
 
       /* Logo */
       .rpg-sidebar-logo { border-bottom: 1px solid rgba(60,40,10,0.08) !important; }
-      .rpg-sidebar-logo-title { color: var(--accent) !important; font-family: 'Cormorant Garamond', serif !important; font-size: 15px !important; font-weight: 700 !important; letter-spacing: 3px !important; }
+      .rpg-sidebar-logo-title { color: var(--accent) !important; font-family: 'Cormorant Garamond', serif !important; font-size: 18px !important; font-weight: 700 !important; letter-spacing: 3px !important; }
       .rpg-sidebar-logo-sub { color: var(--text-lo) !important; }
 
       /* Topbar */
@@ -1076,7 +1076,7 @@ const THEMES = {
       .rpg-sidebar-logo-title {
         color: var(--accent) !important;
         text-shadow: 0 0 12px rgba(0,240,255,0.7), 0 0 24px rgba(0,240,255,0.3) !important;
-        font-size: 14px !important;
+        font-size: 17px !important;
       }
       .rpg-sidebar-logo-sub { color: rgba(0,200,220,0.3) !important; }
 
@@ -2883,18 +2883,18 @@ function RPGLife({ user, onSignOut }) {
         transition: transform 0.25s ease;
       }
       .rpg-sidebar-logo {
-        padding: 10px 16px 8px;
+        padding: 12px 19px 10px;
         border-bottom: 1px solid var(--border-dim);
         display: flex; flex-direction: column; align-items: center;
       }
       .rpg-sidebar-logo-title {
-        font-size: 11px; font-weight: 800; letter-spacing: 2.5px;
+        font-size: 13px; font-weight: 800; letter-spacing: 2.5px;
         text-transform: uppercase; color: var(--gold);
         line-height: 1; text-align: center;
       }
       .rpg-sidebar-logo-sub {
-        font-size: 8.5px; color: var(--text-lo); letter-spacing: 1.5px;
-        text-transform: uppercase; margin-top: 3px; text-align: center;
+        font-size: 10px; color: var(--text-lo); letter-spacing: 1.5px;
+        text-transform: uppercase; margin-top: 4px; text-align: center;
       }
       .rpg-nav-list {
         flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
@@ -3081,7 +3081,7 @@ function RPGLife({ user, onSignOut }) {
         h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 } },
           // RPGLife sword-and-circle logo — viewBox cropped to emblem only (no text area)
           h('svg', {
-            width: '72', height: '75',
+            width: '86', height: '90',
             viewBox: '140 55 400 415',
             xmlns: 'http://www.w3.org/2000/svg',
             style: { display: 'block' },
