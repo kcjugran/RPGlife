@@ -2847,8 +2847,10 @@ function RPGLife({ user, onSignOut }) {
     h('style', null, `
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
       ${THEMES[state.theme || 'default']?.fonts ? `@import url('${THEMES[state.theme].fonts}');` : ''}
-      ${THEMES[state.theme || 'default']?.css || ''}
 
+      /* Fallback defaults — the active theme's :root below (later in source
+         order, same specificity) overrides these per-theme. Keep this block
+         ABOVE the theme injection or every theme silently loses its colors. */
       :root {
         --bg-void:    #080810;
         --bg-panel:   #0d0d1a;
@@ -2871,6 +2873,8 @@ function RPGLife({ user, onSignOut }) {
         --sidebar-w:  260px;
         --sidebar-w-mobile: 0px;
       }
+
+      ${THEMES[state.theme || 'default']?.css || ''}
 
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -3268,42 +3272,42 @@ function RPGLife({ user, onSignOut }) {
             style: { display: 'block' },
           },
             // Outer ring
-            h('circle', { cx: '340', cy: '248', r: '168', fill: 'none', stroke: '#a78bfa', strokeWidth: '1.2', opacity: '0.35' }),
-            h('circle', { cx: '340', cy: '248', r: '152', fill: 'none', stroke: '#a78bfa', strokeWidth: '0.6', opacity: '0.2' }),
+            h('circle', { cx: '340', cy: '248', r: '168', fill: 'none', style: { stroke: 'var(--accent)' }, strokeWidth: '1.2', opacity: '0.35' }),
+            h('circle', { cx: '340', cy: '248', r: '152', fill: 'none', style: { stroke: 'var(--accent)' }, strokeWidth: '0.6', opacity: '0.2' }),
             // Cardinal tick diamonds
-            h('polygon', { points: '340,71 344,79 340,87 336,79', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
-            h('polygon', { points: '340,409 344,417 340,425 336,417', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
-            h('polygon', { points: '163,244 171,248 163,252 155,248', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
-            h('polygon', { points: '517,244 525,248 517,252 509,248', fill: 'none', stroke: '#a78bfa', strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '340,71 344,79 340,87 336,79', fill: 'none', style: { stroke: 'var(--accent)' }, strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '340,409 344,417 340,425 336,417', fill: 'none', style: { stroke: 'var(--accent)' }, strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '163,244 171,248 163,252 155,248', fill: 'none', style: { stroke: 'var(--accent)' }, strokeWidth: '1', opacity: '0.5' }),
+            h('polygon', { points: '517,244 525,248 517,252 509,248', fill: 'none', style: { stroke: 'var(--accent)' }, strokeWidth: '1', opacity: '0.5' }),
             // Spark dots
-            h('circle', { cx: '261', cy: '110', r: '2', fill: '#a78bfa', opacity: '0.35' }),
-            h('circle', { cx: '419', cy: '110', r: '2', fill: '#a78bfa', opacity: '0.35' }),
-            h('circle', { cx: '212', cy: '180', r: '1.5', fill: '#a78bfa', opacity: '0.22' }),
-            h('circle', { cx: '468', cy: '180', r: '1.5', fill: '#a78bfa', opacity: '0.22' }),
+            h('circle', { cx: '261', cy: '110', r: '2', style: { fill: 'var(--accent)' }, opacity: '0.35' }),
+            h('circle', { cx: '419', cy: '110', r: '2', style: { fill: 'var(--accent)' }, opacity: '0.35' }),
+            h('circle', { cx: '212', cy: '180', r: '1.5', style: { fill: 'var(--accent)' }, opacity: '0.22' }),
+            h('circle', { cx: '468', cy: '180', r: '1.5', style: { fill: 'var(--accent)' }, opacity: '0.22' }),
             // Blade
-            h('path', { d: 'M335,390 L333,250 L340,88 L347,250 L345,390 Z', fill: '#eceaf6', opacity: '0.92' }),
-            h('path', { d: 'M340,88 L340,385', fill: 'none', stroke: '#9896b0', strokeWidth: '1.2', opacity: '0.5' }),
-            h('path', { d: 'M333,390 L340,418 L347,390 Z', fill: '#c4c0d8' }),
+            h('path', { d: 'M335,390 L333,250 L340,88 L347,250 L345,390 Z', fill: C.textHi, opacity: '0.92' }),
+            h('path', { d: 'M340,88 L340,385', fill: 'none', style: { stroke: 'var(--text-mid)' }, strokeWidth: '1.2', opacity: '0.5' }),
+            h('path', { d: 'M333,390 L340,418 L347,390 Z', fill: C.textHi, opacity: '0.7' }),
             // Crossguard
-            h('path', { d: 'M296,250 Q300,245 308,246 L332,248 L332,256 L308,258 Q300,259 296,254 Z', fill: '#eceaf6', opacity: '0.9' }),
-            h('path', { d: 'M384,250 Q380,245 372,246 L348,248 L348,256 L372,258 Q380,259 384,254 Z', fill: '#eceaf6', opacity: '0.9' }),
-            h('ellipse', { cx: '298', cy: '252', rx: '4', ry: '6', fill: '#c4c0d8' }),
-            h('ellipse', { cx: '382', cy: '252', rx: '4', ry: '6', fill: '#c4c0d8' }),
+            h('path', { d: 'M296,250 Q300,245 308,246 L332,248 L332,256 L308,258 Q300,259 296,254 Z', fill: C.textHi, opacity: '0.9' }),
+            h('path', { d: 'M384,250 Q380,245 372,246 L348,248 L348,256 L372,258 Q380,259 384,254 Z', fill: C.textHi, opacity: '0.9' }),
+            h('ellipse', { cx: '298', cy: '252', rx: '4', ry: '6', fill: C.textHi, opacity: '0.7' }),
+            h('ellipse', { cx: '382', cy: '252', rx: '4', ry: '6', fill: C.textHi, opacity: '0.7' }),
             // Guard jewel
-            h('polygon', { points: '340,240 348,252 340,264 332,252', fill: '#a78bfa' }),
-            h('polygon', { points: '340,243 346,252 340,261 334,252', fill: '#c4b5fd', opacity: '0.5' }),
-            h('polygon', { points: '340,229 346,236 340,243 334,236', fill: '#a78bfa', opacity: '0.7' }),
+            h('polygon', { points: '340,240 348,252 340,264 332,252', style: { fill: 'var(--accent)' } }),
+            h('polygon', { points: '340,243 346,252 340,261 334,252', style: { fill: 'var(--accent)' }, opacity: '0.6' }),
+            h('polygon', { points: '340,229 346,236 340,243 334,236', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
             // Grip
-            h('rect', { x: '336', y: '152', width: '8', height: '82', fill: '#c4c0d8', rx: '2' }),
-            h('line', { x1: '335', y1: '165', x2: '345', y2: '171', stroke: '#0d0d1a', strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '180', x2: '345', y2: '186', stroke: '#0d0d1a', strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '195', x2: '345', y2: '201', stroke: '#0d0d1a', strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '210', x2: '345', y2: '216', stroke: '#0d0d1a', strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '225', x2: '345', y2: '231', stroke: '#0d0d1a', strokeWidth: '1.5' }),
+            h('rect', { x: '336', y: '152', width: '8', height: '82', fill: C.textHi, opacity: '0.7', rx: '2' }),
+            h('line', { x1: '335', y1: '165', x2: '345', y2: '171', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '180', x2: '345', y2: '186', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '195', x2: '345', y2: '201', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '210', x2: '345', y2: '216', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+            h('line', { x1: '335', y1: '225', x2: '345', y2: '231', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
             // Pommel
-            h('polygon', { points: '340,120 348,136 340,152 332,136', fill: '#eceaf6' }),
-            h('polygon', { points: '340,124 345,136 340,148 335,136', fill: '#a78bfa' }),
-            h('polygon', { points: '340,108 344,116 340,124 336,116', fill: '#a78bfa', opacity: '0.7' }),
+            h('polygon', { points: '340,120 348,136 340,152 332,136', fill: C.textHi }),
+            h('polygon', { points: '340,124 345,136 340,148 335,136', style: { fill: 'var(--accent)' } }),
+            h('polygon', { points: '340,108 344,116 340,124 336,116', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
             // Wordmark — only the sword+circle portion is used inline (no text, text shown below in DOM)
           ),
           h('div', { style: { textAlign: 'center', marginTop: 2 } },
@@ -3335,10 +3339,10 @@ function RPGLife({ user, onSignOut }) {
       ),
       h('div', { className: 'rpg-sidebar-footer' },
         // Sync status
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: syncStatus === 'offline' ? '#9ca3af' : syncStatus === 'syncing' ? '#fbbf24' : '#5de8a0' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: syncStatus === 'offline' ? C.textMid : syncStatus === 'syncing' ? '#fbbf24' : '#5de8a0' } },
           h('div', { style: { width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 } }),
           syncStatus === 'offline'
-            ? h('button', { className: 'rpg-btn', onClick: attemptResync, style: { color: '#9ca3af', fontSize: 11, textDecoration: 'underline' } }, 'Offline — tap to retry')
+            ? h('button', { className: 'rpg-btn', onClick: attemptResync, style: { color: C.textMid, fontSize: 11, textDecoration: 'underline' } }, 'Offline — tap to retry')
             : syncStatus === 'syncing' ? 'Syncing…' : 'Synced'
         ),
         // User + sign out
@@ -4011,7 +4015,7 @@ function TutorialOverlay({ step, onNext, onClose }) {
           border: `1px solid ${isAdvanced ? 'rgba(251,191,36,0.3)' : 'rgba(167,139,250,0.3)'}`,
           borderRadius: 6, padding: '3px 8px',
         }}, isAdvanced ? '★ Advanced' : '● Core'),
-        h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, progress)
+        h('div', { style: { fontSize: 11, color: C.textMid } }, progress)
       ),
 
       // Icon + title
@@ -4034,12 +4038,12 @@ function TutorialOverlay({ step, onNext, onClose }) {
         h('button', {
           className: 'rpg-btn',
           onClick: onClose,
-          style: { flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid #2a2a35', borderRadius: 8, color: '#7c7c8a', fontSize: 12, cursor: 'pointer' },
+          style: { flex: 1, padding: '8px 0', background: 'transparent', border: `1px solid ${C.borderMid}`, borderRadius: 8, color: C.textMid, fontSize: 12, cursor: 'pointer' },
         }, 'Skip'),
         step > 0 && h('button', {
           className: 'rpg-btn',
           onClick: () => onNext(step - 1, ALL_STEPS[step - 1].tab),
-          style: { flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid #2a2a35', borderRadius: 8, color: '#9ca3af', fontSize: 12, cursor: 'pointer' },
+          style: { flex: 1, padding: '8px 0', background: 'transparent', border: `1px solid ${C.borderMid}`, borderRadius: 8, color: C.textMid, fontSize: 12, cursor: 'pointer' },
         }, '← Back'),
         h('button', {
           className: 'rpg-btn',
@@ -4068,7 +4072,7 @@ function AchievementPopup({ achievement, onClose }) {
   },
     h('div', { style: {
       display: 'flex', alignItems: 'center', gap: 14,
-      background: 'linear-gradient(135deg, #1a1528, #0e0e14)',
+      background: `linear-gradient(135deg, ${C.hover}, ${C.void})`,
       border: `1px solid ${hexToRgba(achievement.color || '#fbbf24', 0.5)}`,
       borderRadius: 14, padding: '14px 18px',
       boxShadow: `0 0 30px ${hexToRgba(achievement.color || '#fbbf24', 0.25)}, 0 8px 24px rgba(0,0,0,0.6)`,
@@ -4084,7 +4088,7 @@ function AchievementPopup({ achievement, onClose }) {
       h('div', null,
         h('div', { style: { fontSize: 10.5, fontWeight: 700, color: achievement.color || '#fbbf24', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 } }, '★ Achievement unlocked'),
         h('div', { style: { fontSize: 14, fontWeight: 700, color: '#f4f1ea' } }, achievement.name),
-        h('div', { style: { fontSize: 11.5, color: '#9ca3af', marginTop: 2 } }, achievement.desc)
+        h('div', { style: { fontSize: 11.5, color: C.textMid, marginTop: 2 } }, achievement.desc)
       )
     )
   );
@@ -4107,12 +4111,12 @@ function AchievementsSection({ achievements }) {
   return h('div', null,
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 } },
       h(SectionLabel, { text: 'Achievements' }),
-      h('span', { style: { fontSize: 12, color: '#9ca3af' } }, `${unlocked} / ${total} unlocked`)
+      h('span', { style: { fontSize: 12, color: C.textMid } }, `${unlocked} / ${total} unlocked`)
     ),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
       ACHIEVEMENT_CATEGORIES.map(cat =>
         h('div', { key: cat.id },
-          h('div', { style: { fontSize: 11, fontWeight: 700, color: '#7c7c8a', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 } }, cat.label),
+          h('div', { style: { fontSize: 11, fontWeight: 700, color: C.textMid, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 } }, cat.label),
           h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
             cat.ids.map(id => {
               const def = ACHIEVEMENTS[id];
@@ -4125,14 +4129,14 @@ function AchievementsSection({ achievements }) {
                 style: {
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
                   padding: '10px 12px', borderRadius: 10, width: 88, textAlign: 'center',
-                  background: isUnlocked ? hexToRgba(def.color, 0.1) : '#0e0e14',
-                  border: `1px solid ${isUnlocked ? hexToRgba(def.color, 0.35) : '#2a2a35'}`,
+                  background: isUnlocked ? hexToRgba(def.color, 0.1) : C.void,
+                  border: `1px solid ${isUnlocked ? hexToRgba(def.color, 0.35) : C.borderMid}`,
                   opacity: isUnlocked ? 1 : 0.45,
                   transition: 'all 0.2s',
                 },
               },
                 h('div', { style: { fontSize: 22 } }, isUnlocked ? '🏆' : '🔒'),
-                h('div', { style: { fontSize: 10.5, fontWeight: 600, color: isUnlocked ? def.color : '#7c7c8a', lineHeight: 1.3 } }, def.name)
+                h('div', { style: { fontSize: 10.5, fontWeight: 600, color: isUnlocked ? def.color : C.textMid, lineHeight: 1.3 } }, def.name)
               );
             })
           )
@@ -4159,7 +4163,7 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
   const syncDot = syncStatus === 'syncing'
     ? { color: '#fbbf24', label: 'Syncing…' }
     : syncStatus === 'offline'
-      ? { color: '#9ca3af', label: 'Offline — tap to retry' }
+      ? { color: C.textMid, label: 'Offline — tap to retry' }
       : { color: '#86efac', label: 'Synced' };
 
   const initial = (user && user.email ? user.email[0] : '?').toUpperCase();
@@ -4174,7 +4178,7 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
           ? h('button', {
               className: 'rpg-btn',
               onClick: onRetrySync,
-              style: { ...styles.subtitle, display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#9ca3af' },
+              style: { ...styles.subtitle, display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: C.textMid },
             },
               h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: syncDot.color, display: 'inline-block' } }),
               h('span', { style: { textDecoration: 'underline' } }, syncDot.label)
@@ -4294,8 +4298,8 @@ function BonusRow({ bonus, onDismiss }) {
 
   return h('div', { style: styles.bonusRow },
     h('div', { style: { flex: 1 } },
-      h('div', { style: { fontSize: 12.5, fontWeight: 600, color: '#e5e7eb' } }, bonus.label),
-      h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 2 } }, 'Keep it up!')
+      h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, bonus.label),
+      h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 2 } }, 'Keep it up!')
     ),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, color: '#fbbf24', fontWeight: 700, fontSize: 15 } },
       h(Icon, { name: 'coins', size: 14, color: '#fbbf24' }),
@@ -4375,7 +4379,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 } },
       h('div', null,
         h('div', { style: { fontSize: 15, fontWeight: 700, color: '#f4f1ea' } }, "Today's mission"),
-        h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } },
+        h('div', { style: { fontSize: 12, color: C.textMid, marginTop: 2 } },
           total === 0 ? 'Add activities to build today\'s mission' : `${doneCount} of ${total} complete`
         )
       ),
@@ -4435,7 +4439,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
     ),
 
     // Save template form
-    showSaveTemplate && h('div', { style: { background: '#0e0e14', borderRadius: 8, padding: '10px 12px', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 } },
+    showSaveTemplate && h('div', { style: { background: C.void, borderRadius: 8, padding: '10px 12px', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 } },
       h('input', { value: saveTemplateName, onChange: e => setSaveTemplateName(e.target.value), placeholder: 'Template name (e.g. Morning Routine)', style: styles.input }),
       h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
         MISSION_TYPES.map(t => h('button', { key: t, className: 'rpg-btn', onClick: () => setSaveTemplateType(t),
@@ -4446,21 +4450,21 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
     ),
 
     total === 0
-      ? h('div', { style: { fontSize: 12.5, color: '#7c7c8a', marginBottom: 14, textAlign: 'center', padding: '12px 0' } },
+      ? h('div', { style: { fontSize: 12.5, color: C.textMid, marginBottom: 14, textAlign: 'center', padding: '12px 0' } },
           'No activities selected yet for today\'s mission.'
         )
       : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 } },
           missionActivities.map(act => {
             const d = DOMAINS[act.domain];
             const isDone = plan.completedIds.includes(act.id);
-            return h('div', { key: act.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0e0e14', borderRadius: 8 } },
+            return h('div', { key: act.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 8 } },
               h('button', {
                 className: 'rpg-btn',
                 onClick: () => onToggleComplete(act.id),
-                style: { width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${isDone ? d.color : '#3a3a4a'}`, background: isDone ? hexToRgba(d.color, 0.2) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+                style: { width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${isDone ? d.color : C.borderMid}`, background: isDone ? hexToRgba(d.color, 0.2) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
               }, isDone && h(Icon, { name: 'check', size: 13, color: d.color })),
               h(Icon, { name: d.icon, size: 13, color: d.color }),
-              h('span', { style: { flex: 1, fontSize: 13, color: isDone ? '#7c7c8a' : '#e5e7eb', textDecoration: isDone ? 'line-through' : 'none' } }, act.name),
+              h('span', { style: { flex: 1, fontSize: 13, color: isDone ? C.textMid : C.textHi, textDecoration: isDone ? 'line-through' : 'none' } }, act.name),
               act.favorite && h('span', { style: { color: '#fbbf24', fontSize: 12 } }, '★'),
               !plan.locked && h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeActivity(act.id) }, h(Icon, { name: 'x', size: 11 }))
             );
@@ -4476,13 +4480,13 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
         h(Icon, { name: 'plus', size: 14 }), ' Add activity to mission'),
       pickerOpen && h('div', { style: styles.questPickerDropdown },
         availableToAdd.length === 0
-          ? h('div', { style: { fontSize: 12, color: '#7c7c8a', padding: '10px 12px' } }, 'All activities are in today\'s mission.')
+          ? h('div', { style: { fontSize: 12, color: C.textMid, padding: '10px 12px' } }, 'All activities are in today\'s mission.')
           : availableToAdd.map(act => {
               const d = DOMAINS[act.domain];
               return h('button', {
                 key: act.id, className: 'rpg-btn',
                 onClick: () => { addActivity(act.id); setPickerOpen(false); },
-                style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#e5e7eb', fontSize: 13 },
+                style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: C.textHi, fontSize: 13 },
               }, h(Icon, { name: d.icon, size: 13, color: d.color }), act.name, act.favorite && h('span', { style: { color: '#fbbf24', fontSize: 12, marginLeft: 4 } }, '★'));
             })
       )
@@ -4650,7 +4654,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
               ),
               h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
                 h('span', { style: { ...styles.bigMeterValue, color: d.color } }, earned),
-                h('span', { style: { fontSize: 13, color: '#7c7c8a', fontWeight: 600 } }, `/ ${dailyGoal}`),
+                h('span', { style: { fontSize: 13, color: C.textMid, fontWeight: 600 } }, `/ ${dailyGoal}`),
                 isOverflow && h('span', { style: { ...styles.overflowBadge, color: d.color, borderColor: hexToRgba(d.color, 0.45), background: hexToRgba(d.color, 0.12), marginLeft: 4 } }, `+${overflow}`)
               )
             ),
@@ -4726,7 +4730,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     ),
 
     // #19 Rest day tokens display
-    state.restDayTokens > 0 && h('div', { style: { fontSize: 11.5, color: '#7c7c8a', display: 'flex', alignItems: 'center', gap: 5 } },
+    state.restDayTokens > 0 && h('div', { style: { fontSize: 11.5, color: C.textMid, display: 'flex', alignItems: 'center', gap: 5 } },
       h('span', null, '🛡️'),
       `${state.restDayTokens} rest day token${state.restDayTokens !== 1 ? 's' : ''} — miss a day without losing your streak`
     ),
@@ -4738,9 +4742,9 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
         : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
             todayActLog.map(log => {
               const d = DOMAINS[log.domain];
-              return h('div', { key: log.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', background: '#12121f', borderRadius: 4 } },
+              return h('div', { key: log.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', background: C.raised, borderRadius: 4 } },
                 h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
-                h('span', { style: { flex: 1, fontSize: 12.5, color: '#eceaf6' } }, log.activityName),
+                h('span', { style: { flex: 1, fontSize: 12.5, color: C.textHi } }, log.activityName),
                 log.detail && h('span', { style: { fontSize: 11, color: '#4a4868' } }, log.detail),
                 h('span', { style: { fontSize: 12, fontWeight: 700, color: d.color } }, `+${log.xp}`),
                 onDeleteLogEntry && h('button', {
@@ -4820,10 +4824,10 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
           return h('button', {
             key: act.id, className: 'rpg-btn',
             onClick: () => onLog(act),
-            style: { display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#12121f', border: `1px solid ${hexToRgba(d.color, 0.3)}`, borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s' },
+            style: { display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: C.raised, border: `1px solid ${hexToRgba(d.color, 0.3)}`, borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s' },
           },
             h('div', { style: { width: 5, height: 5, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
-            h('span', { style: { fontSize: 12.5, fontWeight: 600, color: '#eceaf6' } }, act.name),
+            h('span', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, act.name),
             act.favorite && h('span', { style: { color: '#c9a84c', fontSize: 11 } }, '★')
           );
         })
@@ -4875,7 +4879,7 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
               h('div', { style: { display: 'flex', gap: 6, flexShrink: 0 } },
                 h('button', {
                   className: 'rpg-btn',
-                  style: { ...styles.iconBtn, color: act.favorite ? '#fbbf24' : '#7c7c8a' },
+                  style: { ...styles.iconBtn, color: act.favorite ? '#fbbf24' : C.textMid },
                   onClick: () => onToggleFavorite(act.id),
                   title: act.favorite ? 'Remove from favourites' : 'Mark as favourite',
                 }, '★'),
@@ -4953,11 +4957,11 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
       : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
           // Render chain groups first
           chainGroups.map(chain =>
-            h('div', { key: chain.id, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 12, padding: '12px 14px' } },
+            h('div', { key: chain.id, style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 12, padding: '12px 14px' } },
               h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                   h('div', { style: { fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8 } }, '⛓ Chain:'),
-                  h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, chain.name)
+                  h('div', { style: { fontSize: 13, fontWeight: 600, color: C.textHi } }, chain.name)
                 ),
                 h('button', {
                   className: 'rpg-btn',
@@ -4971,11 +4975,11 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
                   const unlocked = isQuestUnlocked ? isQuestUnlocked(q, state) : true;
                   return h('div', { key: q.id, style: { display: 'flex', alignItems: 'flex-start', gap: 8 } },
                     h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, flexShrink: 0 } },
-                      h('div', { style: { width: 10, height: 10, borderRadius: '50%', background: unlocked ? '#a78bfa' : '#3a3a4a', border: `2px solid ${unlocked ? '#a78bfa' : '#2a2a35'}` } }),
-                      i < chain.quests.length - 1 && h('div', { style: { width: 2, height: 24, background: '#2a2a35', marginTop: 2 } })
+                      h('div', { style: { width: 10, height: 10, borderRadius: '50%', background: unlocked ? '#a78bfa' : C.borderMid, border: `2px solid ${unlocked ? '#a78bfa' : C.borderMid}` } }),
+                      i < chain.quests.length - 1 && h('div', { style: { width: 2, height: 24, background: C.borderMid, marginTop: 2 } })
                     ),
                     h('div', { style: { flex: 1, opacity: unlocked ? 1 : 0.5 } },
-                      !unlocked && h('div', { style: { fontSize: 11, color: '#7c7c8a', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
+                      !unlocked && h('div', { style: { fontSize: 11, color: C.textMid, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
                         '🔒', `Requires: ${(state.quests || []).find(x => x.id === q.dependsOn)?.name || 'previous quest'}`
                       ),
                       h(QuestRow, { quest: q, onUpdateProgress: unlocked ? onUpdateProgress : null, onToggleCheckpoint: unlocked ? onToggleCheckpoint : null, onDelete, onEdit: unlocked ? onEdit : null, onArchive: unlocked ? onArchive : null, onRemoveFromChain: () => onRemoveFromChain && onRemoveFromChain(q.id) })
@@ -4999,7 +5003,7 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
             h('div', { style: { flex: 1 } },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
                 h(Icon, { name: DOMAINS[q.domain].icon, size: 13, color: DOMAINS[q.domain].color }),
-                h('span', { style: { ...styles.questName, color: '#9ca3af' } }, q.name),
+                h('span', { style: { ...styles.questName, color: C.textMid } }, q.name),
                 h(Icon, { name: 'trophy', size: 13, color: '#fbbf24' })
               ),
               h('div', { style: { ...styles.questMeta, marginTop: 4 } },
@@ -5055,7 +5059,7 @@ function QuestChainEditorModal({ quests, chains, prefillChain, onSave, onClose }
   const canSave = chainName.trim() && selectedIds.length >= 2;
 
   return h(ModalShell, { title: 'Create quest chain', onClose, width: 480 },
-    h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 14 } },
+    h('div', { style: { fontSize: 13, color: C.textMid, marginBottom: 14 } },
       'Link quests into a progression chain. Quest N+1 stays locked until Quest N is completed and archived.'
     ),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
@@ -5076,17 +5080,17 @@ function QuestChainEditorModal({ quests, chains, prefillChain, onSave, onClose }
               onClick: () => toggle(q.id),
               style: {
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                background: isSelected ? hexToRgba(d.color, 0.12) : '#0e0e14',
-                border: `1.5px solid ${isSelected ? d.color : '#2a2a35'}`,
+                background: isSelected ? hexToRgba(d.color, 0.12) : C.void,
+                border: `1.5px solid ${isSelected ? d.color : C.borderMid}`,
                 borderRadius: 8, cursor: 'pointer', textAlign: 'left',
               },
             },
-              h('div', { style: { width: 16, height: 16, borderRadius: 4, border: `2px solid ${isSelected ? d.color : '#3a3a4a'}`, background: isSelected ? hexToRgba(d.color, 0.2) : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+              h('div', { style: { width: 16, height: 16, borderRadius: 4, border: `2px solid ${isSelected ? d.color : C.borderMid}`, background: isSelected ? hexToRgba(d.color, 0.2) : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
                 isSelected && h(Icon, { name: 'check', size: 10, color: d.color })
               ),
               h(Icon, { name: d.icon, size: 13, color: d.color }),
-              h('span', { style: { fontSize: 13, color: '#e5e7eb', flex: 1 } }, q.name),
-              q._chainName && h('span', { style: { fontSize: 10, color: '#7c7c8a' } }, `(in: ${q._chainName})`)
+              h('span', { style: { fontSize: 13, color: C.textHi, flex: 1 } }, q.name),
+              q._chainName && h('span', { style: { fontSize: 10, color: C.textMid } }, `(in: ${q._chainName})`)
             );
           })
         )
@@ -5097,15 +5101,15 @@ function QuestChainEditorModal({ quests, chains, prefillChain, onSave, onClose }
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           selectedQuests.map((q, i) => {
             const d = DOMAINS[q.domain];
-            return h('div', { key: q.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#0e0e14', borderRadius: 7 } },
+            return h('div', { key: q.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: C.void, borderRadius: 7 } },
               h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
                 h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, padding: '2px 4px', height: 'auto', opacity: i===0?0.3:1 }, onClick: () => moveUp(i) }, '↑'),
                 h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, padding: '2px 4px', height: 'auto', opacity: i===selectedIds.length-1?0.3:1 }, onClick: () => moveDown(i) }, '↓')
               ),
-              h('div', { style: { width: 20, height: 20, borderRadius: '50%', background: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#0e0e14', flexShrink: 0 } }, i+1),
+              h('div', { style: { width: 20, height: 20, borderRadius: '50%', background: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.void, flexShrink: 0 } }, i+1),
               h(Icon, { name: d.icon, size: 13, color: d.color }),
-              h('span', { style: { fontSize: 12.5, color: '#e5e7eb' } }, q.name),
-              i < selectedQuests.length-1 && h('span', { style: { fontSize: 10, color: '#7c7c8a', marginLeft: 'auto' } }, '→ unlocks next')
+              h('span', { style: { fontSize: 12.5, color: C.textHi } }, q.name),
+              i < selectedQuests.length-1 && h('span', { style: { fontSize: 10, color: C.textMid, marginLeft: 'auto' } }, '→ unlocks next')
             );
           })
         )
@@ -5172,13 +5176,13 @@ function QuestRow({ quest, onUpdateProgress, onToggleCheckpoint, onDelete, onArc
         },
           h('div', { style: {
             width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-            border: `2px solid ${cp.done ? d.color : '#3a3a4a'}`,
+            border: `2px solid ${cp.done ? d.color : C.borderMid}`,
             background: cp.done ? hexToRgba(d.color, 0.2) : 'transparent',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }},
             cp.done && h(Icon, { name: 'check', size: 11, color: d.color })
           ),
-          h('span', { style: { fontSize: 13, color: cp.done ? '#7c7c8a' : '#e5e7eb', textDecoration: cp.done ? 'line-through' : 'none' } },
+          h('span', { style: { fontSize: 13, color: cp.done ? C.textMid : C.textHi, textDecoration: cp.done ? 'line-through' : 'none' } },
             cp.name
           ),
           cp.estimatedDays && h('span', { style: { fontSize: 11, color: '#5e5e6b', marginLeft: 'auto' } },
@@ -5215,7 +5219,7 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
           h('div', { style: { fontSize: 18, fontWeight: 700, color: '#f4f1ea' } }, 'Adventurer'),
           equippedTitleDef && h('span', { style: { fontSize: 13, fontWeight: 600, color: equippedTitleDef.color, background: hexToRgba(equippedTitleDef.color, 0.12), border: `1px solid ${hexToRgba(equippedTitleDef.color, 0.35)}`, borderRadius: 6, padding: '2px 8px' } }, equippedTitleDef.name)
         ),
-        h('div', { style: { fontSize: 13, color: '#9ca3af' } }, `Combined level ${totalLevel} · ${totalXp.toLocaleString()} total XP`)
+        h('div', { style: { fontSize: 13, color: C.textMid } }, `Combined level ${totalLevel} · ${totalXp.toLocaleString()} total XP`)
       )
     ),
 
@@ -5235,12 +5239,12 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
                 h('div', { style: { ...styles.charDomainIcon, background: hexToRgba(d.color, 0.15) } }, h(Icon, { name: d.icon, size: 18, color: d.color })),
                 h('div', null,
                   h('div', { style: { fontWeight: 700, fontSize: 15, color: '#f4f1ea' } }, d.name),
-                  h('div', { style: { fontSize: 12, color: '#9ca3af' } }, `${state.domains[k].totalXp.toLocaleString()} total XP`)
+                  h('div', { style: { fontSize: 12, color: C.textMid } }, `${state.domains[k].totalXp.toLocaleString()} total XP`)
                 )
               ),
               h('div', { style: { textAlign: 'right' } },
                 h('div', { style: { fontSize: 22, fontWeight: 700, color: d.color } }, `Level ${comp.rank}`),
-                h('div', { style: { fontSize: 12, color: '#9ca3af' } }, `${comp.currentLevelXp} / ${comp.currentLevelReq} XP`)
+                h('div', { style: { fontSize: 12, color: C.textMid } }, `${comp.currentLevelXp} / ${comp.currentLevelReq} XP`)
               )
             ),
             h('div', { style: { ...styles.meterTrack, height: 8, marginBottom: 10 } },
@@ -5251,7 +5255,7 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
               allSubcats.map(s => h('span', { key: s, style: { fontSize: 11, padding: '2px 8px', borderRadius: 3, background: hexToRgba(d.color, 0.1), color: d.color, border: `1px solid ${hexToRgba(d.color, 0.2)}` } }, s))
             ),
             h('div', { style: { marginTop: 12 } },
-              h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 6 } }, 'Boss gates'),
+              h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 6 } }, 'Boss gates'),
               h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
                 activeBossLevelsFor(state, k).map(bl => {
                   const key = `${k}-${bl}`;
@@ -5285,7 +5289,7 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
       h('button', {
         className: 'rpg-btn',
         onClick: () => setIdentityOpen(o => !o),
-        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#12121f', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 4, color: '#eceaf6' },
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(255,255,255,0.055)', borderRadius: 4, color: C.textHi },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h(Icon, { name: 'award', size: 15, color: '#a78bfa' }),
@@ -5318,7 +5322,7 @@ function TitleSection({ achievements, equippedTitle, onEquip }) {
   if (unlockedTitles.length === 0) {
     return h('div', null,
       h(SectionLabel, { text: 'Titles' }),
-      h('div', { style: { fontSize: 12.5, color: '#7c7c8a', padding: '8px 0' } },
+      h('div', { style: { fontSize: 12.5, color: C.textMid, padding: '8px 0' } },
         'Titles are unlocked through achievements. Earn your first achievement to unlock a title.'
       )
     );
@@ -5327,7 +5331,7 @@ function TitleSection({ achievements, equippedTitle, onEquip }) {
   return h('div', null,
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
       h(SectionLabel, { text: 'Titles' }),
-      h('span', { style: { fontSize: 11.5, color: '#7c7c8a' } }, `${unlockedTitles.length} unlocked`)
+      h('span', { style: { fontSize: 11.5, color: C.textMid } }, `${unlockedTitles.length} unlocked`)
     ),
     h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
       unlockedTitles.map(([id, t]) => {
@@ -5339,9 +5343,9 @@ function TitleSection({ achievements, equippedTitle, onEquip }) {
           title: t.desc,
           style: {
             padding: '8px 14px', borderRadius: 10, cursor: 'pointer',
-            background: isEquipped ? hexToRgba(t.color, 0.18) : '#0e0e14',
-            border: `2px solid ${isEquipped ? t.color : '#2a2a35'}`,
-            color: isEquipped ? t.color : '#9ca3af',
+            background: isEquipped ? hexToRgba(t.color, 0.18) : C.void,
+            border: `2px solid ${isEquipped ? t.color : C.borderMid}`,
+            color: isEquipped ? t.color : C.textMid,
             fontSize: 13, fontWeight: isEquipped ? 700 : 500,
             transition: 'all 0.15s',
             display: 'flex', alignItems: 'center', gap: 6,
@@ -5352,7 +5356,7 @@ function TitleSection({ achievements, equippedTitle, onEquip }) {
         );
       })
     ),
-    h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 8 } },
+    h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 8 } },
       equippedTitle ? `Equipped: ${TITLES[equippedTitle]?.name || ''} — click again to unequip` : 'Click a title to equip it. Equipped title shows next to your name.'
     )
   );
@@ -5372,24 +5376,24 @@ function ClassMasterySection({ classMastery }) {
           ? Math.round(((xp - (highestTier ? highestTier.xp : 0)) / (nextTier.xp - (highestTier ? highestTier.xp : 0))) * 100)
           : 100;
 
-        return h('div', { key: cls.id, style: { background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' } },
+        return h('div', { key: cls.id, style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px' } },
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
               h('span', { style: { fontSize: 18 } }, cls.badge),
               h('div', null,
-                h('div', { style: { fontSize: 13, fontWeight: 700, color: '#e5e7eb' } }, cls.name),
-                h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, cls.desc)
+                h('div', { style: { fontSize: 13, fontWeight: 700, color: C.textHi } }, cls.name),
+                h('div', { style: { fontSize: 11, color: C.textMid } }, cls.desc)
               )
             ),
             h('div', { style: { textAlign: 'right' } },
               highestTier && h('div', { style: { fontSize: 12, fontWeight: 700, color: highestTier.color } }, highestTier.label),
-              h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, `${xp.toLocaleString()} XP`)
+              h('div', { style: { fontSize: 11, color: C.textMid } }, `${xp.toLocaleString()} XP`)
             )
           ),
           h('div', { style: { ...styles.meterTrack, height: 6 } },
             h('div', { style: { ...styles.meterFill, width: `${Math.min(progressPct, 100)}%`, background: highestTier ? highestTier.color : cls.color } })
           ),
-          nextTier && h('div', { style: { fontSize: 10.5, color: '#7c7c8a', marginTop: 4 } },
+          nextTier && h('div', { style: { fontSize: 10.5, color: C.textMid, marginTop: 4 } },
             `${(nextTier.xp - xp).toLocaleString()} XP to ${nextTier.label}`
           ),
           !nextTier && h('div', { style: { fontSize: 10.5, color: '#fbbf24', marginTop: 4 } }, '✦ Maximum mastery reached')
@@ -5406,7 +5410,7 @@ function YearlyLegacySection({ yearlyLegacy }) {
   if (years.length === 0) {
     return h('div', null,
       h(SectionLabel, { text: 'Yearly legacy' }),
-      h('div', { style: { fontSize: 12.5, color: '#7c7c8a', padding: '8px 0' } },
+      h('div', { style: { fontSize: 12.5, color: C.textMid, padding: '8px 0' } },
         'Your yearly character sheet will appear here after you start logging activities. Each year becomes a permanent record of your growth.'
       )
     );
@@ -5423,7 +5427,7 @@ function YearlyLegacySection({ yearlyLegacy }) {
         const topDomainColor = topDomain && DOMAINS[topDomain] ? DOMAINS[topDomain].color : '#a78bfa';
         const isCurrentYear = year === String(new Date().getFullYear());
 
-        return h('div', { key: year, style: { background: '#1a1a24', border: `1px solid ${isCurrentYear ? 'rgba(167,139,250,0.35)' : '#2a2a35'}`, borderRadius: 12, padding: '14px 16px' } },
+        return h('div', { key: year, style: { background: C.hover, border: `1px solid ${isCurrentYear ? 'rgba(167,139,250,0.35)' : C.borderMid}`, borderRadius: 12, padding: '14px 16px' } },
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
             h('div', { style: { fontSize: 16, fontWeight: 800, color: '#f4f1ea' } }, year),
             isCurrentYear && h('span', { style: { fontSize: 10, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8, background: 'rgba(167,139,250,0.12)', padding: '2px 8px', borderRadius: 5 } }, 'This year')
@@ -5437,13 +5441,13 @@ function YearlyLegacySection({ yearlyLegacy }) {
               { label: 'Gates Cleared', value: (entry.gatesCleared || 0).toLocaleString(), color: '#f59e0b' },
               { label: 'Best Streak', value: `${entry.highestStreak || 0}d`, color: '#fb923c' },
             ].map(stat =>
-              h('div', { key: stat.label, style: { background: '#0e0e14', borderRadius: 8, padding: '8px 10px', textAlign: 'center' } },
+              h('div', { key: stat.label, style: { background: C.void, borderRadius: 8, padding: '8px 10px', textAlign: 'center' } },
                 h('div', { style: { fontSize: 16, fontWeight: 800, color: stat.color } }, stat.value),
-                h('div', { style: { fontSize: 10, color: '#7c7c8a', marginTop: 2 } }, stat.label)
+                h('div', { style: { fontSize: 10, color: C.textMid, marginTop: 2 } }, stat.label)
               )
             )
           ),
-          topDomain && h('div', { style: { marginTop: 8, fontSize: 11.5, color: '#9ca3af' } },
+          topDomain && h('div', { style: { marginTop: 8, fontSize: 11.5, color: C.textMid } },
             'Top domain: ',
             h('span', { style: { color: topDomainColor, fontWeight: 600 } }, DOMAIN_NAMES[topDomain] || topDomain)
           )
@@ -5458,7 +5462,7 @@ function AddSubcatButton({ domain, onAdd, color }) {
   const [value, setValue] = useState('');
 
   if (!open) {
-    return h('button', { className: 'rpg-btn', onClick: () => setOpen(true), style: { ...styles.subcatPill, borderStyle: 'dashed', color: '#7c7c8a', borderColor: 'rgba(255,255,255,0.15)' } },
+    return h('button', { className: 'rpg-btn', onClick: () => setOpen(true), style: { ...styles.subcatPill, borderStyle: 'dashed', color: C.textMid, borderColor: 'rgba(255,255,255,0.15)' } },
       h(Icon, { name: 'plus', size: 11 }), ' Add'
     );
   }
@@ -5491,15 +5495,15 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
     h('div', { style: styles.goldBanner },
       h('div', { style: { flex: 1 } },
-        h('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 2 } }, 'Reward currency'),
+        h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 2 } }, 'Reward currency'),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h(Icon, { name: 'coins', size: 22, color: '#fbbf24' }),
           h('span', { style: { fontSize: 28, fontWeight: 700, color: '#fbbf24' } }, state.gold),
-          h('span', { style: { fontSize: 13, color: '#9ca3af' } }, 'gold')
+          h('span', { style: { fontSize: 13, color: C.textMid } }, 'gold')
         ),
         haveEstimate
-          ? h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, `Current pace: ~${avgPerDay.toFixed(1)} gold/day`)
-          : h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, 'No earning history yet — estimates will appear after you earn some gold.')
+          ? h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 4 } }, `Current pace: ~${avgPerDay.toFixed(1)} gold/day`)
+          : h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 4 } }, 'No earning history yet — estimates will appear after you earn some gold.')
       ),
       (state.totalCoinsEarnedAllTime || 0) > 0 && h('div', { style: { textAlign: 'right', paddingLeft: 16, borderLeft: '1px solid rgba(255,255,255,0.06)' } },
         h('div', { style: { fontSize: 10, color: '#4a4868', textTransform: 'uppercase', letterSpacing: 1 } }, 'All-time earned'),
@@ -5522,7 +5526,7 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
           h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 12 } },
             h('div', { style: { flex: 1, minWidth: 0 } },
               h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, r.name),
-              r.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, r.desc),
+              r.desc && h('div', { style: { fontSize: 12, color: C.textMid, marginTop: 2 } }, r.desc),
               canAfford
                 ? h('div', { style: { fontSize: 11.5, color: '#5de8a0', marginTop: 4 } }, '✓ All requirements met')
                 : estimate && h('div', { style: { fontSize: 11.5, color: '#a78bfa', marginTop: 4 } }, `Est. ${estimate}`)
@@ -5579,8 +5583,8 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
                     h(Icon, { name: 'gift', size: 13, color: '#a78bfa' }),
                     h('span', { style: { fontWeight: 700, fontSize: 13.5, color: '#f4f1ea' } }, t.name)
                   ),
-                  t.desc && h('div', { style: { fontSize: 11.5, color: '#9ca3af', marginTop: 2 } }, t.desc),
-                  h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 4 } }, `Paid ${t.cost} · sell for ${refund}`)
+                  t.desc && h('div', { style: { fontSize: 11.5, color: C.textMid, marginTop: 2 } }, t.desc),
+                  h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 4 } }, `Paid ${t.cost} · sell for ${refund}`)
                 ),
                 h('div', { style: { display: 'flex', gap: 6 } },
                   h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, padding: '6px 12px' }, onClick: () => onUseTicket(t.id) },
@@ -5605,7 +5609,7 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
                   h(Icon, { name: 'check', size: 12, color: '#86efac' }),
                   h('span', { style: { fontWeight: 600, fontSize: 13, color: '#d1d5db', textDecoration: 'line-through' } }, t.name)
                 ),
-                h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 3 } }, `Used ${usedDate} · cost ${t.cost} gold`)
+                h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 3 } }, `Used ${usedDate} · cost ${t.cost} gold`)
               ),
               h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => onDeleteTicket(t.id), title: 'Delete from history' },
                 h(Icon, { name: 'trash2', size: 12 })
@@ -5640,19 +5644,19 @@ function LogActivityModal({ activity, onClose, onSubmit }) {
   return h(ModalShell, { title: `Log: ${activity.name}`, onClose },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 } },
       h(Icon, { name: d.icon, size: 16, color: d.color }),
-      h('span', { style: { fontSize: 13, color: '#9ca3af' } }, `${d.name} · ${activity.subcat}`)
+      h('span', { style: { fontSize: 13, color: C.textMid } }, `${d.name} · ${activity.subcat}`)
     ),
     activity.type === 'duration'
       ? h('div', null,
           h('label', { style: styles.label }, 'Duration (minutes)'),
           h('input', { type: 'number', value: duration, min: 1, onChange: e => setDuration(Math.max(1, parseInt(e.target.value)||1)), style: styles.input }),
-          h('div', { style: { marginTop: 8, fontSize: 12, color: '#7c7c8a' } }, `Scaling curve: ${activity.curve.map(([m,x]) => `${m}m=${x}XP`).join(', ')}`)
+          h('div', { style: { marginTop: 8, fontSize: 12, color: C.textMid } }, `Scaling curve: ${activity.curve.map(([m,x]) => `${m}m=${x}XP`).join(', ')}`)
         )
-      : h('div', { style: { fontSize: 13, color: '#9ca3af' } }, 'This activity awards a fixed amount of XP.'),
+      : h('div', { style: { fontSize: 13, color: C.textMid } }, 'This activity awards a fixed amount of XP.'),
     h('div', { style: styles.xpPreview },
       h(Icon, { name: 'zap', size: 16, color: d.color }),
       h('span', { style: { fontSize: 20, fontWeight: 700, color: d.color } }, `+${previewXp} XP`),
-      h('span', { style: { fontSize: 12, color: '#7c7c8a' } }, `to ${d.name}`)
+      h('span', { style: { fontSize: 12, color: C.textMid } }, `to ${d.name}`)
     ),
     h('button', {
       className: 'rpg-btn',
@@ -5750,9 +5754,9 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
           curve.map((p,i) => h('div', { key: i, style: { display: 'flex', gap: 6, alignItems: 'center' } },
             h('input', { type: 'number', value: p[0], onChange: e => updateCurvePoint(i,0,e.target.value), style: { ...styles.input, flex: 1 }, placeholder: 'min' }),
-            h('span', { style: { color: '#7c7c8a', fontSize: 12 } }, 'min ='),
+            h('span', { style: { color: C.textMid, fontSize: 12 } }, 'min ='),
             h('input', { type: 'number', value: p[1], onChange: e => updateCurvePoint(i,1,e.target.value), style: { ...styles.input, flex: 1 }, placeholder: 'XP' }),
-            h('span', { style: { color: '#7c7c8a', fontSize: 12 } }, 'XP'),
+            h('span', { style: { color: C.textMid, fontSize: 12 } }, 'XP'),
             h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeCurvePoint(i) }, h(Icon, { name: 'x', size: 12 }))
           )),
           h('button', { className: 'rpg-btn', style: { ...styles.filterChip, justifyContent: 'center' }, onClick: addCurvePoint }, h(Icon, { name: 'plus', size: 12 }), ' Add point')
@@ -5768,7 +5772,7 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
         h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 } },
           tags.map(tag => h('span', { key: tag, style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: 'rgba(167,139,250,0.15)', color: '#c4b5fd', border: '1px solid rgba(167,139,250,0.3)' } },
             tag,
-            h('button', { className: 'rpg-btn', onClick: () => removeTag(tag), style: { background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 } }, '×')
+            h('button', { className: 'rpg-btn', onClick: () => removeTag(tag), style: { background: 'none', border: 'none', color: C.textMid, cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 } }, '×')
           ))
         ),
         h('div', { style: { display: 'flex', gap: 6 } },
@@ -5785,7 +5789,7 @@ function ActivityFormModal({ activity, customSubcats, onClose, onSave, onAddSubc
       h('button', {
         className: 'rpg-btn',
         onClick: () => setFavorite(v => !v),
-        style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: favorite ? 'rgba(251,191,36,0.12)' : '#0e0e14', border: `1px solid ${favorite ? '#fbbf24' : '#2a2a35'}`, borderRadius: 8, color: favorite ? '#fbbf24' : '#7c7c8a', cursor: 'pointer', fontSize: 13 },
+        style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: favorite ? 'rgba(251,191,36,0.12)' : C.void, border: `1px solid ${favorite ? '#fbbf24' : C.borderMid}`, borderRadius: 8, color: favorite ? '#fbbf24' : C.textMid, cursor: 'pointer', fontSize: 13 },
       }, h('span', { style: { fontSize: 16 } }, favorite ? '★' : '☆'), favorite ? 'Marked as favourite' : 'Mark as favourite'),
 
       h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, justifyContent: 'center', padding: '10px 0' }, onClick: handleSave }, h(Icon, { name: 'check', size: 14 }), ' Save activity')
@@ -5876,16 +5880,16 @@ function QuestFormModal({ onClose, onSave, existingQuest }) {
       h('div', null,
         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
           h('label', { style: styles.label }, `Milestones / checkpoints (optional)`),
-          checkpoints.length > 0 && h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, 'Progress driven by checkmarks')
+          checkpoints.length > 0 && h('span', { style: { fontSize: 11, color: C.textMid } }, 'Progress driven by checkmarks')
         ),
-        checkpoints.length === 0 && h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginBottom: 8 } },
+        checkpoints.length === 0 && h('div', { style: { fontSize: 11.5, color: C.textMid, marginBottom: 8 } },
           'Add checkpoints for structured quests. Leave empty to use a manual % slider.'
         ),
         checkpoints.length > 0 && h('div', { style: { display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 } },
           checkpoints.map((cp, i) =>
-            h('div', { key: cp.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#0e0e14', borderRadius: 8 } },
+            h('div', { key: cp.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: C.void, borderRadius: 8 } },
               h('span', { style: { fontSize: 12.5, color: '#d1d5db', flex: 1 } }, cp.name),
-              cp.estimatedDays && h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, `~${cp.estimatedDays}d`),
+              cp.estimatedDays && h('span', { style: { fontSize: 11, color: C.textMid } }, `~${cp.estimatedDays}d`),
               h('button', { className: 'rpg-btn', style: styles.iconBtnDanger, onClick: () => removeCheckpoint(cp.id) }, h(Icon, { name: 'x', size: 11 }))
             )
           )
@@ -6094,7 +6098,7 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
     ? (economy && economy.miniGateTierMultipliers) || DEFAULT_ECONOMY.miniGateTierMultipliers
     : (economy && economy.gateTierMultipliers) || DEFAULT_ECONOMY.gateTierMultipliers;
 
-  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
+  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: C.textMid };
   const [selectedIdx, setSelectedIdx] = useState(null);
 
   return h(ModalShell, { title: `${d.name} — ${isMiniGate ? 'mini gate' : 'boss battle'}: level ${level}`, onClose, width: 460 },
@@ -6102,7 +6106,7 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
       h('div', { style: { ...styles.bossIcon, background: d.dark900, borderColor: d.dark600, width: 40, height: 40 } },
         h(Icon, { name: 'trophy', size: 20, color: '#fbbf24' })
       ),
-      h('div', { style: { fontSize: 13, color: '#9ca3af' } },
+      h('div', { style: { fontSize: 13, color: C.textMid } },
         'Pick which challenge you completed. The tier and coin reward are shown on each.'
       )
     ),
@@ -6110,7 +6114,7 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
       challenges.map((ch, i) => {
         const mult = (multipliers && multipliers[ch.tier]) || 1.0;
         const coinReward = Math.round(base * mult);
-        const color = tierColors[ch.tier] || '#9ca3af';
+        const color = tierColors[ch.tier] || C.textMid;
         const isSelected = selectedIdx === i;
         return h('button', {
           key: i,
@@ -6118,8 +6122,8 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
           onClick: () => setSelectedIdx(i),
           style: {
             display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-            background: isSelected ? hexToRgba(color, 0.12) : '#0e0e14',
-            border: `2px solid ${isSelected ? color : '#2a2a35'}`,
+            background: isSelected ? hexToRgba(color, 0.12) : C.void,
+            border: `2px solid ${isSelected ? color : C.borderMid}`,
             borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
             textAlign: 'left',
           },
@@ -6129,7 +6133,7 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
             background: hexToRgba(color, 0.15), borderRadius: 6, padding: '4px 8px', textAlign: 'center',
           }}, ch.tier),
           h('div', { style: { flex: 1 } },
-            h('div', { style: { fontSize: 13.5, fontWeight: 600, color: '#e5e7eb' } }, ch.name)
+            h('div', { style: { fontSize: 13.5, fontWeight: 600, color: C.textHi } }, ch.name)
           ),
           h('div', { style: { fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 } },
             h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }),
@@ -6144,7 +6148,7 @@ function BossModal({ domainKey, level, customBosses, economy, onClose, onComplet
       style: {
         ...styles.primaryBtn, width: '100%', justifyContent: 'center', padding: '11px 0',
         background: selectedIdx !== null ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.04)',
-        borderColor: selectedIdx !== null ? '#fbbf24' : '#2a2a35',
+        borderColor: selectedIdx !== null ? '#fbbf24' : C.borderMid,
         color: selectedIdx !== null ? '#fbbf24' : '#5e5e6b',
         cursor: selectedIdx !== null ? 'pointer' : 'not-allowed',
         opacity: selectedIdx !== null ? 1 : 0.6,
@@ -6205,7 +6209,7 @@ function NeglectedDomainsReminder({ state, economy, dismissedReminders, onDismis
         h('button', {
           className: 'rpg-btn',
           onClick: () => onDismiss && onDismiss(k),
-          style: { background: 'none', border: 'none', color: '#7c7c8a', cursor: 'pointer', fontSize: 16, padding: '0 4px' },
+          style: { background: 'none', border: 'none', color: C.textMid, cursor: 'pointer', fontSize: 16, padding: '0 4px' },
           title: 'Dismiss for this session',
         }, '×')
       );
@@ -6266,11 +6270,11 @@ function DomainBalanceIndicator({ state, economy }) {
         const val = totals[k];
         const pct = Math.round((val / maxVal) * 100);
         return h('div', { key: k, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 } },
-          h('div', { style: { width: '100%', height: 56, background: '#0e0e14', borderRadius: 8, position: 'relative', overflow: 'hidden' } },
+          h('div', { style: { width: '100%', height: 56, background: C.void, borderRadius: 8, position: 'relative', overflow: 'hidden' } },
             h('div', { style: { position: 'absolute', bottom: 0, left: 0, right: 0, height: `${Math.max(pct, 4)}%`, background: hexToRgba(dom.color, 0.5), borderRadius: '8px 8px 0 0', transition: 'height 0.4s ease' } })
           ),
           h(Icon, { name: dom.icon, size: 13, color: dom.color }),
-          h('div', { style: { fontSize: 10, color: '#7c7c8a' } }, dom.name.slice(0, 3))
+          h('div', { style: { fontSize: 10, color: C.textMid } }, dom.name.slice(0, 3))
         );
       })
     ),
@@ -6285,8 +6289,8 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
   const isCompleted = !!challenge.completedAt;
   const isRevealed = !!challenge.revealed;
   const tier = challenge.tier || 'B';
-  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
-  const tc = tierColors[tier] || '#9ca3af';
+  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: C.textMid };
+  const tc = tierColors[tier] || C.textMid;
 
   // #11 Hours remaining in the day
   const now = new Date();
@@ -6315,7 +6319,7 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
         )
       ),
       h('div', { style: { fontSize: 15, fontWeight: 700, color: '#f4f1ea', marginBottom: 4 } }, challenge.name),
-      challenge.desc && h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 10 } }, challenge.desc),
+      challenge.desc && h('div', { style: { fontSize: 13, color: C.textMid, marginBottom: 10 } }, challenge.desc),
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
         isCompleted && isRevealed
           ? h('div', { style: { display: 'flex', gap: 16, alignItems: 'center' } },
@@ -6328,8 +6332,8 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
               )
             )
           : h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', width: '100%' } },
-              h('div', { style: { fontSize: 12, color: '#7c7c8a' } }, 'Reward: '),
-              h('div', { style: { fontSize: 13, fontWeight: 700, color: '#7c7c8a' } }, '??? XP + ??? coins'),
+              h('div', { style: { fontSize: 12, color: C.textMid } }, 'Reward: '),
+              h('div', { style: { fontSize: 13, fontWeight: 700, color: C.textMid } }, '??? XP + ??? coins'),
               h('button', { className: 'rpg-btn', style: { ...styles.primaryBtn, marginLeft: 'auto', padding: '6px 14px', background: hexToRgba(d.color, 0.15), borderColor: d.color, color: d.color }, onClick: onComplete },
                 h(Icon, { name: 'check', size: 13 }), ' Complete'
               )
@@ -6393,7 +6397,7 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
                 },
                   h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
                   h('div', { style: { flex: 1 } },
-                    h('div', { style: { fontSize: 13, fontWeight: 600, color: '#eceaf6' } },
+                    h('div', { style: { fontSize: 13, fontWeight: 600, color: C.textHi } },
                       act.name,
                       act.favorite && h('span', { style: { color: '#c9a84c', marginLeft: 5, fontSize: 11 } }, '★')
                     ),
@@ -6461,11 +6465,11 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
     if (mode === 'power') {
       if (status === 'power') return { bg: '#fbbf24', fg: '#13131a', border: '#fbbf24' };
       if (status === 'consistency') return { bg: 'rgba(251,191,36,0.15)', fg: '#fbbf24', border: 'rgba(251,191,36,0.3)' };
-      if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: '#9ca3af', border: '#2a2a35' };
+      if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: C.textMid, border: C.borderMid };
       return { bg: 'transparent', fg: '#5e5e6b', border: '#22222e' };
     }
     if (status === 'consistency' || status === 'power') return { bg: '#22c55e', fg: '#13131a', border: '#22c55e' };
-    if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: '#9ca3af', border: '#2a2a35' };
+    if (status === 'partial') return { bg: 'rgba(156,163,175,0.1)', fg: C.textMid, border: C.borderMid };
     return { bg: 'transparent', fg: '#5e5e6b', border: '#22222e' };
   }
 
@@ -6497,7 +6501,7 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
       )
     ),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 } },
-      dayLabels.map((d, i) => h('div', { key: i, style: { textAlign: 'center', fontSize: 10, color: '#7c7c8a', fontWeight: 600, padding: '4px 0' } }, d))
+      dayLabels.map((d, i) => h('div', { key: i, style: { textAlign: 'center', fontSize: 10, color: C.textMid, fontWeight: 600, padding: '4px 0' } }, d))
     ),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 } },
       cells.map((c, i) => {
@@ -6557,7 +6561,7 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
                         : `${xp} XP`
                     )
                   ),
-                  h('div', { style: { height: 4, background: '#0e0e14', borderRadius: 2, overflow: 'hidden' } },
+                  h('div', { style: { height: 4, background: C.void, borderRadius: 2, overflow: 'hidden' } },
                     h('div', { style: { height: '100%', width: `${pct}%`, background: d.color, borderRadius: 2 } })
                   )
                 );
@@ -6570,7 +6574,7 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
                 selectedActivities.map(l =>
                   h('div', { key: l.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' } },
                     h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: DOMAINS[l.domain]?.color || '#a78bfa', flexShrink: 0 } }),
-                    h('span', { style: { flex: 1, fontSize: 12, color: '#eceaf6' } }, l.activityName),
+                    h('span', { style: { flex: 1, fontSize: 12, color: C.textHi } }, l.activityName),
                     l.detail && h('span', { style: { fontSize: 11, color: '#4a4868' } }, l.detail),
                     h('span', { style: { fontSize: 12, fontWeight: 700, color: DOMAINS[l.domain]?.color || '#a78bfa' } }, `+${l.xp}`)
                   )
@@ -6583,16 +6587,16 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
           )
     ),
 
-    h('div', { style: { marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, color: '#9ca3af' } },
+    h('div', { style: { marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, color: C.textMid } },
       mode === 'power'
         ? [
             h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#fbbf24', borderRadius: 3, display: 'inline-block' } }), 'Power day'),
             h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 3, display: 'inline-block' } }), 'Consistency day'),
-            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
+            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: `1px solid ${C.borderMid}`, borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
           ]
         : [
             h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#22c55e', borderRadius: 3, display: 'inline-block' } }), `Consistency met (all 4 ≥ ${consistencyMin} XP)`),
-            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: '1px solid #2a2a35', borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: `1px solid ${C.borderMid}`, borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
           ],
       h('div', { key: 'tap', style: { fontSize: 10.5, color: '#4a4868', marginTop: 2 } }, 'Tap any day to see what you logged')
     )
@@ -6651,7 +6655,7 @@ function BossEditorModal({ domain, level, existing, onSave, onClose }) {
   const allTiers = ['C', 'B', 'A', 'S'];
   const defaultTiers = isMiniGate ? ['C', 'B', 'A'] : ['B', 'A', 'S'];
   const defaultNames = (DEFAULT_BOSSES[domain] && DEFAULT_BOSSES[domain][level]) || ['', '', ''];
-  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
+  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: C.textMid };
 
   // Parse existing data — handle both old string[] and new {name, tier}[] formats
   function parseInitial() {
@@ -6681,13 +6685,13 @@ function BossEditorModal({ domain, level, existing, onSave, onClose }) {
   }
 
   return h(ModalShell, { title: `${d.name} — Level ${level} boss`, onClose, width: 500 },
-    h('div', { style: { fontSize: 13, color: '#9ca3af', marginBottom: 14 } },
+    h('div', { style: { fontSize: 13, color: C.textMid, marginBottom: 14 } },
       'Define up to 3 challenges for this gate. Each challenge has its own tier — the tier determines the coin reward when that challenge is completed.'
     ),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 } },
       challenges.map((ch, i) => {
-        const color = tierColors[ch.tier] || '#9ca3af';
-        return h('div', { key: i, style: { background: '#0e0e14', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' } },
+        const color = tierColors[ch.tier] || C.textMid;
+        return h('div', { key: i, style: { background: C.void, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px' } },
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
             h('label', { style: { ...styles.label, margin: 0 } }, `Challenge ${i + 1}`),
             h('div', { style: { display: 'flex', gap: 4 } },
@@ -6701,7 +6705,7 @@ function BossEditorModal({ domain, level, existing, onSave, onClose }) {
                   style: {
                     width: 32, height: 28, borderRadius: 6,
                     fontSize: 12, fontWeight: 800,
-                    border: `2px solid ${isActive ? tc : '#2a2a35'}`,
+                    border: `2px solid ${isActive ? tc : C.borderMid}`,
                     background: isActive ? hexToRgba(tc, 0.18) : 'transparent',
                     color: isActive ? tc : '#5e5e6b',
                     cursor: 'pointer',
@@ -6760,7 +6764,7 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
       h('div', { style: { ...styles.bossIcon, background: 'rgba(167,139,250,0.15)', borderColor: 'rgba(167,139,250,0.35)', width: 40, height: 40 } }, h(Icon, { name: 'gift', size: 18, color: '#a78bfa' })),
       h('div', { style: { flex: 1, minWidth: 0 } },
         h('div', { style: { fontWeight: 700, fontSize: 14, color: '#f4f1ea' } }, reward.name),
-        reward.desc && h('div', { style: { fontSize: 12, color: '#9ca3af', marginTop: 2 } }, reward.desc)
+        reward.desc && h('div', { style: { fontSize: 12, color: C.textMid, marginTop: 2 } }, reward.desc)
       )
     ),
 
@@ -6768,7 +6772,7 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 } },
       // Gold cost row
       (reward.cost || 0) > 0 && h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 4 } },
-        h('span', { style: { fontSize: 12, color: '#9ca3af' } }, `🪙 ${reward.cost} gold`),
+        h('span', { style: { fontSize: 12, color: C.textMid } }, `🪙 ${reward.cost} gold`),
         h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.gold || 0) >= (reward.cost || 0) ? '#5de8a0' : '#e05c5c' } },
           `${state.gold || 0} available ${(state.gold || 0) >= (reward.cost || 0) ? '✓' : '✗'}`
         )
@@ -6777,7 +6781,7 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
       reqs.map((req, i) => {
         const { met, label, skipped } = reqStatus(req);
         return h('div', { key: i, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 4, opacity: skipped ? 0.5 : 1 } },
-          h('span', { style: { fontSize: 12, color: '#9ca3af' } }, label),
+          h('span', { style: { fontSize: 12, color: C.textMid } }, label),
           h('span', { style: { fontSize: 13, color: met ? '#5de8a0' : '#e05c5c' } }, met ? '✓' : '✗')
         );
       }),
@@ -7272,33 +7276,33 @@ function DailyQuestSettingsSection({ state, onSetLock }) {
     h('button', {
       className: 'rpg-btn',
       onClick: () => setOpen(o => !o),
-      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb' },
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 10, color: C.textHi },
     },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h(Icon, { name: 'target', size: 16, color: '#a78bfa' }),
         h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, 'Daily Quest Mode')
       ),
-      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' }))
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: C.textMid }))
     ),
-    open && h('div', { style: { background: '#1a1a24', border: '1px solid #2a2a35', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
+    open && h('div', { style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
 
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
         h('div', null,
-          h('div', { style: { fontSize: 13, fontWeight: 600, color: '#e5e7eb' } }, 'Lock mission after first completion'),
-          h('div', { style: { fontSize: 11.5, color: '#7c7c8a', marginTop: 2 } }, 'Once enabled, the activity list can\'t be changed once a day\'s mission starts')
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: C.textHi } }, 'Lock mission after first completion'),
+          h('div', { style: { fontSize: 11.5, color: C.textMid, marginTop: 2 } }, 'Once enabled, the activity list can\'t be changed once a day\'s mission starts')
         ),
         h('button', {
           className: 'rpg-btn',
           onClick: () => onSetLock(!lockEnabled),
           style: {
             width: 44, height: 26, borderRadius: 999, flexShrink: 0,
-            background: lockEnabled ? 'rgba(167,139,250,0.3)' : '#2a2a35',
-            border: `1px solid ${lockEnabled ? '#a78bfa' : '#3a3a4a'}`,
+            background: lockEnabled ? 'rgba(167,139,250,0.3)' : C.borderMid,
+            border: `1px solid ${lockEnabled ? '#a78bfa' : C.borderMid}`,
             position: 'relative', cursor: 'pointer',
           },
         },
           h('div', { style: {
-            width: 18, height: 18, borderRadius: '50%', background: lockEnabled ? '#c4b5fd' : '#7c7c8a',
+            width: 18, height: 18, borderRadius: '50%', background: lockEnabled ? '#c4b5fd' : C.textMid,
             position: 'absolute', top: 3, left: lockEnabled ? 23 : 3, transition: 'left 0.15s ease',
           }})
         )
@@ -7307,12 +7311,12 @@ function DailyQuestSettingsSection({ state, onSetLock }) {
       h('div', null,
         h('div', { style: { ...styles.label, marginBottom: 8 } }, 'Recent mission history'),
         history.length === 0
-          ? h('div', { style: { fontSize: 12, color: '#7c7c8a' } }, 'No completed Daily Quest missions yet.')
+          ? h('div', { style: { fontSize: 12, color: C.textMid } }, 'No completed Daily Quest missions yet.')
           : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-              history.map(h_ => h('div', { key: h_.date, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0e0e14', borderRadius: 8 } },
-                h('div', { style: { fontSize: 12, color: '#9ca3af', minWidth: 78 } }, h_.date),
-                h('div', { style: { fontSize: 12, color: '#e5e7eb', flex: 1 } }, `${h_.activitiesCompleted}/${h_.activitiesPlanned} complete`),
-                h('div', { style: { fontSize: 12, fontWeight: 700, color: h_.completionPct >= 100 ? '#86efac' : '#9ca3af' } }, `${h_.completionPct}%`),
+              history.map(h_ => h('div', { key: h_.date, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 8 } },
+                h('div', { style: { fontSize: 12, color: C.textMid, minWidth: 78 } }, h_.date),
+                h('div', { style: { fontSize: 12, color: C.textHi, flex: 1 } }, `${h_.activitiesCompleted}/${h_.activitiesPlanned} complete`),
+                h('div', { style: { fontSize: 12, fontWeight: 700, color: h_.completionPct >= 100 ? '#86efac' : C.textMid } }, `${h_.completionPct}%`),
                 h_.countedForStreak && h(Icon, { name: 'flame', size: 13, color: '#fb923c' })
               ))
             )
@@ -7344,15 +7348,15 @@ function EconomySettingsSection({ state, onSave }) {
     h('button', {
       className: 'rpg-btn',
       onClick: () => setOpen(o => !o),
-      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb' },
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 10, color: C.textHi },
     },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h(Icon, { name: 'coins', size: 16, color: '#fbbf24' }),
         h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, 'Economy & rewards config')
       ),
-      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' }))
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: C.textMid }))
     ),
-    open && h('div', { style: { background: '#1a1a24', border: '1px solid #2a2a35', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
+    open && h('div', { style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
 
       h(EcoGroup, { label: 'Daily progression' },
         h(EcoField, { label: 'Daily XP goal per domain', value: vals.dailyGoal, onChange: v => setNum('dailyGoal', v) }),
@@ -7388,7 +7392,7 @@ function EconomySettingsSection({ state, onSave }) {
         h('div', { style: { display: 'flex', gap: 8 } },
           ['C', 'B', 'A'].map(t =>
             h('div', { key: t, style: { flex: 1 } },
-              h('label', { style: { ...styles.label, color: { C: '#9ca3af', B: '#60a5fa', A: '#34d399' }[t] } }, `${t} ×`),
+              h('label', { style: { ...styles.label, color: { C: C.textMid, B: '#60a5fa', A: '#34d399' }[t] } }, `${t} ×`),
               h('input', { type: 'number', step: 0.1, value: (vals.miniGateTierMultipliers || {})[t] || '', onChange: e => setMult(t, 'miniGateTierMultipliers', e.target.value), style: styles.input })
             )
           )
@@ -7429,14 +7433,14 @@ function EconomySettingsSection({ state, onSave }) {
 
 function EcoGroup({ label, children }) {
   return h('div', null,
-    h('div', { style: { fontSize: 11.5, color: '#7c7c8a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 } }, label),
+    h('div', { style: { fontSize: 11.5, color: C.textMid, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 } }, label),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }, children)
   );
 }
 
 function EcoField({ label, value, onChange, step }) {
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-    h('label', { style: { ...styles.label, flex: 1, margin: 0, color: '#9ca3af' } }, label),
+    h('label', { style: { ...styles.label, flex: 1, margin: 0, color: C.textMid } }, label),
     h('input', { type: 'number', step: step || 1, value, onChange: e => onChange(e.target.value), style: { ...styles.input, width: 80, flex: 'none', textAlign: 'right' } })
   );
 }
@@ -7453,7 +7457,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
   const [newTier, setNewTier] = useState('B');
 
   const allTiers = ['C', 'B', 'A', 'S'];
-  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: '#9ca3af' };
+  const tierColors = { S: '#fbbf24', A: '#34d399', B: '#60a5fa', C: C.textMid };
 
   function addChallenge() {
     if (!newName.trim()) return;
@@ -7479,16 +7483,16 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
     h('button', {
       className: 'rpg-btn',
       onClick: () => setOpen(o => !o),
-      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#1a1a24', border: '1px solid #2a2a35', borderRadius: 10, color: '#e5e7eb' },
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 10, color: C.textHi },
     },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h(Icon, { name: 'zap', size: 16, color: '#a78bfa' }),
         h('span', { style: { fontSize: 13.5, fontWeight: 600 } }, 'Random challenges'),
-        h('span', { style: { fontSize: 11, color: '#7c7c8a' } }, `· ${library.length} in library`)
+        h('span', { style: { fontSize: 11, color: C.textMid } }, `· ${library.length} in library`)
       ),
-      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: '#7c7c8a' }))
+      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } }, h(Icon, { name: 'chevronRight', size: 14, color: C.textMid }))
     ),
-    open && h('div', { style: { background: '#1a1a24', border: '1px solid #2a2a35', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
+    open && h('div', { style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 } },
 
       h('div', null,
         h('label', { style: styles.label }, 'Daily spawn chance'),
@@ -7499,7 +7503,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
             }, `${pct}%`)
           )
         ),
-        h('div', { style: { fontSize: 11, color: '#7c7c8a', marginTop: 6 } },
+        h('div', { style: { fontSize: 11, color: C.textMid, marginTop: 6 } },
           'The tier of a challenge multiplies its base XP and coin reward (C=0.75×, B=1×, A=1.5×, S=2×).'
         )
       ),
@@ -7507,20 +7511,20 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
       h('div', null,
         h('div', { style: { ...styles.label, marginBottom: 8 } }, `Challenge library (${library.length})`),
         library.length === 0
-          ? h('div', { style: { fontSize: 12, color: '#7c7c8a', marginBottom: 8 } }, 'No challenges yet. Add some below.')
+          ? h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 8 } }, 'No challenges yet. Add some below.')
           : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 } },
               library.map(c => {
                 const d = DOMAINS[c.domain];
                 const ct = c.tier || 'B';
-                const tc = tierColors[ct] || '#9ca3af';
-                return h('div', { key: c.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#0e0e14', borderRadius: 8 } },
+                const tc = tierColors[ct] || C.textMid;
+                return h('div', { key: c.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: C.void, borderRadius: 8 } },
                   h(Icon, { name: d.icon, size: 13, color: d.color }),
                   h('div', { style: { flex: 1, minWidth: 0 } },
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-                      h('span', { style: { fontSize: 13, color: '#e5e7eb' } }, c.name),
+                      h('span', { style: { fontSize: 13, color: C.textHi } }, c.name),
                       h('span', { style: { fontWeight: 800, fontSize: 10, color: tc, background: hexToRgba(tc, 0.15), border: `1px solid ${hexToRgba(tc, 0.4)}`, borderRadius: 4, padding: '1px 5px' } }, ct)
                     ),
-                    c.desc && h('div', { style: { fontSize: 11, color: '#7c7c8a' } }, c.desc)
+                    c.desc && h('div', { style: { fontSize: 11, color: C.textMid } }, c.desc)
                   ),
                   // Tier selector for existing challenges
                   h('div', { style: { display: 'flex', gap: 3, flexShrink: 0 } },
@@ -7532,7 +7536,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
                         onClick: () => updateChallengeTier(c.id, t),
                         style: {
                           width: 24, height: 22, borderRadius: 4, fontSize: 10, fontWeight: 800,
-                          border: `1.5px solid ${isActive ? ttc : '#2a2a35'}`,
+                          border: `1.5px solid ${isActive ? ttc : C.borderMid}`,
                           background: isActive ? hexToRgba(ttc, 0.18) : 'transparent',
                           color: isActive ? ttc : '#5e5e6b',
                           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -7546,7 +7550,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
             ),
 
         // Add new challenge form
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, padding: '10px', background: '#0e0e14', borderRadius: 8 } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, padding: '10px', background: C.void, borderRadius: 8 } },
           h('input', { value: newName, onChange: e => setNewName(e.target.value), style: styles.input, placeholder: 'Challenge name (e.g. Call an old friend)' }),
           h('textarea', { value: newDesc, onChange: e => setNewDesc(e.target.value), style: { ...styles.input, minHeight: 44, resize: 'vertical' }, placeholder: 'Description (optional)' }),
           h('div', { style: { display: 'flex', gap: 8 } },
@@ -7562,7 +7566,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
                   onClick: () => setNewTier(t),
                   style: {
                     width: 30, height: 28, borderRadius: 5, fontSize: 11, fontWeight: 800,
-                    border: `2px solid ${isActive ? ttc : '#2a2a35'}`,
+                    border: `2px solid ${isActive ? ttc : C.borderMid}`,
                     background: isActive ? hexToRgba(ttc, 0.18) : 'transparent',
                     color: isActive ? ttc : '#5e5e6b',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -7592,8 +7596,8 @@ function ConfigErrorScreen({ error }) {
           ? 'Firebase couldn\'t connect. Double-check your config values.'
           : 'This app needs a Firebase project to sync your data.'
       ),
-      h('div', { style: { fontSize: 12.5, color: '#9ca3af', lineHeight: 1.6, background: '#0e0e14', border: '1px solid #2a2a35', borderRadius: 10, padding: '12px 14px' } },
-        h('div', { style: { fontWeight: 600, color: '#e5e7eb', marginBottom: 6 } }, 'Setup steps:'),
+      h('div', { style: { fontSize: 12.5, color: C.textMid, lineHeight: 1.6, background: C.void, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px' } },
+        h('div', { style: { fontWeight: 600, color: C.textHi, marginBottom: 6 } }, 'Setup steps:'),
         h('ol', { style: { margin: 0, paddingLeft: 18 } },
           h('li', null, 'Read ', h('code', null, 'SETUP.md'), ' in the app folder.'),
           h('li', null, 'Create a free Firebase project at console.firebase.google.com'),
@@ -7673,7 +7677,7 @@ function LoginScreen({ onSignedIn }) {
         }, busy ? '...' : (mode === 'signin' ? 'Sign in' : 'Create account'))
       ),
 
-      h('div', { style: { marginTop: 16, fontSize: 13, color: '#9ca3af', textAlign: 'center' } },
+      h('div', { style: { marginTop: 16, fontSize: 13, color: C.textMid, textAlign: 'center' } },
         mode === 'signin'
           ? h('span', null, 'No account yet? ', h('a', { href: '#', onClick: (e) => { e.preventDefault(); setMode('signup'); setError(null); }, style: styles.authLink }, 'Create one'))
           : h('span', null, 'Already have an account? ', h('a', { href: '#', onClick: (e) => { e.preventDefault(); setMode('signin'); setError(null); }, style: styles.authLink }, 'Sign in'))
@@ -7732,24 +7736,27 @@ function AuthGate() {
 
 // ---------- Styles ----------
 // CSS-variable-backed design token system.
+// These resolve through the CSS custom properties set by the active theme's
+// :root override (see THEMES), so every inline style using C.* repaints on
+// theme change — not just the classes covered by global CSS.
 const C = {
-  void:       '#080810',
-  panel:      '#0d0d1a',
-  raised:     '#12121f',
-  hover:      '#1a1a2e',
-  borderDim:  'rgba(255,255,255,0.055)',
-  borderMid:  'rgba(255,255,255,0.10)',
-  borderGlow: 'rgba(167,139,250,0.45)',
-  accent:     '#a78bfa',
-  accentDim:  'rgba(167,139,250,0.12)',
-  accentGlow: 'rgba(167,139,250,0.3)',
-  gold:       '#c9a84c',
-  goldDim:    'rgba(201,168,76,0.15)',
-  textHi:     '#eceaf6',
-  textMid:    '#9896b0',
-  textLo:     '#4a4868',
-  danger:     '#e05c5c',
-  success:    '#5de8a0',
+  void:       'var(--bg-void)',
+  panel:      'var(--bg-panel)',
+  raised:     'var(--bg-raised)',
+  hover:      'var(--bg-hover)',
+  borderDim:  'var(--border-dim)',
+  borderMid:  'var(--border-mid)',
+  borderGlow: 'var(--border-glow)',
+  accent:     'var(--accent)',
+  accentDim:  'var(--accent-dim)',
+  accentGlow: 'var(--accent-glow)',
+  gold:       'var(--gold)',
+  goldDim:    'var(--gold-dim)',
+  textHi:     'var(--text-hi)',
+  textMid:    'var(--text-mid)',
+  textLo:     'var(--text-lo)',
+  danger:     'var(--danger)',
+  success:    'var(--success)',
 };
 
 const styles = {
