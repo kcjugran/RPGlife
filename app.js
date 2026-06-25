@@ -677,14 +677,6 @@ const THEMES = {
       }
       .rpg-fab:hover { box-shadow: 0 6px 32px rgba(167,139,250,0.6), 0 0 0 1px rgba(167,139,250,0.5) !important; }
 
-      /* Cards */
-      .rpg-card {
-        background: linear-gradient(145deg, #111120, #0c0c1a) !important;
-        border: 1px solid rgba(167,139,250,0.08) !important;
-        border-radius: 8px !important;
-      }
-      .rpg-card:hover { border-color: rgba(167,139,250,0.18) !important; }
-
       /* Toast */
       .rpg-toast {
         border-left: 3px solid #a78bfa !important;
@@ -694,9 +686,6 @@ const THEMES = {
 
       /* Modals */
       .rpg-modal-overlay { background: rgba(3,3,8,0.92) !important; }
-
-      /* Primary button glow */
-      .rpg-primary-btn:hover { box-shadow: 0 0 20px rgba(167,139,250,0.4) !important; }
 
       /* Scrollbar */
       ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.2) !important; border-radius: 3px !important; }
@@ -783,14 +772,6 @@ const THEMES = {
       }
       .rpg-fab:hover { box-shadow: 0 6px 32px rgba(217,79,53,0.65) !important; }
 
-      /* Cards */
-      .rpg-card {
-        background: linear-gradient(145deg, #180d0d, #110808) !important;
-        border: 1px solid rgba(200,60,40,0.09) !important;
-        border-radius: 6px !important;
-      }
-      .rpg-card:hover { border-color: rgba(200,60,40,0.22) !important; }
-
       /* Toast */
       .rpg-toast {
         border-left: 3px solid #d94f35 !important;
@@ -800,10 +781,6 @@ const THEMES = {
 
       /* Scanlines — slightly redder tint */
       body::after { background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(30,0,0,0.04) 2px,rgba(30,0,0,0.04) 4px) !important; }
-
-      /* Primary button */
-      .rpg-primary-btn { border-color: #d94f35 !important; color: #d94f35 !important; background: rgba(217,79,53,0.1) !important; }
-      .rpg-primary-btn:hover { box-shadow: 0 0 20px rgba(217,79,53,0.4) !important; }
 
       ::-webkit-scrollbar-thumb { background: rgba(200,60,40,0.25) !important; }
     `,
@@ -861,7 +838,7 @@ const THEMES = {
       }
 
       /* Nav */
-      .rpg-nav-item { color: var(--text-mid) !important; font-size: 15px !important; }
+      .rpg-nav-item { color: var(--text-mid) !important; font-size: 17px !important; }
       .rpg-nav-item.active {
         color: var(--accent) !important;
         background: linear-gradient(90deg, rgba(138,109,0,0.08) 0%, transparent 100%) !important;
@@ -905,15 +882,6 @@ const THEMES = {
       }
       .rpg-fab:hover { box-shadow: 0 6px 32px rgba(180,140,40,0.55) !important; }
 
-      /* Cards */
-      .rpg-card {
-        background: #ffffff !important;
-        border: 1px solid rgba(60,40,10,0.07) !important;
-        border-radius: 8px !important;
-        box-shadow: 0 1px 6px rgba(60,40,10,0.05) !important;
-      }
-      .rpg-card:hover { border-color: rgba(138,109,0,0.2) !important; box-shadow: 0 4px 16px rgba(60,40,10,0.08) !important; }
-
       /* Toast */
       .rpg-toast {
         border-left: 3px solid var(--gold) !important;
@@ -925,17 +893,6 @@ const THEMES = {
 
       /* Modal */
       .rpg-modal-overlay { background: rgba(100,80,40,0.35) !important; backdrop-filter: blur(12px) !important; }
-
-      /* Primary button */
-      .rpg-primary-btn {
-        border-color: var(--accent) !important; color: var(--accent) !important;
-        background: rgba(138,109,0,0.07) !important;
-        font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
-      }
-      .rpg-primary-btn:hover { background: rgba(138,109,0,0.13) !important; box-shadow: 0 0 16px rgba(138,109,0,0.2) !important; }
-
-      .rpg-secondary-btn { border-color: rgba(60,40,10,0.15) !important; color: var(--text-mid) !important; }
-      .rpg-secondary-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
       input, textarea, select {
         background: rgba(255,255,255,0.9) !important;
@@ -1039,14 +996,6 @@ const THEMES = {
       }
       .rpg-fab:hover { box-shadow: 0 6px 32px rgba(232,144,176,0.55) !important; }
 
-      /* Cards */
-      .rpg-card {
-        background: linear-gradient(145deg, #191525, #120f1c) !important;
-        border: 1px solid rgba(240,180,200,0.07) !important;
-        border-radius: 10px !important;
-      }
-      .rpg-card:hover { border-color: rgba(240,180,200,0.16) !important; }
-
       /* Toast */
       .rpg-toast {
         border-left: 3px solid #e890b0 !important;
@@ -1056,10 +1005,6 @@ const THEMES = {
 
       /* Modal */
       .rpg-modal-overlay { background: rgba(4,3,8,0.88) !important; }
-
-      /* Primary button */
-      .rpg-primary-btn { border-color: #e890b0 !important; color: #e890b0 !important; background: rgba(232,144,176,0.08) !important; }
-      .rpg-primary-btn:hover { box-shadow: 0 0 18px rgba(232,144,176,0.35) !important; }
 
       /* Subtle petal scanlines */
       body::after {
@@ -1116,7 +1061,7 @@ const THEMES = {
         letter-spacing: 2px !important;
         text-transform: uppercase !important;
       }
-      code, .rpg-stat-value { font-family: 'Share Tech Mono', monospace !important; }
+      code { font-family: 'Share Tech Mono', monospace !important; }
 
       html, body { background: var(--bg-void); }
 
@@ -1136,7 +1081,7 @@ const THEMES = {
       .rpg-sidebar-logo-sub { color: rgba(0,200,220,0.3) !important; }
 
       /* Nav */
-      .rpg-nav-item { color: var(--text-mid) !important; font-size: 13px !important; }
+      .rpg-nav-item { color: var(--text-mid) !important; font-size: 15px !important; }
       .rpg-nav-item.active {
         color: var(--accent) !important;
         background: rgba(0,240,255,0.05) !important;
@@ -1179,14 +1124,6 @@ const THEMES = {
       }
       .rpg-fab:hover { box-shadow: 0 6px 32px rgba(0,240,255,0.6), 0 0 80px rgba(0,240,255,0.15) !important; }
 
-      /* Cards — angular, minimal */
-      .rpg-card {
-        background: linear-gradient(145deg, #0c1422, #070e1a) !important;
-        border: 1px solid rgba(0,240,255,0.08) !important;
-        border-radius: 4px !important;
-      }
-      .rpg-card:hover { border-color: rgba(0,240,255,0.2) !important; box-shadow: 0 0 20px rgba(0,240,255,0.05) !important; }
-
       /* Toast */
       .rpg-toast {
         border-left: 3px solid var(--accent) !important;
@@ -1198,15 +1135,6 @@ const THEMES = {
       /* Modal */
       .rpg-modal-overlay { background: rgba(0,2,6,0.92) !important; backdrop-filter: blur(10px) !important; }
 
-      /* Primary button */
-      .rpg-primary-btn {
-        border-color: var(--accent) !important; color: var(--accent) !important;
-        background: rgba(0,240,255,0.07) !important;
-        border-radius: 3px !important;
-        text-shadow: 0 0 8px rgba(0,240,255,0.4) !important;
-      }
-      .rpg-primary-btn:hover { box-shadow: 0 0 20px rgba(0,240,255,0.35), 0 0 40px rgba(0,240,255,0.1) !important; }
-
       /* Scanlines — cyan tint */
       body::after {
         background: repeating-linear-gradient(
@@ -1214,13 +1142,6 @@ const THEMES = {
           rgba(0,30,40,0.06) 3px, rgba(0,30,40,0.06) 4px
         ) !important;
       }
-
-      /* Secondary button */
-      .rpg-secondary-btn { border-color: rgba(0,240,255,0.15) !important; border-radius: 3px !important; }
-      .rpg-secondary-btn:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
-
-      /* Section labels */
-      .rpg-section-label { letter-spacing: 3px !important; }
 
       ::-webkit-scrollbar-thumb { background: rgba(0,240,255,0.2) !important; }
     `,
@@ -1888,6 +1809,17 @@ function RPGLife({ user, onSignOut }) {
   DOMAIN_KEYS.forEach(k => {
     domainComputed[k] = computeProgression(state.domains[k].totalXp, state.bossCompletions, k, activeBossLevelsFor(state, k));
   });
+
+  // Sidebar mini character summary (see render below). Rank is the floor of
+  // the average domain level — not the per-domain boss-gate-locked `rank`
+  // field (those start at 1 each, so summing them floors at 4 for a brand
+  // new account and never reads as "Rank 1"). Averaging keeps it a single
+  // whole number that starts at 1 and climbs as the four domains level up.
+  const sidebarMaxLevel = Math.max(1, ...DOMAIN_KEYS.map(k => domainComputed[k].level || 0));
+  const sidebarCombinedRank = Math.max(1, Math.floor(
+    DOMAIN_KEYS.reduce((s, k) => s + (domainComputed[k].level || 1), 0) / DOMAIN_KEYS.length
+  ));
+  const sidebarEquippedTitleDef = state.equippedTitle ? TITLES[state.equippedTitle] : null;
 
   // Shared streak-crediting logic: marks `dateStr` as a qualifying consistency
   // day, increments Consistency Streak (and derived Power Streak), and queues
@@ -2951,18 +2883,18 @@ function RPGLife({ user, onSignOut }) {
         transition: transform 0.25s ease;
       }
       .rpg-sidebar-logo {
-        padding: 16px 16px 14px;
+        padding: 10px 16px 8px;
         border-bottom: 1px solid var(--border-dim);
         display: flex; flex-direction: column; align-items: center;
       }
       .rpg-sidebar-logo-title {
-        font-size: 12px; font-weight: 800; letter-spacing: 2.5px;
+        font-size: 11px; font-weight: 800; letter-spacing: 2.5px;
         text-transform: uppercase; color: var(--gold);
         line-height: 1; text-align: center;
       }
       .rpg-sidebar-logo-sub {
-        font-size: 9.5px; color: var(--text-lo); letter-spacing: 1.5px;
-        text-transform: uppercase; margin-top: 4px; text-align: center;
+        font-size: 8.5px; color: var(--text-lo); letter-spacing: 1.5px;
+        text-transform: uppercase; margin-top: 3px; text-align: center;
       }
       .rpg-nav-list {
         flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
@@ -2971,7 +2903,7 @@ function RPGLife({ user, onSignOut }) {
         position: relative;
         display: flex; align-items: center; gap: 14px;
         padding: 14px 28px;
-        font-size: 14px; font-weight: 500; letter-spacing: 0.2px;
+        font-size: 16px; font-weight: 500; letter-spacing: 0.2px;
         color: var(--text-mid);
         cursor: pointer; border: none; background: transparent;
         text-align: left; width: 100%;
@@ -3046,54 +2978,6 @@ function RPGLife({ user, onSignOut }) {
         margin: 0 auto;
       }
 
-      /* ── Section labels ─────────────────────────────────── */
-      .rpg-section-label {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 10px; font-weight: 700; letter-spacing: 2px;
-        text-transform: uppercase; color: var(--text-lo);
-        margin-bottom: 12px;
-      }
-      .rpg-section-label::after {
-        content: '';
-        flex: 1; height: 1px;
-        background: linear-gradient(90deg, var(--border-dim), transparent);
-      }
-
-      /* ── Cards ──────────────────────────────────────────── */
-      .rpg-card {
-        background: var(--bg-raised);
-        border: 1px solid var(--border-dim);
-        border-radius: 4px;
-        padding: 16px;
-        transition: border-color 0.2s;
-      }
-      .rpg-card:hover { border-color: var(--border-mid); }
-      .rpg-card.glow { border-color: var(--border-glow); box-shadow: 0 0 20px var(--accent-dim); }
-
-      /* ── XP meter ───────────────────────────────────────── */
-      .rpg-meter-track {
-        position: relative; height: 8px;
-        background: var(--bg-void);
-        border: 1px solid var(--border-dim);
-        border-radius: 2px; overflow: visible;
-      }
-      .rpg-meter-fill {
-        position: absolute; top: 0; left: 0; bottom: 0;
-        border-radius: 2px;
-        transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-        animation: barFill 0.7s cubic-bezier(0.4,0,0.2,1);
-      }
-      .rpg-meter-tick {
-        position: absolute; top: -2px; bottom: -2px; width: 1px;
-        background: var(--bg-panel); opacity: 0.6;
-        pointer-events: none;
-      }
-      .rpg-meter-overflow { box-shadow: 0 0 12px currentColor; }
-
-      /* ── Stat value display ─────────────────────────────── */
-      .rpg-stat-value { font-size: 24px; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
-      .rpg-stat-label { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-lo); margin-top: 2px; }
-
       /* ── Primary / secondary buttons ───────────────────── */
       .rpg-primary-btn {
         display: inline-flex; align-items: center; gap: 7px;
@@ -3116,26 +3000,6 @@ function RPGLife({ user, onSignOut }) {
       }
       .rpg-secondary-btn:hover { border-color: var(--text-mid); color: var(--text-hi); background: var(--bg-hover); }
 
-      .rpg-gold-btn {
-        display: inline-flex; align-items: center; gap: 7px;
-        padding: 9px 16px; border-radius: 4px;
-        background: var(--gold-dim);
-        border: 1px solid var(--gold);
-        color: var(--gold); font-size: 12px; font-weight: 700;
-        letter-spacing: 0.5px; text-transform: uppercase;
-        cursor: pointer; transition: all 0.15s;
-      }
-      .rpg-gold-btn:hover { background: rgba(201,168,76,0.22); box-shadow: 0 0 14px var(--gold-glow); }
-
-      .rpg-icon-btn {
-        width: 30px; height: 30px; border-radius: 4px;
-        display: inline-flex; align-items: center; justify-content: center;
-        background: var(--bg-hover); border: 1px solid var(--border-dim);
-        color: var(--text-mid); cursor: pointer; transition: all 0.15s; flex-shrink: 0;
-      }
-      .rpg-icon-btn:hover { border-color: var(--border-mid); color: var(--text-hi); }
-      .rpg-icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(224,92,92,0.1); }
-
       /* ── Toast ──────────────────────────────────────────── */
       .rpg-toast {
         position: fixed; top: 16px; right: 16px; z-index: 9998;
@@ -3149,34 +3013,6 @@ function RPGLife({ user, onSignOut }) {
         animation: toastSlide 0.25s ease;
         max-width: 320px;
       }
-
-      /* ── Modal overlay ──────────────────────────────────── */
-      .rpg-modal-overlay {
-        position: fixed; inset: 0; z-index: 200;
-        background: rgba(4,4,10,0.85);
-        backdrop-filter: blur(6px);
-        display: flex; align-items: center; justify-content: center;
-        padding: 20px;
-      }
-      .rpg-modal {
-        background: var(--bg-panel);
-        border: 1px solid var(--border-mid);
-        border-top: 1px solid rgba(167,139,250,0.25);
-        border-radius: 4px;
-        width: 100%; max-width: 500px;
-        max-height: 90vh; overflow-y: auto;
-        box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03);
-      }
-      .rpg-modal-header {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 18px 20px 14px;
-        border-bottom: 1px solid var(--border-dim);
-      }
-      .rpg-modal-title {
-        font-size: 12px; font-weight: 700; letter-spacing: 2px;
-        text-transform: uppercase; color: var(--text-hi);
-      }
-      .rpg-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 
       /* ── FAB ────────────────────────────────────────────── */
       .rpg-fab {
@@ -3236,37 +3072,16 @@ function RPGLife({ user, onSignOut }) {
         .rpg-topbar { padding: 0 16px; }
       }
 
-      /* ── Filter chips ───────────────────────────────────── */
-      .rpg-chip {
-        display: inline-flex; align-items: center; gap: 5px;
-        padding: 5px 10px; border-radius: 3px;
-        font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
-        border: 1px solid var(--border-dim); background: transparent;
-        color: var(--text-mid); cursor: pointer; transition: all 0.15s;
-      }
-      .rpg-chip:hover { border-color: var(--border-mid); color: var(--text-hi); }
-      .rpg-chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
-
-      /* ── Progress bar tick marks ────────────────────────── */
-      .rpg-meter-wrap { position: relative; }
-      .rpg-meter-wrap .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bg-panel); z-index: 1; }
-
-      /* ── Misc utility ───────────────────────────────────── */
-      .rpg-divider { height: 1px; background: var(--border-dim); margin: 4px 0; }
-      .text-gold { color: var(--gold); }
-      .text-accent { color: var(--accent); }
-      .text-dim { color: var(--text-lo); }
-      .text-mid { color: var(--text-mid); }
     `),
     toast && h('div', { className: 'rpg-toast' }, toast),
 
     // ── Sidebar (desktop) ──────────────────────────────────
     h('aside', { className: 'rpg-sidebar' },
       h('div', { className: 'rpg-sidebar-logo' },
-        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 } },
           // RPGLife sword-and-circle logo — viewBox cropped to emblem only (no text area)
           h('svg', {
-            width: '200', height: '200',
+            width: '72', height: '75',
             viewBox: '140 55 400 415',
             xmlns: 'http://www.w3.org/2000/svg',
             style: { display: 'block' },
@@ -3331,12 +3146,44 @@ function RPGLife({ user, onSignOut }) {
             onClick: () => { setActiveTab(tab.id); SoundEngine.play('nav'); },
             'data-tutorial-id': `tab-${tab.id}`,
           },
-            h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 18, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
+            h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 21, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
             tab.label,
             tab.id === 'character' && state.newAchievementsSince && h('span', { style: { width: 7, height: 7, borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 6px #a78bfa', marginLeft: 'auto', flexShrink: 0 } })
           )
         )
       ),
+
+      // Mini character summary — fills the space below the nav list with a
+      // glanceable status: combined rank, equipped title, and a 4-segment
+      // bar showing each domain's level relative to your strongest one.
+      h('div', {
+        style: {
+          margin: '0 14px 14px', padding: '12px 14px',
+          background: C.raised, border: `1px solid ${C.borderDim}`, borderRadius: 8,
+          display: 'flex', flexDirection: 'column', gap: 9,
+        },
+        onClick: () => setActiveTab('character'),
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h(Icon, { name: 'shield', size: 14, color: C.gold }),
+            h('span', { style: { fontSize: 12, fontWeight: 700, color: C.textHi } }, `Rank ${sidebarCombinedRank}`)
+          ),
+          h('span', { style: { fontSize: 10.5, fontWeight: 600, color: sidebarEquippedTitleDef ? sidebarEquippedTitleDef.color : C.textLo, fontStyle: sidebarEquippedTitleDef ? 'normal' : 'italic' } },
+            sidebarEquippedTitleDef ? sidebarEquippedTitleDef.name : 'Adventurer'
+          )
+        ),
+        h('div', { style: { display: 'flex', gap: 3 } },
+          DOMAIN_KEYS.map(k => h('div', { key: k, style: { flex: 1, height: 4, borderRadius: 2, background: hexToRgba(DOMAINS[k].color, 0.2), overflow: 'hidden' } },
+            h('div', { style: {
+              height: '100%', borderRadius: 2, background: DOMAINS[k].color,
+              width: `${Math.max(6, (domainComputed[k].level / sidebarMaxLevel) * 100)}%`,
+              transition: 'width 0.3s ease',
+            }})
+          ))
+        )
+      ),
+
       h('div', { className: 'rpg-sidebar-footer' },
         // Sync status
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: syncStatus === 'offline' ? C.textMid : syncStatus === 'syncing' ? '#fbbf24' : '#5de8a0' } },
@@ -3376,10 +3223,10 @@ function RPGLife({ user, onSignOut }) {
               title: 'Bonus earned',
             }, h(Icon, { name: 'coins', size: 13, color: '#fbbf24' }), (state.pendingBonuses || []).length)
           ),
-          h('button', { className: 'rpg-hud-chip streak-chip rpg-btn', onClick: () => setStreakCalendar('consistency'), title: 'Consistency streak' },
+          h('button', { className: 'rpg-hud-chip streak-chip rpg-btn', onClick: () => setStreakCalendar('consistency'), title: 'Consistency streak', 'data-tutorial-id': 'streak-chip' },
             h(Icon, { name: 'flame', size: 17, color: '#fb923c' }), state.consistencyStreak
           ),
-          h('button', { className: 'rpg-hud-chip power-chip rpg-btn', onClick: () => setStreakCalendar('power'), title: 'Power streak' },
+          h('button', { className: 'rpg-hud-chip power-chip rpg-btn', onClick: () => setStreakCalendar('power'), title: 'Power streak', 'data-tutorial-id': 'power-streak-chip' },
             h(Icon, { name: 'star', size: 17, color: '#fbbf24' }), state.powerStreak
           ),
           h('button', { className: 'rpg-hud-chip gold-chip rpg-btn', onClick: () => setActiveTab('rewards'), title: 'Gold' },
@@ -3565,309 +3412,213 @@ function RPGLife({ user, onSignOut }) {
 // ==========================================================
 // FEATURE REGISTRY
 // ==========================================================
-// Every feature in this app is registered here. Adding a new
-// feature = adding one object to this array. The tutorial
-// system reads this registry automatically — no other changes
-// needed for the tutorial to include the new feature.
+// Every step in the first-time tutorial is registered here,
+// grouped into short "chapters" (see TUTORIAL_CHAPTERS below)
+// so the walkthrough reads like a guided onboarding quest
+// instead of a flat list of feature cards.
 //
 // Each entry:
 //   id         — unique string identifier
-//   category   — 'core' (shown in main walkthrough)
-//              | 'advanced' (shown in the "More" section after core)
+//   category   — 'core' (the guided walkthrough every new
+//                player gets) | 'advanced' (the single brief
+//                card shown at the very end, pointing at
+//                Settings → Advanced without re-explaining it)
+//   chapter    — key into TUTORIAL_CHAPTERS, used for the
+//                chapter label + per-chapter progress dots
 //   tab        — which tab to navigate to when this step is active
 //   highlight  — data-tutorial-id value of the element to spotlight,
 //                or null for a plain card with no spotlight
 //   icon / color — for the step card visual
-//   title / body — what to show the user
+//   title / body — what to show the user (kept short — this is
+//                a tutorial, not a manual)
 // ==========================================================
+
+const TUTORIAL_CHAPTERS = {
+  welcome:  { label: 'Welcome' },
+  domains:  { label: 'Your Domains' },
+  logging:  { label: 'Logging Activities' },
+  rhythm:   { label: 'Daily Rhythm' },
+  leveling: { label: 'Leveling Up' },
+  quests:   { label: 'Quests' },
+  rewards:  { label: 'Rewards' },
+  mastery:  { label: 'Beyond the Basics' },
+};
+
 const FEATURE_REGISTRY = [
 
   // ══════════════════════════════════════════════════
-  // CORE — the journey every beginner must take
+  // CORE — the guided first-time walkthrough
   // ══════════════════════════════════════════════════
 
   {
     id: 'welcome',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: null,
+    category: 'core', chapter: 'welcome',
+    tab: 'dashboard', highlight: null,
     icon: 'sword', color: '#a78bfa',
-    title: 'Welcome to RPGLife',
-    body: 'This app turns your real life into an RPG. Every workout, study session, social call, or financial action earns XP — just like a game. You gain levels, defeat bosses, complete quests, and spend coins on real rewards. The goal: build a life you\'re proud of, one logged action at a time.',
+    title: 'Welcome, Adventurer',
+    body: 'RPGLife turns your real life into an RPG. Workouts, study sessions, calls home, smart money moves — every one earns XP. Level up, defeat bosses, complete quests, and spend coins on rewards you choose. Let\'s get you started.',
   },
 
   {
     id: 'four-domains',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: null,
+    category: 'core', chapter: 'domains',
+    tab: 'dashboard', highlight: 'tab-dashboard',
     icon: 'shield', color: '#60a5fa',
-    title: 'Your 4 Domains (HRCF)',
-    body: 'Your character has 4 domains: Health, Relationships, Career, and Finance. Everything you do belongs to one of them. Health = fitness, sleep, nutrition. Relationships = family, friends, social. Career = work, learning, skills. Finance = budgeting, investing, earning. Each domain has its own XP bar and level — neglect one and it falls behind.',
+    title: 'Your 4 Domains',
+    body: 'Everything you do falls into one of four domains: Health, Relationships, Career, Finance. Each levels up on its own — neglect one and it falls behind the others.',
   },
 
   {
     id: 'activities-intro',
-    category: 'core',
-    tab: 'activities',
-    highlight: 'tab-activities',
+    category: 'core', chapter: 'logging',
+    tab: 'activities', highlight: 'tab-activities',
     icon: 'zap', color: '#fbbf24',
-    title: 'Activities — your XP sources',
-    body: 'Activities are the real-world actions you track. You create them once, then log them whenever you do them. Each activity belongs to a domain and has an XP value. Examples: "Morning Run → Health, 30 XP", "Read 30 min → Career, 15 XP", "Called Mum → Relationships, 20 XP".',
+    title: 'Activities = XP Sources',
+    body: 'Create an Activity once, then log it anytime you do it in real life. Each one belongs to a domain and has an XP value — "Morning Run → Health, 30 XP" is a good example.',
   },
 
   {
     id: 'activity-types',
-    category: 'core',
-    tab: 'activities',
-    highlight: null,
+    category: 'core', chapter: 'logging',
+    tab: 'activities', highlight: 'tab-activities',
     icon: 'zap', color: '#fbbf24',
-    title: 'Activity Types: Fixed, Duration, Milestone',
-    body: 'Fixed: always awards the same XP (e.g. "Meditation = 20 XP" every time). Duration: XP scales with time spent — the longer you go, the more you earn, following a curve you define. Milestone: a one-time event (e.g. "Finished a book = 100 XP"). You choose the type when creating an activity.',
+    title: '3 Activity Types',
+    body: 'Fixed: same XP every time. Duration: XP scales with time spent. Milestone: a one-off event. Pick whichever fits when you create an activity.',
   },
 
   {
     id: 'activity-tags',
-    category: 'core',
-    tab: 'activities',
-    highlight: null,
+    category: 'core', chapter: 'logging',
+    tab: 'activities', highlight: 'tab-activities',
     icon: 'zap', color: '#fbbf24',
-    title: 'Tags, Favourites & Class Badges',
-    body: 'Add tags to activities (e.g. "Fitness", "Creative", "Learning") to power the search filter and class mastery tracking. Mark any activity as a ★ Favourite — favourites always appear first in every list and in the Quick Log strip. The small emoji badge on each card shows which character class it feeds.',
+    title: 'Tags & Favourites',
+    body: 'Tag activities (e.g. "Fitness") to power search and class mastery. Star your most-used ones as Favourites — they jump to the top of every list.',
   },
 
   {
     id: 'quick-log',
-    category: 'core',
-    tab: 'activities',
-    highlight: 'quick-log-fab',
+    category: 'core', chapter: 'logging',
+    tab: 'activities', highlight: 'quick-log-fab',
     icon: 'plus', color: '#a78bfa',
-    title: 'Logging — the + button',
-    body: 'Tap the purple + button (bottom right) from any tab to open the Quick Log. Select an activity, enter a value if it\'s a duration type, then confirm. XP instantly goes into your domain, the daily meter updates, and the log entry appears in today\'s activity feed. This is the action you\'ll use most every day.',
+    title: 'The + Button Is Your Best Friend',
+    body: 'Tap it from anywhere to log an activity in seconds. Pick it, confirm, done — XP lands instantly. You\'ll use this every single day.',
   },
 
   {
     id: 'daily-meters',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: 'tab-dashboard',
+    category: 'core', chapter: 'rhythm',
+    tab: 'dashboard', highlight: 'tab-dashboard',
     icon: 'scroll', color: '#60a5fa',
-    title: 'Daily Meters & Goals',
-    body: 'The dashboard shows today\'s XP per domain as bar charts. Each bar has a daily goal (default 100 XP). The bars reset to 0 at midnight — but the XP still counts toward your level permanently. Think of the bar as "how much did I invest in this domain today", not a cap on earning.',
+    title: 'Daily Meters',
+    body: 'Your dashboard shows today\'s XP per domain. Bars reset at midnight, but the XP stays forever — they\'re a mirror, not a cap.',
   },
 
   {
     id: 'consistency-streak',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: null,
+    category: 'core', chapter: 'rhythm',
+    tab: 'dashboard', highlight: 'streak-chip',
     icon: 'flame', color: '#fb923c',
     title: 'Consistency Streak',
-    body: 'Your Consistency Streak increases by 1 every day you hit the minimum XP threshold in ALL four domains (default: 50 XP each). Miss one domain — even by 1 XP — and you don\'t count that day. Miss a full day entirely and the streak resets to 0. It\'s the core habit loop: do something in every area of life, every day.',
+    body: 'This flame in the top bar is your streak. Hit the minimum XP in all 4 domains in one day and it grows by 1. Miss even one domain, and that day doesn\'t count.',
   },
 
   {
     id: 'rest-tokens',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: null,
+    category: 'core', chapter: 'rhythm',
+    tab: 'dashboard', highlight: 'streak-chip',
     icon: 'shield', color: '#34d399',
     title: 'Rest Day Tokens 🛡️',
-    body: 'Every 7 consecutive days of hitting your streak, you earn a Rest Day Token. If you miss a day while holding a token, it\'s automatically consumed to protect your streak — no reset. Think of it as a shield earned through consistency. Tokens are shown on your dashboard when you have them.',
+    body: 'That same streak earns a Rest Day Token every 7 days. Miss a day while holding one and it auto-shields your streak from resetting.',
   },
 
   {
     id: 'power-streak',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: null,
+    category: 'core', chapter: 'rhythm',
+    tab: 'dashboard', highlight: 'power-streak-chip',
     icon: 'star', color: '#fbbf24',
     title: 'Power Streak',
-    body: 'After 15 consecutive consistency days, a Power Streak unlocks and begins climbing alongside your main streak. It earns bonus coins at milestones (every 10 power days by default). If you ever break your consistency streak, the power streak resets too — and you need another 15 days to reactivate it. Day 15 unlocks it; Day 16 is Power Streak day 1.',
+    body: 'This star tracks your Power Streak — it unlocks after 15 days of consistency and pays bonus coins. Break your main streak, and this one resets too.',
   },
 
   {
     id: 'streak-warning',
-    category: 'core',
-    tab: 'dashboard',
-    highlight: null,
+    category: 'core', chapter: 'rhythm',
+    tab: 'dashboard', highlight: 'streak-chip',
     icon: 'flame', color: '#fb923c',
-    title: 'Streak at Risk Warning',
-    body: 'After 8 PM, if you haven\'t completed your day\'s requirements yet, an amber warning appears at the top of the dashboard. In Standard Mode it fires if any domain is below the minimum. In Daily Quest Mode it fires if your mission is below 100%. It vanishes the moment you\'ve met the day\'s target.',
+    title: 'Streak-at-Risk Warning',
+    body: 'After 8 PM, if this flame is at risk of not growing today, an amber banner appears on your dashboard reminding you. Hit your target and it disappears.',
   },
 
   {
     id: 'levels-and-xp',
-    category: 'core',
-    tab: 'character',
-    highlight: 'tab-character',
+    category: 'core', chapter: 'leveling',
+    tab: 'character', highlight: 'tab-character',
     icon: 'shield', color: '#34d399',
-    title: 'Levels, Ranks & Boss Gates',
-    body: 'XP accumulates into levels for each domain. Levels are continuous — you never stop earning. Every 10 levels, a Boss Gate appears and locks your rank advancement until you defeat it. Gates are challenges you write for yourself (e.g. "Run 5km without stopping"). Defeat it and choose your tier: B (done), A (exceeded), S (exceptional) — higher tier = more coins.',
+    title: 'Levels & Boss Gates',
+    body: 'XP builds levels forever. Every 10 levels, a Boss Gate blocks rank-up until you defeat a challenge you set for yourself.',
   },
 
   {
     id: 'boss-gate-detail',
-    category: 'core',
-    tab: 'character',
-    highlight: null,
+    category: 'core', chapter: 'leveling',
+    tab: 'character', highlight: 'tab-character',
     icon: 'trophy', color: '#fbbf24',
-    title: 'How Boss Gates Work',
-    body: 'On the Character tab, each domain shows its active boss gates as pills. A glowing pill = gate available to challenge now. Gold = already defeated. Grey = not yet reached. Tap a glowing gate to open the challenge. Read what you set as the challenge, go do it in real life, then return and rate your performance. The rank unlock and coin reward fire immediately.',
+    title: 'Defeating a Gate',
+    body: 'On the Character tab, glowing pills are gates ready to fight. Complete the real-world challenge, then rate yourself B / A / S for the reward.',
   },
 
   {
     id: 'quests-intro',
-    category: 'core',
-    tab: 'quests',
-    highlight: 'tab-quests',
+    category: 'core', chapter: 'quests',
+    tab: 'quests', highlight: 'tab-quests',
     icon: 'target', color: '#818cf8',
-    title: 'Quests — longer-term goals',
-    body: 'Quests are goals with a deadline. Create one by naming it, choosing a domain, setting a deadline (in days), and an XP reward. Progress is tracked with a manual slider or automatic checkpoints. When progress hits 100%, the XP and coins are awarded and the quest moves to your archive. Quests are your campaigns.',
+    title: 'Quests = Longer Goals',
+    body: 'Set a deadline and an XP reward, track progress with a slider, and collect the payout the moment you hit 100%.',
   },
 
   {
     id: 'quest-deadline-urgency',
-    category: 'core',
-    tab: 'quests',
-    highlight: null,
+    category: 'core', chapter: 'quests',
+    tab: 'quests', highlight: 'tab-quests',
     icon: 'target', color: '#818cf8',
-    title: 'Quest Deadlines & Urgency',
-    body: 'Quest cards color-code their deadline: grey means more than 7 days remain, amber means 7 days or fewer, and red with a pulsing border means the quest is overdue. Overdue quests don\'t auto-fail — they stay active until you either complete or delete them. You can also manually archive a quest using the → button.',
+    title: 'Deadlines Matter',
+    body: 'Cards turn amber at 7 days left, red and overdue after that — though nothing auto-fails. You\'re always in control.',
   },
 
   {
     id: 'rewards-intro',
-    category: 'core',
-    tab: 'rewards',
-    highlight: 'tab-rewards',
+    category: 'core', chapter: 'rewards',
+    tab: 'rewards', highlight: 'tab-rewards',
     icon: 'gift', color: '#f472b6',
-    title: 'Rewards — spend your coins',
-    body: 'Create rewards with prices you set — a meal out, a game session, a purchase, a day off. When you can afford one, buy it to receive a Ticket. Tickets sit in your wallet until you\'re ready to redeem them. Sell a ticket back for 50% if you change your mind. The Rewards tab also shows your all-time coins earned so spending feels like victory, not loss.',
+    title: 'Spend Your Coins',
+    body: 'Set your own prices for real rewards — a meal out, a day off, anything. Buy a Ticket when you can afford it, redeem whenever you\'re ready.',
+  },
+
+  {
+    id: 'ready-to-begin',
+    category: 'core', chapter: 'mastery',
+    tab: 'dashboard', highlight: null,
+    icon: 'star', color: '#34d399',
+    title: 'You\'re Ready',
+    body: 'That\'s everything you need to start. Go log your first activity — your adventure begins now.',
   },
 
   // ══════════════════════════════════════════════════
-  // ADVANCED — powerful once you know the basics
+  // ADVANCED — one brief card, not a feature-by-feature
+  // tour. Daily Quest Mode, Quest Chains, Achievements,
+  // Class Mastery, Yearly Legacy, Power Values, Random
+  // Challenges, the Streak Calendar, and full economy
+  // tuning all live in Settings → Advanced — players can
+  // discover those on their own once they're comfortable.
   // ══════════════════════════════════════════════════
 
   {
-    id: 'daily-quest-mode',
-    category: 'advanced',
-    tab: 'dashboard',
-    highlight: null,
-    icon: 'scroll', color: '#a78bfa',
-    title: 'Daily Quest Mode',
-    body: 'Switch the dashboard from HRCF meters to a mission checklist. Build today\'s mission by adding activities from your library. Checking off an activity immediately awards its XP to the relevant domain — whether or not you finish the full mission. At midnight, if you hit 100%, it counts as a consistency day (just like hitting domain minimums in Standard Mode). Drop below 100% and it doesn\'t count.',
-  },
-
-  {
-    id: 'daily-quest-lock',
-    category: 'advanced',
-    tab: 'dashboard',
-    highlight: null,
-    icon: 'lock', color: '#fb923c',
-    title: 'Mission Lock & Templates',
-    body: 'Enable "Lock mission after first completion" in Settings to freeze your mission list the moment you check off the first activity — no adding or removing after you\'ve started. Save any mission as a Template (📋 button) so you can reload your "Morning Routine" or "Gym Day" in one tap the next time you want it.',
-  },
-
-  {
-    id: 'quest-chains',
-    category: 'advanced',
-    tab: 'quests',
-    highlight: null,
-    icon: 'target', color: '#818cf8',
-    title: 'Quest Chains',
-    body: 'Link quests into a campaign where Quest 2 is locked until Quest 1 is completed. When Quest 1 archives, Quest 2 automatically unlocks with a "Chain continues" notification. Create a chain with the ⛓ New chain button, then edit it using the Edit button inside the chain header. Deleting the head quest automatically promotes the next one.',
-  },
-
-  {
-    id: 'quest-archive',
-    category: 'advanced',
-    tab: 'quests',
-    highlight: null,
-    icon: 'trophy', color: '#fbbf24',
-    title: 'Quest Archive & Restore',
-    body: 'Completed quests move to the Archive instead of disappearing. Tap "Archive (N)" in the Quests tab to see them — each shows completion date, XP earned, and gold earned. You can restore an archived quest to active status if you want to redo it, but the XP and coins from the original completion will be reversed to prevent farming.',
-  },
-
-  {
-    id: 'achievements',
-    category: 'advanced',
-    tab: 'character',
-    highlight: null,
-    icon: 'trophy', color: '#fbbf24',
-    title: 'Achievements & Titles',
-    body: 'Achievements unlock automatically as you hit milestones: first log, 100 activities, 30-day streak, 5 boss gates, and more. A purple dot appears on the Character tab when new ones unlock. Each achievement can unlock a cosmetic Title — equip one from the Identity section on the Character tab and it displays next to your name.',
-  },
-
-  {
-    id: 'class-mastery',
-    category: 'advanced',
-    tab: 'character',
-    highlight: null,
-    icon: 'shield', color: '#a78bfa',
-    title: 'Class Mastery',
-    body: 'Five classes accumulate mastery in parallel with your activity logging: Warrior (Health XP), Scholar (Career XP), Guardian (Relationships XP), Treasurer (Finance XP), Creator (any activity tagged "Creative"). Mastery earns cosmetic badges at Bronze (500 XP), Silver (2000 XP), and Gold (5000 XP). No gameplay advantage — purely identity.',
-  },
-
-  {
-    id: 'yearly-legacy',
-    category: 'advanced',
-    tab: 'character',
-    highlight: null,
-    icon: 'calendar', color: '#60a5fa',
-    title: 'Yearly Legacy',
-    body: 'The Identity section on your Character tab builds a yearly record: XP earned, coins earned, activities logged, quests completed, gates cleared, best streak, and top domain — all per calendar year. It updates in real time as you play. Years from now you\'ll be able to look back and see exactly who you were and what you achieved.',
-  },
-
-  {
-    id: 'domain-balance',
-    category: 'advanced',
-    tab: 'dashboard',
-    highlight: null,
-    icon: 'scroll', color: '#60a5fa',
-    title: 'HRCF Balance Indicator',
-    body: 'The dashboard shows a 7-day bar chart comparing your XP across all four domains. A "Lopsided" score means one domain is being neglected — which matters because neglected domains level slower and their boss gates stay locked longer. The indicator is purely informational. No penalty, just a mirror.',
-  },
-
-  {
-    id: 'power-values',
-    category: 'advanced',
-    tab: 'settings',
-    highlight: null,
-    icon: 'star', color: '#fbbf24',
-    title: 'Power Values',
-    body: 'In Settings, set 3 personal values — each gets a name and an emoji. Their symbols stay visible in the top bar at all times. Clicking the icons opens the Power Values editor directly. This is about anchoring your identity in the app: every time you open it, your core values are right there. Pick emojis that resonate deeply, not just look cool.',
-  },
-
-  {
-    id: 'random-challenges',
-    category: 'advanced',
-    tab: 'settings',
-    highlight: null,
-    icon: 'zap', color: '#a78bfa',
-    title: 'Random Challenges',
-    body: 'Build a library of surprise side-challenges in Settings → Advanced → Random Challenges. Set a daily spawn chance (1%–50%). When one spawns on the dashboard, the reward is hidden until you complete it — a blind incentive for unplanned action. Set a tier (C/B/A/S) on each challenge in your library to scale the reward multiplier.',
-  },
-
-  {
-    id: 'difficulty-and-advanced',
-    category: 'advanced',
-    tab: 'settings',
-    highlight: null,
+    id: 'advanced-brief',
+    category: 'advanced', chapter: 'mastery',
+    tab: 'settings', highlight: 'advanced-settings-btn',
     icon: 'settings', color: '#9896b0',
-    title: 'Difficulty & Advanced Settings',
-    body: 'Settings has a Difficulty preset at the top: Relaxed (lower goals, more forgiving), Balanced (default), or Ambitious (harder targets, longer power streak lock). Advanced Settings unlock at combined rank 10 and give you full control: daily XP goals, consistency minimums, streak coin amounts, gate coin bases, tier multipliers, and challenge reward ranges.',
-  },
-
-  {
-    id: 'calendar',
-    category: 'advanced',
-    tab: 'dashboard',
-    highlight: null,
-    icon: 'calendar', color: '#fb923c',
-    title: 'Streak Calendar',
-    body: 'Tap the 🔥 or ⭐ chips in the top bar to open your streak calendar. Green days = consistency met. Tap any day to see a breakdown: which domains you hit, how much XP each got, and every individual activity you logged that day with its XP. A permanent record of every active day.',
+    title: 'Make It Yours',
+    body: 'Once you\'re comfortable, head into Settings → Advanced to tweak almost everything — XP goals, streak rules, quest chains, daily missions, achievements, and more. Nothing there is required. Explore it whenever curiosity strikes.',
   },
 
 ];
@@ -3948,7 +3699,12 @@ function TutorialOverlay({ step, onNext, onClose }) {
 
   const sidebarLeft = 0; // used in cardPosition
 
-  const progress = `${step + 1} / ${ALL_STEPS.length}`;
+  const overallPct = ((step + 1) / ALL_STEPS.length) * 100;
+  const chapterKey = feature.chapter;
+  const chapterLabel = (TUTORIAL_CHAPTERS[chapterKey] || {}).label || '';
+  const chapterIndex = Object.keys(TUTORIAL_CHAPTERS).indexOf(chapterKey) + 1;
+  const stepsInChapter = CORE_STEPS.filter(f => f.chapter === chapterKey);
+  const indexInChapter = stepsInChapter.findIndex(f => f.id === feature.id) + 1;
 
   return h('div', { style: { position: 'fixed', inset: 0, zIndex: 1000, pointerEvents: 'none' } },
     // Dark overlay — full screen minus the spotlight cutout
@@ -3999,13 +3755,25 @@ function TutorialOverlay({ step, onNext, onClose }) {
         background: '#1a1a2e',
         border: '1px solid rgba(167,139,250,0.4)',
         borderRadius: 14,
-        padding: '18px 18px 14px',
+        padding: '16px 18px 14px',
         boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
         zIndex: 1002,
         pointerEvents: 'auto',
+        overflow: 'hidden',
       },
       onClick: e => e.stopPropagation(),
     },
+      // Overall progress — slim bar across the very top of the card,
+      // the quickest "how much is left" signal (gacha-tutorial style)
+      h('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'rgba(255,255,255,0.06)' } },
+        h('div', { style: { height: '100%', width: `${overallPct}%`, background: 'linear-gradient(90deg, #a78bfa, #818cf8)', transition: 'width 0.3s ease' } })
+      ),
+
+      // Chapter label
+      h('div', { style: { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, color: C.textLo, marginTop: 6, marginBottom: 8 } },
+        isAdvanced ? 'One Last Thing' : `Chapter ${chapterIndex} · ${chapterLabel}`
+      ),
+
       // Category badge
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
         h('div', { style: {
@@ -4015,7 +3783,7 @@ function TutorialOverlay({ step, onNext, onClose }) {
           border: `1px solid ${isAdvanced ? 'rgba(251,191,36,0.3)' : 'rgba(167,139,250,0.3)'}`,
           borderRadius: 6, padding: '3px 8px',
         }}, isAdvanced ? '★ Advanced' : '● Core'),
-        h('div', { style: { fontSize: 11, color: C.textMid } }, progress)
+        !isAdvanced && h('div', { style: { fontSize: 11, color: C.textMid } }, `Step ${indexInChapter} / ${stepsInChapter.length}`)
       ),
 
       // Icon + title
@@ -6883,6 +6651,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
       h('button', {
         className: 'rpg-btn',
         onClick: () => setAdvancedOpen(o => !o),
+        'data-tutorial-id': 'advanced-settings-btn',
         style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: C.raised, border: `1px solid ${state.advancedSettingsUnlocked ? 'rgba(167,139,250,0.3)' : C.borderDim}`, borderRadius: 4, color: C.textHi },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
