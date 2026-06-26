@@ -11,12 +11,37 @@ function Icon({ name, size = 16, color = 'currentColor', style = {} }) {
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: color,
-    strokeWidth: 2,
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
-    style: { flexShrink: 0, ...style },
+    // strokeWidth lives in style (not a bare attribute) so themes can
+    // make the icon set read chunkier/cuter via --icon-stroke.
+    style: { flexShrink: 0, strokeWidth: 'var(--icon-stroke, 2)', ...style },
     dangerouslySetInnerHTML: { __html: inner },
   });
+}
+
+// Renders a string that may start or end with a colorful emoji, recoloring just
+// that glyph to match the active theme (via --emoji-filter) while leaving the
+// rest of the text untouched. Falls back to plain text if no emoji is found.
+const LEADING_EMOJI_RE = /^(\p{Extended_Pictographic})(️)?\s*/u;
+const TRAILING_EMOJI_RE = /\s*(\p{Extended_Pictographic})(️)?$/u;
+function EmojiLabel({ text }) {
+  const str = text || '';
+  const lead = LEADING_EMOJI_RE.exec(str);
+  if (lead) {
+    return h(React.Fragment, null,
+      h('span', { style: { filter: 'var(--emoji-filter, none)' } }, lead[0].trim()),
+      ' ' + str.slice(lead[0].length)
+    );
+  }
+  const trail = TRAILING_EMOJI_RE.exec(str);
+  if (trail) {
+    return h(React.Fragment, null,
+      str.slice(0, str.length - trail[0].length) + ' ',
+      h('span', { style: { filter: 'var(--emoji-filter, none)' } }, trail[0].trim())
+    );
+  }
+  return str;
 }
 
 // ---------- Constants ----------
@@ -286,6 +311,15 @@ function uid(prefix='id') {
 // Three style modes: fantasy, digital, atmospheric.
 // ==========================================================
 
+// Each theme has its own fixed sound palette — users only get an enable/disable toggle.
+const THEME_SOUND_STYLE = {
+  default:   'fantasy',
+  ember:     'ember',
+  gilded:    'gilded',
+  sakura:    'sakura',
+  cyberpunk: 'digital',
+};
+
 const SoundEngine = (() => {
   let ctx = null;
   let masterGain = null;
@@ -507,85 +541,228 @@ const SoundEngine = (() => {
     },
   };
 
-  // ── ATMOSPHERIC style ───────────────────────────────────
+  // ── EMBER style — molten metal, forge clangs, fire crackle ──
 
-  const ATMOSPHERIC = {
+  const EMBER = {
     click() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(180, 'sine', t, 0.08, 0.1);
-      noise(t, 0.04, 0.04, 600);
+      osc(660, 'sawtooth', t, 0.05, 0.12);
+      noise(t, 0.02, 0.06, 3200);
     },
     nav() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(120, 'sine', t, 0.15, 0.08);
-      oscFreqSweep(300, 200, 'sine', t, 0.12, 0.06);
+      oscFreqSweep(300, 520, 'sawtooth', t, 0.07, 0.1);
+      noise(t, 0.03, 0.04, 2200);
     },
     logActivity() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(130, 'sine', t,        0.5,  0.15);
-      osc(196, 'sine', t + 0.1,  0.4,  0.12);
-      osc(260, 'sine', t + 0.2,  0.35, 0.1);
-      noise(t, 0.15, 0.05, 300);
+      osc(220, 'sawtooth', t,       0.12, 0.2);
+      osc(440, 'triangle', t + 0.05,0.15, 0.16);
+      noise(t + 0.08, 0.15, 0.05, 4200);
     },
     levelUp() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(65,  'sine', t,       0.8, 0.3);
-      osc(130, 'sine', t,       0.6, 0.25);
-      osc(195, 'sine', t + 0.3, 0.5, 0.25);
-      osc(260, 'sine', t + 0.6, 0.5, 0.3);
-      noise(t + 0.5, 0.4, 0.08, 200);
+      osc(110, 'sawtooth', t,        0.4, 0.3);
+      osc(220, 'triangle', t + 0.1,  0.4, 0.25);
+      osc(330, 'triangle', t + 0.2,  0.4, 0.25);
+      oscFreqSweep(440, 880, 'sawtooth', t + 0.3, 0.4, 0.3);
+      noise(t + 0.3, 0.35, 0.09, 5000);
     },
     bossDefeated() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(55,  'sine', t,       1.0, 0.4);
-      osc(82,  'sine', t,       0.8, 0.3);
-      osc(110, 'sine', t + 0.2, 0.7, 0.3);
-      noise(t, 0.3, 0.15, 150);
-      osc(220, 'sine', t + 0.5, 0.8, 0.4);
+      osc(55,  'sawtooth', t,       0.8, 0.45);
+      osc(110, 'triangle', t,       0.7, 0.3);
+      noise(t, 0.25, 0.25, 320);
+      osc(330, 'triangle', t + 0.3, 0.4, 0.25);
+      osc(440, 'triangle', t + 0.4, 0.4, 0.25);
+      noise(t + 0.4, 0.3, 0.1, 5200);
     },
     achievement() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      [0,0.1,0.2,0.3].forEach((d,i) => {
-        osc(220 * (i+1), 'sine', t+d, 0.5, 0.15);
-        noise(t+d, 0.08, 0.04, 400 + i*200);
+      [0, 0.06, 0.12, 0.18].forEach((d, i) => {
+        osc(660 + i * 110, 'triangle', t + d, 0.15, 0.18 - i * 0.02);
+        noise(t + d, 0.04, 0.05, 3500 + i * 500);
       });
     },
     questComplete() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(110, 'sine', t,       0.6, 0.25);
-      osc(165, 'sine', t + 0.2, 0.5, 0.25);
-      osc(220, 'sine', t + 0.4, 0.6, 0.3);
-      noise(t + 0.3, 0.2, 0.06, 250);
+      osc(220, 'sawtooth', t,       0.3, 0.2);
+      osc(440, 'triangle', t + 0.1, 0.3, 0.22);
+      osc(550, 'triangle', t + 0.2, 0.4, 0.28);
     },
     streakMilestone() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(110, 'sine', t,       0.5, 0.2);
-      osc(165, 'sine', t + 0.2, 0.4, 0.2);
-      noise(t + 0.1, 0.3, 0.08, 180);
+      noise(t, 0.08, 0.1, 4000);
+      osc(495, 'triangle', t + 0.05, 0.25, 0.22);
+      osc(660, 'triangle', t + 0.15, 0.25, 0.2);
     },
     coinPurchase() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      [0,0.06,0.12].forEach((d,i) => osc(260 + i*40, 'sine', t+d, 0.1, 0.12));
+      [0, 0.05, 0.1].forEach((d, i) => {
+        osc(880 + i * 150, 'triangle', t + d, 0.08, 0.15);
+        noise(t + d, 0.02, 0.04, 5000);
+      });
     },
     tutorial() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(196, 'sine', t, 0.2, 0.1);
-      noise(t, 0.1, 0.04, 500);
+      osc(330, 'triangle', t, 0.1, 0.12);
+      noise(t, 0.02, 0.03, 3000);
     },
     streakRisk() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      osc(55, 'sine', t,       0.6, 0.15);
-      osc(52, 'sine', t + 0.3, 0.6, 0.12);
-      noise(t + 0.1, 0.5, 0.06, 100);
+      osc(98, 'sawtooth', t,        0.35, 0.22);
+      osc(92, 'sawtooth', t + 0.25, 0.35, 0.18);
+      noise(t, 0.3, 0.06, 500);
     },
     dayComplete() {
       const c = getCtx(); if (!c) return; const t = c.currentTime;
-      [55,82,110,165,220,330].forEach((f,i) => osc(f,'sine',t+i*0.12, 0.6, 0.3));
-      noise(t + 0.5, 0.5, 0.1, 200);
+      [165, 220, 277, 330, 440, 554].forEach((f, i) =>
+        osc(f, i % 2 ? 'triangle' : 'sawtooth', t + i * 0.09, 0.3, 0.25)
+      );
+      noise(t + 0.5, 0.4, 0.12, 4000);
     },
   };
 
-  const STYLES = { fantasy: FANTASY, digital: DIGITAL, atmospheric: ATMOSPHERIC };
+  // ── GILDED style — crystal chimes, harp shimmer, refined luxury ──
+
+  const GILDED = {
+    click() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(1760, 'sine', t, 0.05, 0.1);
+      osc(2640, 'sine', t, 0.03, 0.05);
+    },
+    nav() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(660, 990, 'sine', t, 0.1, 0.12);
+    },
+    logActivity() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(659, 'sine', t,        0.25, 0.18);
+      osc(831, 'sine', t + 0.05, 0.25, 0.18);
+      osc(1046,'sine', t + 0.1,  0.35, 0.22);
+    },
+    levelUp() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(523, 'sine', t,        0.4, 0.25);
+      osc(659, 'sine', t + 0.12, 0.4, 0.25);
+      osc(831, 'sine', t + 0.24, 0.4, 0.25);
+      osc(1046,'sine', t + 0.36, 0.6, 0.3);
+      osc(1568,'sine', t + 0.36, 0.6, 0.18);
+    },
+    bossDefeated() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(220, 'triangle', t,        0.9, 0.3);
+      osc(440, 'sine',     t,        0.8, 0.25);
+      osc(554, 'sine',     t + 0.15, 0.7, 0.22);
+      osc(659, 'sine',     t + 0.3,  0.6, 0.2);
+      osc(1318,'sine',     t + 0.4,  0.5, 0.25);
+    },
+    achievement() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.05, 0.1, 0.15, 0.2].forEach((d, i) =>
+        osc(1046 + i * 262, 'sine', t + d, 0.25, 0.18 - i * 0.02)
+      );
+    },
+    questComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(659, 'sine', t,        0.3,  0.2);
+      osc(831, 'sine', t + 0.1,  0.3,  0.2);
+      osc(1046,'sine', t + 0.2,  0.45, 0.28);
+    },
+    streakMilestone() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(1318, 'sine', t,        0.3,  0.2);
+      osc(1568, 'sine', t + 0.12, 0.35, 0.22);
+    },
+    coinPurchase() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.05, 0.1].forEach((d, i) => osc(1568 + i * 220, 'sine', t + d, 0.1, 0.16));
+    },
+    tutorial() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(880, 'sine', t, 0.15, 0.12);
+    },
+    streakRisk() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(311, 'sine', t,        0.4, 0.15);
+      osc(294, 'sine', t + 0.25, 0.4, 0.12);
+    },
+    dayComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [523, 659, 831, 1046, 1318, 1568].forEach((f, i) => osc(f, 'sine', t + i * 0.1, 0.4, 0.25));
+      osc(2093, 'sine', t + 0.6, 0.6, 0.3);
+    },
+  };
+
+  // ── SAKURA style — bubbly marimba pings, playful and sweet ──
+
+  const SAKURA = {
+    click() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(988,  'triangle', t,        0.06, 0.15);
+      osc(1318, 'triangle', t + 0.02, 0.04, 0.08);
+    },
+    nav() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(700, 1100, 'triangle', t, 0.08, 0.15);
+    },
+    logActivity() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(784,  'triangle', t,        0.15, 0.2);
+      osc(988,  'triangle', t + 0.06, 0.15, 0.2);
+      osc(1318, 'triangle', t + 0.12, 0.2,  0.25);
+    },
+    levelUp() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [659, 784, 988, 1175, 1568].forEach((f, i) => osc(f, 'triangle', t + i * 0.08, 0.2, 0.25));
+      osc(1975, 'triangle', t + 0.4, 0.3, 0.3);
+    },
+    bossDefeated() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(392, 'triangle', t,        0.3, 0.25);
+      osc(523, 'triangle', t + 0.1,  0.3, 0.22);
+      osc(659, 'triangle', t + 0.2,  0.3, 0.22);
+      osc(880, 'triangle', t + 0.3,  0.4, 0.28);
+      osc(1318,'triangle', t + 0.35, 0.4, 0.25);
+    },
+    achievement() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.05, 0.1, 0.15, 0.2].forEach((d, i) =>
+        osc(1318 + i * 175, 'triangle', t + d, 0.18, 0.16 - i * 0.015)
+      );
+    },
+    questComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(784,  'triangle', t,        0.2, 0.2);
+      osc(988,  'triangle', t + 0.08, 0.2, 0.2);
+      osc(1318, 'triangle', t + 0.16, 0.3, 0.26);
+    },
+    streakMilestone() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(1175, 'triangle', t,        0.15, 0.2);
+      osc(1568, 'triangle', t + 0.1,  0.2,  0.22);
+    },
+    coinPurchase() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.04, 0.08].forEach((d, i) => osc(1318 + i * 150, 'triangle', t + d, 0.09, 0.16));
+    },
+    tutorial() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(880, 'triangle', t, 0.1, 0.15);
+    },
+    streakRisk() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(440, 330, 'triangle', t,        0.3, 0.15);
+      oscFreqSweep(400, 300, 'triangle', t + 0.25, 0.3, 0.12);
+    },
+    dayComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [523, 659, 784, 988, 1175, 1568].forEach((f, i) => osc(f, 'triangle', t + i * 0.08, 0.25, 0.25));
+      osc(1975, 'triangle', t + 0.5, 0.4, 0.3);
+    },
+  };
+
+  const STYLES = { fantasy: FANTASY, digital: DIGITAL, ember: EMBER, gilded: GILDED, sakura: SAKURA };
 
   function play(event) {
     if (!enabled) return;
@@ -701,88 +878,116 @@ const THEMES = {
     label: 'Ember',
     icon: '🔥',
     desc: 'Onyx black, crimson fire, molten gold — warrior aesthetic',
-    fonts: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap',
+    fonts: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Oswald:wght@300;400;500;600;700&display=swap',
     css: `
       :root {
         --bg-void:     #080608;
         --bg-panel:    #0f0a0a;
-        --bg-raised:   #160e0e;
-        --bg-hover:    #1e1212;
-        --border-dim:  rgba(200,60,40,0.08);
-        --border-mid:  rgba(200,60,40,0.2);
-        --border-glow: rgba(220,80,50,0.55);
-        --gold:        #e8a430;
-        --gold-dim:    rgba(232,164,48,0.12);
-        --gold-glow:   rgba(232,164,48,0.4);
-        --accent:      #d94f35;
-        --accent-dim:  rgba(217,79,53,0.12);
-        --accent-glow: rgba(217,79,53,0.35);
-        --text-hi:     #f5ede0;
-        --text-mid:    #957060;
-        --text-lo:     #4a3030;
-        --danger:      #e05c5c;
-        --success:     #5dba80;
+        --bg-raised:   #170e0d;
+        --bg-hover:    #20120f;
+        --border-dim:  rgba(255,90,40,0.1);
+        --border-mid:  rgba(255,90,40,0.24);
+        --border-glow: rgba(255,110,50,0.6);
+        --gold:        #ffb020;
+        --gold-dim:    rgba(255,176,32,0.14);
+        --gold-glow:   rgba(255,176,32,0.45);
+        --accent:      #ff5a32;
+        --accent-dim:  rgba(255,90,50,0.14);
+        --accent-glow: rgba(255,90,50,0.4);
+        --text-hi:     #f7ece0;
+        --text-mid:    #a87f6a;
+        --text-lo:     #5a3830;
+        --danger:      #ff5c5c;
+        --success:     #6dc78f;
+        --radius-card: 2px;
+        --radius-pill: 2px;
+        --icon-stroke: 2.3;
+        --emoji-filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-10deg) brightness(0.95);
       }
 
-      html, body, input, select, textarea, button { font-family: 'Inter', sans-serif !important; }
+      html, body, input, select, textarea, button { font-family: 'Oswald', sans-serif !important; }
       .rpg-sidebar-logo-title, .rpg-topbar-title { font-family: 'Cinzel', serif !important; letter-spacing: 3px !important; }
+      .rpg-nav-item { font-family: 'Oswald', sans-serif !important; font-weight: 600 !important; letter-spacing: 0.6px !important; text-transform: uppercase !important; }
 
       html, body { background: var(--bg-void); }
 
+      @keyframes emberFlicker {
+        0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(255,90,50,0.7); }
+        50% { opacity: 0.7; box-shadow: 0 0 18px rgba(255,90,50,0.95); }
+      }
+      @keyframes emberBreathe {
+        0%, 100% { box-shadow: 0 4px 24px rgba(255,90,50,0.5), 0 0 0 1px rgba(255,90,50,0.25); }
+        50% { box-shadow: 0 4px 34px rgba(255,90,50,0.75), 0 0 0 1px rgba(255,90,50,0.4); }
+      }
+      @keyframes emberRise {
+        0% { transform: translateY(0); opacity: 0; }
+        15% { opacity: 0.9; }
+        100% { transform: translateY(-46px); opacity: 0; }
+      }
+      @keyframes emberGlowLine {
+        0%, 100% { opacity: 0.55; }
+        50% { opacity: 1; }
+      }
+
       /* Sidebar — dark ember gradient with subtle left edge */
       .rpg-sidebar {
-        background: linear-gradient(180deg, #120a0a 0%, #080608 100%) !important;
-        border-right: 1px solid rgba(200,60,40,0.1) !important;
+        background: linear-gradient(180deg, #140b0a 0%, #080608 100%) !important;
+        border-right: 1px solid rgba(255,90,40,0.12) !important;
       }
 
-      /* Nav active — blood orange bar */
+      /* Nav active — blood orange bar that flickers like embers */
       .rpg-nav-item.active {
-        background: linear-gradient(90deg, rgba(217,79,53,0.14) 0%, transparent 100%) !important;
-        color: #f5ede0 !important;
+        background: linear-gradient(90deg, rgba(255,90,50,0.16) 0%, transparent 100%) !important;
+        color: #f7ece0 !important;
       }
-      .rpg-nav-item::before { background: #d94f35 !important; box-shadow: 0 0 10px rgba(217,79,53,0.7) !important; }
-      .rpg-nav-item:hover { background: rgba(200,60,40,0.07) !important; }
+      .rpg-nav-item.active::before {
+        background: #ff5a32 !important;
+        animation: emberFlicker 2.2s ease-in-out infinite !important;
+      }
+      .rpg-nav-item:hover { background: rgba(255,90,40,0.08) !important; }
 
       /* Logo title — cinzel gives it gravitas */
-      .rpg-sidebar-logo-title { color: #e8a430 !important; font-size: 16px !important; }
-      .rpg-sidebar-logo-sub { color: rgba(200,80,60,0.5) !important; }
+      .rpg-sidebar-logo-title { color: #ffb020 !important; font-size: 19px !important; }
+      .rpg-sidebar-logo-sub { color: rgba(255,120,70,0.55) !important; }
 
       /* Topbar */
       .rpg-topbar {
         background: rgba(8,6,8,0.95) !important;
-        border-bottom: 1px solid rgba(200,60,40,0.07) !important;
+        border-bottom: 1px solid rgba(255,90,40,0.1) !important;
         height: 56px !important;
       }
-      .rpg-topbar-title { font-family: 'Cinzel', serif !important; letter-spacing: 2px !important; color: rgba(200,120,80,0.6) !important; }
+      .rpg-topbar-title { font-family: 'Cinzel', serif !important; letter-spacing: 2px !important; color: rgba(220,140,90,0.65) !important; }
 
-      /* HUD chips */
+      /* HUD chips — forged-plate, sharp corners */
       .rpg-hud-chip {
-        background: rgba(217,79,53,0.06) !important;
-        border: 1px solid rgba(200,60,40,0.15) !important;
-        border-radius: 5px !important;
+        background: rgba(255,90,50,0.07) !important;
+        border: 1px solid rgba(255,90,40,0.2) !important;
+        border-radius: 3px !important;
       }
-      .rpg-hud-chip.gold-chip { color: #e8a430 !important; }
-      .rpg-hud-chip.streak-chip { color: #e87040 !important; }
+      .rpg-hud-chip:hover { background: rgba(255,90,50,0.12) !important; }
+      .rpg-hud-chip.gold-chip { color: #ffb020 !important; }
+      .rpg-hud-chip.streak-chip { color: #ff8040 !important; text-shadow: 0 0 6px rgba(255,128,64,0.5) !important; }
+      .rpg-hud-chip.power-chip { color: #ffb020 !important; text-shadow: 0 0 6px rgba(255,176,32,0.5) !important; }
 
-      /* FAB — molten */
+      /* FAB — molten, breathing like a coal */
       .rpg-fab {
-        background: linear-gradient(135deg, #e05030, #b02810) !important;
-        box-shadow: 0 4px 24px rgba(217,79,53,0.5), 0 0 0 1px rgba(217,79,53,0.25) !important;
+        background: linear-gradient(135deg, #ff6a3c, #c4250f) !important;
         border-radius: 12px !important;
+        animation: emberBreathe 2.6s ease-in-out infinite !important;
       }
-      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(217,79,53,0.65) !important; }
+      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(255,90,50,0.7) !important; }
 
       /* Toast */
       .rpg-toast {
-        border-left: 3px solid #d94f35 !important;
-        background: #160e0e !important;
+        border-left: 3px solid #ff5a32 !important;
+        background: #170e0d !important;
         box-shadow: 0 8px 40px rgba(0,0,0,0.8) !important;
       }
 
       /* Scanlines — slightly redder tint */
-      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(30,0,0,0.04) 2px,rgba(30,0,0,0.04) 4px) !important; }
+      body::after { background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(40,0,0,0.05) 2px,rgba(40,0,0,0.05) 4px) !important; }
 
-      ::-webkit-scrollbar-thumb { background: rgba(200,60,40,0.25) !important; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,90,40,0.3) !important; }
     `,
   },
 
@@ -795,7 +1000,7 @@ const THEMES = {
     label: 'Gilded',
     icon: '✦',
     desc: 'Ivory white, warm charcoal, liquid 24K gold — luxury minimalism',
-    fonts: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap',
+    fonts: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Jost:wght@300;400;500;600&display=swap',
     css: `
       :root {
         --bg-void:     #f7f4ef;
@@ -816,9 +1021,10 @@ const THEMES = {
         --text-lo:     #c0aa80;
         --danger:      #c0392b;
         --success:     #27864a;
+        --emoji-filter: grayscale(1) sepia(1) saturate(3) brightness(1.05);
       }
 
-      html, body, input, select, textarea, button { font-family: 'Inter', sans-serif !important; }
+      html, body, input, select, textarea, button { font-family: 'Jost', sans-serif !important; }
       .rpg-sidebar-logo-title, .rpg-topbar-title, .rpg-nav-item, .rpg-modal-title {
         font-family: 'Cormorant Garamond', Georgia, serif !important;
         font-weight: 600 !important;
@@ -849,7 +1055,7 @@ const THEMES = {
 
       /* Logo */
       .rpg-sidebar-logo { border-bottom: 1px solid rgba(60,40,10,0.08) !important; }
-      .rpg-sidebar-logo-title { color: var(--accent) !important; font-family: 'Cormorant Garamond', serif !important; font-size: 18px !important; font-weight: 700 !important; letter-spacing: 3px !important; }
+      .rpg-sidebar-logo-title { color: var(--accent) !important; font-family: 'Cormorant Garamond', serif !important; font-size: 22px !important; font-weight: 700 !important; letter-spacing: 3px !important; }
       .rpg-sidebar-logo-sub { color: var(--text-lo) !important; }
 
       /* Topbar */
@@ -917,104 +1123,132 @@ const THEMES = {
   sakura: {
     label: 'Sakura',
     icon: '🌸',
-    desc: 'Moonlit ink black, cherry blossom pink, silver mist',
-    fonts: 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap',
+    desc: 'Blush-pink kawaii pastels, bubblegum and lavender, soft and sweet',
+    fonts: 'https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800&display=swap',
     css: `
       :root {
-        --bg-void:     #09080c;
-        --bg-panel:    #0f0d14;
-        --bg-raised:   #161320;
-        --bg-hover:    #1d1a28;
-        --border-dim:  rgba(240,180,200,0.07);
-        --border-mid:  rgba(240,180,200,0.15);
-        --border-glow: rgba(235,150,180,0.45);
-        --gold:        #e8c4d4;
-        --gold-dim:    rgba(232,196,212,0.1);
-        --gold-glow:   rgba(232,196,212,0.3);
-        --accent:      #e890b0;
-        --accent-dim:  rgba(232,144,176,0.1);
-        --accent-glow: rgba(232,144,176,0.3);
-        --text-hi:     #f8f0f4;
-        --text-mid:    #9080a0;
-        --text-lo:     #3d3050;
-        --danger:      #e05070;
-        --success:     #70d090;
+        --bg-void:     #fff0f5;
+        --bg-panel:    #ffe9f0;
+        --bg-raised:   #ffffff;
+        --bg-hover:    #ffd9e8;
+        --border-dim:  rgba(255,143,171,0.18);
+        --border-mid:  rgba(255,143,171,0.32);
+        --border-glow: rgba(255,143,171,0.55);
+        --gold:        #ff9d6c;
+        --gold-dim:    rgba(255,157,108,0.15);
+        --gold-glow:   rgba(255,157,108,0.35);
+        --accent:      #ff6fa5;
+        --accent-dim:  rgba(255,111,165,0.12);
+        --accent-glow: rgba(255,111,165,0.35);
+        --text-hi:     #5b2e44;
+        --text-mid:    #a3667f;
+        --text-lo:     #d9a0b8;
+        --danger:      #e2607a;
+        --success:     #5fbf94;
+        --radius-card: 18px;
+        --radius-pill: 999px;
+        --icon-stroke: 2.6;
+        --emoji-filter: grayscale(1) sepia(1) hue-rotate(300deg) saturate(5) brightness(1.1);
       }
 
-      html, body, input, select, textarea { font-family: 'Inter', sans-serif !important; }
-      .rpg-sidebar-logo-title, .rpg-modal-title, .rpg-topbar-title {
-        font-family: 'Noto Serif JP', serif !important;
-        letter-spacing: 2px !important;
-        font-weight: 500 !important;
+      html, body, input, select, textarea, button { font-family: 'Nunito', sans-serif !important; }
+      .rpg-sidebar-logo-title, .rpg-topbar-title {
+        font-family: 'Baloo 2', cursive !important;
+        letter-spacing: 0.5px !important;
+        font-weight: 700 !important;
       }
-      .rpg-nav-item { font-family: 'Inter', sans-serif !important; font-weight: 400 !important; letter-spacing: 0.3px !important; }
+      .rpg-nav-item { font-family: 'Nunito', sans-serif !important; font-weight: 700 !important; letter-spacing: 0.2px !important; }
 
-      html, body { background: var(--bg-void); }
+      html, body { background: var(--bg-void) !important; color: var(--text-hi) !important; }
 
-      /* Sidebar — ink wash gradient */
+      /* No scanlines on a soft pastel theme */
+      body::after { display: none !important; }
+
+      /* Sidebar — cloud-soft blush gradient */
       .rpg-sidebar {
-        background: linear-gradient(180deg, #0e0c18 0%, #09080c 60%, #0c0a10 100%) !important;
-        border-right: 1px solid rgba(240,180,200,0.06) !important;
+        background: linear-gradient(180deg, #fff8fb 0%, #ffeaf2 100%) !important;
+        border-right: 1px solid rgba(255,143,171,0.2) !important;
+        box-shadow: 2px 0 20px rgba(255,143,171,0.1) !important;
       }
+      .rpg-sidebar-logo { border-bottom: 1px solid rgba(255,143,171,0.15) !important; }
 
-      /* Nav active — petal pink bar */
+      /* Nav — rounded floating pill instead of a side bar */
+      .rpg-nav-item {
+        margin: 0 10px !important;
+        width: calc(100% - 20px) !important;
+        border-radius: var(--radius-card) !important;
+        color: var(--text-mid) !important;
+      }
+      .rpg-nav-item::before { display: none !important; }
+      .rpg-nav-item:hover { background: rgba(255,143,171,0.12) !important; color: var(--text-hi) !important; }
       .rpg-nav-item.active {
-        background: linear-gradient(90deg, rgba(232,144,176,0.1) 0%, transparent 100%) !important;
+        background: linear-gradient(135deg, #ffb3cf, #ffd6a8) !important;
+        color: #6b1f42 !important;
+        box-shadow: 0 4px 14px rgba(255,143,171,0.4) !important;
       }
-      .rpg-nav-item::before {
-        background: linear-gradient(180deg, #e890b0, #c060a0) !important;
-        box-shadow: 0 0 10px rgba(232,144,176,0.5) !important;
-      }
-      .rpg-nav-item:hover { background: rgba(240,180,200,0.05) !important; }
 
       /* Logo */
-      .rpg-sidebar-logo-title { color: #e8c4d4 !important; }
-      .rpg-sidebar-logo-sub { color: rgba(232,144,176,0.35) !important; }
+      .rpg-sidebar-logo-title {
+        color: #ff5f93 !important;
+        font-size: 24px !important;
+        letter-spacing: 1px !important;
+        text-shadow: 0 2px 0 rgba(255,179,207,0.7), 0 0 14px rgba(255,111,165,0.35) !important;
+      }
+      .rpg-sidebar-logo-sub { color: #d990ab !important; }
 
       /* Topbar */
       .rpg-topbar {
-        background: rgba(9,8,12,0.94) !important;
-        border-bottom: 1px solid rgba(240,180,200,0.05) !important;
+        background: rgba(255,248,251,0.92) !important;
+        backdrop-filter: blur(14px) !important;
+        border-bottom: 1px solid rgba(255,143,171,0.15) !important;
       }
-      .rpg-topbar-title { color: rgba(200,160,180,0.45) !important; font-family: 'Noto Serif JP', serif !important; }
+      .rpg-topbar-title { color: #c97898 !important; }
 
-      /* Chips */
+      /* Chips — full pill, candy-button feel */
       .rpg-hud-chip {
-        background: rgba(232,144,176,0.05) !important;
-        border: 1px solid rgba(240,180,200,0.1) !important;
-        border-radius: 8px !important;
+        background: #ffffff !important;
+        border: 1px solid rgba(255,143,171,0.3) !important;
+        border-radius: var(--radius-pill) !important;
+        box-shadow: 0 1px 6px rgba(255,143,171,0.15) !important;
       }
-      .rpg-hud-chip.gold-chip { color: #e8c4d4 !important; }
-      .rpg-hud-chip.streak-chip { color: #f0a060 !important; }
-      .rpg-hud-chip.power-chip { color: #e8c4d4 !important; }
+      .rpg-hud-chip:hover { background: #fff0f5 !important; box-shadow: 0 2px 10px rgba(255,143,171,0.25) !important; }
+      .rpg-hud-chip.gold-chip { color: #d65f88 !important; }
+      .rpg-hud-chip.streak-chip { color: #ff8a5b !important; }
+      .rpg-hud-chip.power-chip { color: #a87ce0 !important; }
 
-      /* FAB — blossom gradient */
+      /* FAB — round candy button */
       .rpg-fab {
-        background: linear-gradient(135deg, #f0a0c0, #c06090) !important;
-        box-shadow: 0 4px 24px rgba(232,144,176,0.4), 0 0 0 1px rgba(232,144,176,0.2) !important;
-        border-radius: 16px !important;
+        background: linear-gradient(135deg, #ff9fc4, #c9a8ff) !important;
+        box-shadow: 0 6px 20px rgba(255,111,165,0.45) !important;
+        border-radius: 50% !important;
       }
-      .rpg-fab:hover { box-shadow: 0 6px 32px rgba(232,144,176,0.55) !important; }
+      .rpg-fab:hover { box-shadow: 0 8px 26px rgba(255,111,165,0.6) !important; transform: scale(1.06) !important; }
 
       /* Toast */
       .rpg-toast {
-        border-left: 3px solid #e890b0 !important;
-        background: #161320 !important;
-        box-shadow: 0 8px 40px rgba(0,0,0,0.7) !important;
+        border-left: 3px solid #ff6fa5 !important;
+        background: #ffffff !important;
+        color: var(--text-hi) !important;
+        box-shadow: 0 8px 32px rgba(255,143,171,0.25) !important;
+        border: 1px solid rgba(255,143,171,0.2) !important;
       }
 
       /* Modal */
-      .rpg-modal-overlay { background: rgba(4,3,8,0.88) !important; }
+      .rpg-modal-overlay { background: rgba(255,200,220,0.45) !important; backdrop-filter: blur(10px) !important; }
 
-      /* Subtle petal scanlines */
-      body::after {
-        background: repeating-linear-gradient(
-          0deg, transparent, transparent 3px,
-          rgba(80,0,40,0.025) 3px, rgba(80,0,40,0.025) 4px
-        ) !important;
+      input, textarea, select {
+        background: #ffffff !important;
+        border: 1px solid rgba(255,143,171,0.3) !important;
+        color: var(--text-hi) !important;
+        border-radius: var(--radius-card) !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 3px rgba(255,111,165,0.15) !important;
       }
 
-      ::-webkit-scrollbar-thumb { background: rgba(232,144,176,0.18) !important; }
+      ::-webkit-scrollbar-track { background: rgba(255,143,171,0.06) !important; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,143,171,0.35) !important; border-radius: var(--radius-pill) !important; }
     `,
   },
 
@@ -1048,6 +1282,7 @@ const THEMES = {
         --text-lo:     #0f3040;
         --danger:      #ff2d78;
         --success:     #00f0ff;
+        --emoji-filter: grayscale(1) sepia(1) hue-rotate(150deg) saturate(6) brightness(1.05);
       }
 
       html, body, input, select, textarea, button {
@@ -1076,7 +1311,7 @@ const THEMES = {
       .rpg-sidebar-logo-title {
         color: var(--accent) !important;
         text-shadow: 0 0 12px rgba(0,240,255,0.7), 0 0 24px rgba(0,240,255,0.3) !important;
-        font-size: 17px !important;
+        font-size: 20px !important;
       }
       .rpg-sidebar-logo-sub { color: rgba(0,200,220,0.3) !important; }
 
@@ -1220,7 +1455,6 @@ function buildInitialState() {
     soundSettings: {
       enabled: true,
       volume: 0.6,
-      style: 'fantasy',
     },
     theme: 'default', // 'default' | 'girly' | 'minimal' | 'retro' | 'cyberpunk'
   };
@@ -1736,11 +1970,12 @@ function RPGLife({ user, onSignOut }) {
   // load/day-open rather than waiting for the next qualifying day to lazily
   // overwrite the stale count. Runs once per day per client, same pattern as
   // the challenge check above.
-  // Sync SoundEngine settings whenever state.soundSettings changes
+  // Sync SoundEngine settings whenever state.soundSettings or theme changes.
+  // Sound style is fixed per theme, not user-selectable.
   useEffect(() => {
     if (!loaded || !state || !state.soundSettings) return;
-    SoundEngine.setSettings(state.soundSettings);
-  }, [loaded, state && state.soundSettings]);
+    SoundEngine.setSettings({ ...state.soundSettings, style: THEME_SOUND_STYLE[state.theme] || 'fantasy' });
+  }, [loaded, state && state.soundSettings, state && state.theme]);
 
   function saveSoundSettings(patch) {
     setState(prev => ({
@@ -1788,7 +2023,7 @@ function RPGLife({ user, onSignOut }) {
         :root { --bg-void: #080810; }
         html, body { background: #080810; }
       `),
-      h('div', { style: { width: 44, height: 44, borderRadius: 4, background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+      h('div', { style: { width: 44, height: 44, borderRadius: 'var(--radius-card)', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
         h(Icon, { name: 'sword', size: 22, color: '#a78bfa' })
       ),
       h('div', { style: { fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: '#4a4868' } }, 'Loading character data'),
@@ -2802,6 +3037,8 @@ function RPGLife({ user, onSignOut }) {
         --text-lo:    #4a4868;
         --danger:     #e05c5c;
         --success:    #5de8a0;
+        --radius-card: 4px;
+        --radius-pill: 3px;
         --sidebar-w:  260px;
         --sidebar-w-mobile: 0px;
       }
@@ -2883,18 +3120,18 @@ function RPGLife({ user, onSignOut }) {
         transition: transform 0.25s ease;
       }
       .rpg-sidebar-logo {
-        padding: 12px 19px 10px;
+        padding: 14px 23px 12px;
         border-bottom: 1px solid var(--border-dim);
         display: flex; flex-direction: column; align-items: center;
       }
       .rpg-sidebar-logo-title {
-        font-size: 13px; font-weight: 800; letter-spacing: 2.5px;
+        font-size: 16px; font-weight: 800; letter-spacing: 3px;
         text-transform: uppercase; color: var(--gold);
         line-height: 1; text-align: center;
       }
       .rpg-sidebar-logo-sub {
-        font-size: 10px; color: var(--text-lo); letter-spacing: 1.5px;
-        text-transform: uppercase; margin-top: 4px; text-align: center;
+        font-size: 12px; color: var(--text-lo); letter-spacing: 1.8px;
+        text-transform: uppercase; margin-top: 5px; text-align: center;
       }
       .rpg-nav-list {
         flex: 1; padding: 12px 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
@@ -2978,28 +3215,6 @@ function RPGLife({ user, onSignOut }) {
         margin: 0 auto;
       }
 
-      /* ── Primary / secondary buttons ───────────────────── */
-      .rpg-primary-btn {
-        display: inline-flex; align-items: center; gap: 7px;
-        padding: 9px 16px; border-radius: 4px;
-        background: var(--accent-dim);
-        border: 1px solid var(--accent);
-        color: var(--accent); font-size: 12px; font-weight: 700;
-        letter-spacing: 0.5px; text-transform: uppercase;
-        cursor: pointer; transition: all 0.15s;
-      }
-      .rpg-primary-btn:hover { background: rgba(167,139,250,0.22); box-shadow: 0 0 14px var(--accent-glow); }
-
-      .rpg-secondary-btn {
-        display: inline-flex; align-items: center; gap: 7px;
-        padding: 8px 14px; border-radius: 4px;
-        background: transparent;
-        border: 1px solid var(--border-mid);
-        color: var(--text-mid); font-size: 12px; font-weight: 600;
-        cursor: pointer; transition: all 0.15s;
-      }
-      .rpg-secondary-btn:hover { border-color: var(--text-mid); color: var(--text-hi); background: var(--bg-hover); }
-
       /* ── Toast ──────────────────────────────────────────── */
       .rpg-toast {
         position: fixed; top: 16px; right: 16px; z-index: 9998;
@@ -3073,7 +3288,7 @@ function RPGLife({ user, onSignOut }) {
       }
 
     `),
-    toast && h('div', { className: 'rpg-toast' }, toast),
+    toast && h('div', { className: 'rpg-toast' }, h(EmojiLabel, { text: toast })),
 
     // ── Sidebar (desktop) ──────────────────────────────────
     h('aside', { className: 'rpg-sidebar' },
@@ -3081,7 +3296,7 @@ function RPGLife({ user, onSignOut }) {
         h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 } },
           // RPGLife sword-and-circle logo — viewBox cropped to emblem only (no text area)
           h('svg', {
-            width: '86', height: '90',
+            width: '103', height: '108',
             viewBox: '140 55 400 415',
             xmlns: 'http://www.w3.org/2000/svg',
             style: { display: 'block' },
@@ -3099,31 +3314,72 @@ function RPGLife({ user, onSignOut }) {
             h('circle', { cx: '419', cy: '110', r: '2', style: { fill: 'var(--accent)' }, opacity: '0.35' }),
             h('circle', { cx: '212', cy: '180', r: '1.5', style: { fill: 'var(--accent)' }, opacity: '0.22' }),
             h('circle', { cx: '468', cy: '180', r: '1.5', style: { fill: 'var(--accent)' }, opacity: '0.22' }),
-            // Blade
-            h('path', { d: 'M335,390 L333,250 L340,88 L347,250 L345,390 Z', fill: C.textHi, opacity: '0.92' }),
-            h('path', { d: 'M340,88 L340,385', fill: 'none', style: { stroke: 'var(--text-mid)' }, strokeWidth: '1.2', opacity: '0.5' }),
-            h('path', { d: 'M333,390 L340,418 L347,390 Z', fill: C.textHi, opacity: '0.7' }),
-            // Crossguard
-            h('path', { d: 'M296,250 Q300,245 308,246 L332,248 L332,256 L308,258 Q300,259 296,254 Z', fill: C.textHi, opacity: '0.9' }),
-            h('path', { d: 'M384,250 Q380,245 372,246 L348,248 L348,256 L372,258 Q380,259 384,254 Z', fill: C.textHi, opacity: '0.9' }),
-            h('ellipse', { cx: '298', cy: '252', rx: '4', ry: '6', fill: C.textHi, opacity: '0.7' }),
-            h('ellipse', { cx: '382', cy: '252', rx: '4', ry: '6', fill: C.textHi, opacity: '0.7' }),
-            // Guard jewel
-            h('polygon', { points: '340,240 348,252 340,264 332,252', style: { fill: 'var(--accent)' } }),
-            h('polygon', { points: '340,243 346,252 340,261 334,252', style: { fill: 'var(--accent)' }, opacity: '0.6' }),
-            h('polygon', { points: '340,229 346,236 340,243 334,236', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
-            // Grip
-            h('rect', { x: '336', y: '152', width: '8', height: '82', fill: C.textHi, opacity: '0.7', rx: '2' }),
-            h('line', { x1: '335', y1: '165', x2: '345', y2: '171', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '180', x2: '345', y2: '186', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '195', x2: '345', y2: '201', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '210', x2: '345', y2: '216', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
-            h('line', { x1: '335', y1: '225', x2: '345', y2: '231', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
-            // Pommel
-            h('polygon', { points: '340,120 348,136 340,152 332,136', fill: C.textHi }),
-            h('polygon', { points: '340,124 345,136 340,148 335,136', style: { fill: 'var(--accent)' } }),
-            h('polygon', { points: '340,108 344,116 340,124 336,116', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
-            // Wordmark — only the sword+circle portion is used inline (no text, text shown below in DOM)
+
+            ...(state.theme === 'sakura' ? [
+              // ── Kawaii wand — replaces the sword for the Sakura theme ──
+              // Candy-cane stick with a glossy highlight stripe
+              h('rect', { key: 'w-stick', x: '334', y: '160', width: '12', height: '215', rx: '6', style: { fill: 'var(--accent)' }, opacity: '0.9' }),
+              h('rect', { key: 'w-stripe', x: '337', y: '160', width: '3', height: '215', rx: '1.5', fill: '#ffffff', opacity: '0.5' }),
+              // Dangling charm bead near the tip, with a tiny shine highlight
+              h('circle', { key: 'w-bead', cx: '340', cy: '368', r: '6', style: { fill: 'var(--gold)' } }),
+              h('circle', { key: 'w-bead-shine', cx: '338', cy: '366', r: '1.8', fill: '#ffffff', opacity: '0.75' }),
+              // Ribbon bow — soft rounded loops instead of flat triangles, with fluttering tails
+              h('path', { key: 'w-bow-l', d: 'M340,248 C312,224 286,228 286,248 C286,268 312,272 340,248 Z', style: { fill: 'var(--accent)' } }),
+              h('path', { key: 'w-bow-r', d: 'M340,248 C368,224 394,228 394,248 C394,268 368,272 340,248 Z', style: { fill: 'var(--accent)' } }),
+              h('path', { key: 'w-tail-l', d: 'M334,255 L320,283 L331,277 Z', style: { fill: 'var(--accent)' }, opacity: '0.85' }),
+              h('path', { key: 'w-tail-r', d: 'M346,255 L360,283 L349,277 Z', style: { fill: 'var(--accent)' }, opacity: '0.85' }),
+              // Heart knot at the bow's centre
+              h('circle', { key: 'w-heart-l', cx: '336', cy: '244', r: '6.5', style: { fill: 'var(--gold)' } }),
+              h('circle', { key: 'w-heart-r', cx: '344', cy: '244', r: '6.5', style: { fill: 'var(--gold)' } }),
+              h('polygon', { key: 'w-heart-pt', points: '327.5,247.5 352.5,247.5 340,260.5', style: { fill: 'var(--gold)' } }),
+              // Star finial on top, a touch bigger and fluffier
+              h('polygon', {
+                key: 'w-star',
+                points: '340,84 345.4,99.4 361,99.7 348.6,109.5 353.3,124.8 340,115.8 326.7,124.8 331.4,109.5 319,99.7 334.6,99.4',
+                style: { fill: 'var(--gold)' },
+              }),
+              h('circle', { key: 'w-star-shine', cx: '335', cy: '95', r: '2.2', fill: '#ffffff', opacity: '0.8' }),
+              // Twinkle sparkle floating beside the star
+              h('path', {
+                key: 'w-twinkle',
+                d: 'M368,84 L370,91 L377,93 L370,95 L368,102 L366,95 L359,93 L366,91 Z',
+                style: { fill: 'var(--gold)' }, opacity: '0.75',
+              }),
+            ] : [
+              // Blade
+              h('path', { key: 's-blade', d: 'M335,390 L333,250 L340,88 L347,250 L345,390 Z', fill: C.textHi, opacity: '0.92' }),
+              h('path', { key: 's-blade-line', d: 'M340,88 L340,385', fill: 'none', style: { stroke: 'var(--text-mid)' }, strokeWidth: '1.2', opacity: '0.5' }),
+              h('path', { key: 's-blade-tip', d: 'M333,390 L340,418 L347,390 Z', fill: C.textHi, opacity: '0.7' }),
+              // Crossguard
+              h('path', { key: 's-guard-l', d: 'M296,250 Q300,245 308,246 L332,248 L332,256 L308,258 Q300,259 296,254 Z', fill: C.textHi, opacity: '0.9' }),
+              h('path', { key: 's-guard-r', d: 'M384,250 Q380,245 372,246 L348,248 L348,256 L372,258 Q380,259 384,254 Z', fill: C.textHi, opacity: '0.9' }),
+              h('ellipse', { key: 's-guard-cap-l', cx: '298', cy: '252', rx: '4', ry: '6', fill: C.textHi, opacity: '0.7' }),
+              h('ellipse', { key: 's-guard-cap-r', cx: '382', cy: '252', rx: '4', ry: '6', fill: C.textHi, opacity: '0.7' }),
+              // Guard jewel
+              h('polygon', { key: 's-jewel', points: '340,240 348,252 340,264 332,252', style: { fill: 'var(--accent)' } }),
+              h('polygon', { key: 's-jewel-shine', points: '340,243 346,252 340,261 334,252', style: { fill: 'var(--accent)' }, opacity: '0.6' }),
+              h('polygon', { key: 's-jewel-top', points: '340,229 346,236 340,243 334,236', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
+              // Grip
+              h('rect', { key: 's-grip', x: '336', y: '152', width: '8', height: '82', fill: C.textHi, opacity: '0.7', rx: '2' }),
+              h('line', { key: 's-wrap-1', x1: '335', y1: '165', x2: '345', y2: '171', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 's-wrap-2', x1: '335', y1: '180', x2: '345', y2: '186', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 's-wrap-3', x1: '335', y1: '195', x2: '345', y2: '201', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 's-wrap-4', x1: '335', y1: '210', x2: '345', y2: '216', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 's-wrap-5', x1: '335', y1: '225', x2: '345', y2: '231', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              // Pommel
+              h('polygon', { key: 's-pommel', points: '340,120 348,136 340,152 332,136', fill: C.textHi }),
+              h('polygon', { key: 's-pommel-jewel', points: '340,124 345,136 340,148 335,136', style: { fill: 'var(--accent)' } }),
+              h('polygon', { key: 's-pommel-shine', points: '340,108 344,116 340,124 336,116', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
+            ]),
+
+            ...(state.theme === 'ember' ? [
+              // ── Ember-only extras: a glowing molten core down the blade
+              // and rising spark particles, layered on top of the sword ──
+              h('path', { key: 'e-blade-glow', d: 'M340,90 L340,383', fill: 'none', stroke: '#ff5a32', strokeWidth: '1.4', opacity: '0.8', style: { animation: 'emberGlowLine 1.8s ease-in-out infinite' } }),
+              h('circle', { key: 'e-spark-1', cx: '322', cy: '300', r: '2', fill: '#ff8040', style: { animation: 'emberRise 2.6s ease-in infinite' } }),
+              h('circle', { key: 'e-spark-2', cx: '359', cy: '260', r: '1.6', fill: '#ffb020', style: { animation: 'emberRise 3.2s ease-in 0.8s infinite' } }),
+              h('circle', { key: 'e-spark-3', cx: '328', cy: '340', r: '1.4', fill: '#ff6a3c', style: { animation: 'emberRise 2.9s ease-in 1.6s infinite' } }),
+            ] : []),
           ),
           h('div', { style: { textAlign: 'center', marginTop: 2 } },
             h('div', { className: 'rpg-sidebar-logo-title' }, 'RPGLife'),
@@ -3174,9 +3430,9 @@ function RPGLife({ user, onSignOut }) {
           )
         ),
         h('div', { style: { display: 'flex', gap: 3 } },
-          DOMAIN_KEYS.map(k => h('div', { key: k, style: { flex: 1, height: 4, borderRadius: 2, background: hexToRgba(DOMAINS[k].color, 0.2), overflow: 'hidden' } },
+          DOMAIN_KEYS.map(k => h('div', { key: k, style: { flex: 1, height: 4, borderRadius: 'var(--radius-pill)', background: hexToRgba(DOMAINS[k].color, 0.2), overflow: 'hidden' } },
             h('div', { style: {
-              height: '100%', borderRadius: 2, background: DOMAINS[k].color,
+              height: '100%', borderRadius: 'var(--radius-pill)', background: DOMAINS[k].color,
               width: `${Math.max(6, (domainComputed[k].level / sidebarMaxLevel) * 100)}%`,
               transition: 'width 0.3s ease',
             }})
@@ -3242,7 +3498,7 @@ function RPGLife({ user, onSignOut }) {
               style: { gap: 5, cursor: 'pointer' },
             },
               h('span', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#4a4868' } }, 'P'),
-              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 20 } }, v.symbol))
+              pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 20, filter: 'var(--emoji-filter, none)' } }, v.symbol))
             );
           })()
         )
@@ -3795,7 +4051,7 @@ function TutorialOverlay({ step, onNext, onClose }) {
         }},
           h(Icon, { name: feature.icon, size: 17, color: feature.color })
         ),
-        h('div', { style: { fontSize: 14, fontWeight: 700, color: '#f4f1ea', lineHeight: 1.3 } }, feature.title)
+        h('div', { style: { fontSize: 14, fontWeight: 700, color: '#f4f1ea', lineHeight: 1.3 } }, h(EmojiLabel, { text: feature.title }))
       ),
 
       // Body text
@@ -3851,7 +4107,7 @@ function AchievementPopup({ achievement, onClose }) {
         background: hexToRgba(achievement.color || '#fbbf24', 0.15),
         border: `1.5px solid ${hexToRgba(achievement.color || '#fbbf24', 0.4)}`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22,
+        fontSize: 22, filter: 'var(--emoji-filter, none)',
       }}, '🏆'),
       h('div', null,
         h('div', { style: { fontSize: 10.5, fontWeight: 700, color: achievement.color || '#fbbf24', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 } }, '★ Achievement unlocked'),
@@ -3903,7 +4159,7 @@ function AchievementsSection({ achievements }) {
                   transition: 'all 0.2s',
                 },
               },
-                h('div', { style: { fontSize: 22 } }, isUnlocked ? '🏆' : '🔒'),
+                h('div', { style: { fontSize: 22, filter: 'var(--emoji-filter, none)' } }, isUnlocked ? '🏆' : '🔒'),
                 h('div', { style: { fontSize: 10.5, fontWeight: 600, color: isUnlocked ? def.color : C.textMid, lineHeight: 1.3 } }, def.name)
               );
             })
@@ -3965,7 +4221,7 @@ function Header({ gold, consistencyStreak, powerStreak, user, onSignOut, syncSta
         return h('div', { style: styles.pValuesChip },
           h('div', { style: styles.pValuesLabel }, 'P Values'),
           h('div', { style: styles.pValuesIcons },
-            pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 16 } }, v.symbol))
+            pv.map((v, i) => h('span', { key: i, title: v.name || '', style: { fontSize: 16, filter: 'var(--emoji-filter, none)' } }, v.symbol))
           )
         );
       })(),
@@ -4188,9 +4444,9 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
     h('div', { style: { display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' } },
       templates.length > 0 && h('div', { style: { position: 'relative' } },
         h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, fontSize: 12, padding: '6px 10px' }, onClick: () => setTemplatePickerOpen(v => !v) },
-          '📋 Use template'
+          h(EmojiLabel, { text: '📋 Use template' })
         ),
-        templatePickerOpen && h('div', { style: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 260, zIndex: 50, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, maxHeight: 240, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' } },
+        templatePickerOpen && h('div', { style: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 260, zIndex: 50, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 'var(--radius-card)', maxHeight: 240, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' } },
           h('div', { style: { fontSize: 10, color: C.textLo, padding: '8px 12px 4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 } }, 'Mission templates'),
           templates.map(tmpl => h('div', { key: tmpl.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid ' + C.borderDim } },
             h('button', { className: 'rpg-btn', onClick: () => applyTemplate(tmpl), style: { flex: 1, background: 'transparent', border: 'none', textAlign: 'left', color: C.textHi, fontSize: 13, cursor: 'pointer', padding: 0 } },
@@ -4202,7 +4458,7 @@ function DailyQuestPanel({ state, today, onSetActivities, onToggleComplete, onSa
         )
       ),
       total > 0 && !plan.locked && h('button', { className: 'rpg-btn', style: { ...styles.secondaryBtn, fontSize: 12, padding: '6px 10px' }, onClick: () => setShowSaveTemplate(v => !v) },
-        '💾 Save as template'
+        h(EmojiLabel, { text: '💾 Save as template' })
       )
     ),
 
@@ -4344,7 +4600,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
   return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 20, animation: 'fadeIn 0.3s ease' } },
 
     // #2 Day complete celebration flash
-    dayCompleteShown && h('div', { style: { padding: '14px 18px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.5)', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10, animation: 'fadeIn 0.3s ease' } },
+    dayCompleteShown && h('div', { style: { padding: '14px 18px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.5)', borderRadius: 'var(--radius-card)', display: 'flex', alignItems: 'center', gap: 10, animation: 'fadeIn 0.3s ease' } },
       h('span', { style: { fontSize: 20 } }, '✦'),
       h('div', null,
         h('div', { style: { fontSize: 13, fontWeight: 700, color: '#c4b5fd' } }, 'Day complete — all domains cleared'),
@@ -4353,13 +4609,13 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     ),
 
     // #3 Streak-at-risk warning
-    streakAtRisk && h('div', { style: { padding: '10px 14px', background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.3)', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 } },
+    streakAtRisk && h('div', { style: { padding: '10px 14px', background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.3)', borderRadius: 'var(--radius-card)', display: 'flex', alignItems: 'center', gap: 8 } },
       h(Icon, { name: 'flame', size: 14, color: '#fb923c' }),
       h('span', { style: { fontSize: 12.5, color: '#fb923c' } }, `Streak at risk — hit your minimums before midnight to protect your ${state.consistencyStreak}-day streak`)
     ),
 
     // #1 Start here banner for new users
-    showStartBanner && h('div', { style: { padding: '16px 18px', background: 'rgba(167,139,250,0.07)', border: '1px dashed rgba(167,139,250,0.3)', borderRadius: 4 } },
+    showStartBanner && h('div', { style: { padding: '16px 18px', background: 'rgba(167,139,250,0.07)', border: '1px dashed rgba(167,139,250,0.3)', borderRadius: 'var(--radius-card)' } },
       h('div', { style: { fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10 } }, 'Where to begin'),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
         h('div', { style: { fontSize: 12, color: '#9896b0' } }, '① Create activities in the Activities tab — these are the things you do daily that earn XP'),
@@ -4470,7 +4726,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
           const chainPos = chain ? chain.questIds.indexOf(q.id) + 1 : null;
           return h('div', { key: q.id },
             chain && h('div', { style: { fontSize: 10, color: '#a78bfa', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
-              '⛓', `${chain.name} — step ${chainPos} of ${chain.questIds.length}`
+              h('span', { style: { filter: 'var(--emoji-filter, none)' } }, '⛓'), `${chain.name} — step ${chainPos} of ${chain.questIds.length}`
             ),
             h(QuestRow, { quest: q, compact: true })
           );
@@ -4482,7 +4738,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
     h(DomainBalanceIndicator, { state, economy }),
 
     // #6 Power Streak visibility — show when active
-    state.powerStreak > 0 && h('div', { style: { padding: '12px 16px', background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+    state.powerStreak > 0 && h('div', { style: { padding: '12px 16px', background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 'var(--radius-card)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h(Icon, { name: 'star', size: 15, color: '#c9a84c' }),
         h('div', null,
@@ -4499,7 +4755,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
 
     // #19 Rest day tokens display
     state.restDayTokens > 0 && h('div', { style: { fontSize: 11.5, color: C.textMid, display: 'flex', alignItems: 'center', gap: 5 } },
-      h('span', null, '🛡️'),
+      h('span', { style: { filter: 'var(--emoji-filter, none)' } }, '🛡️'),
       `${state.restDayTokens} rest day token${state.restDayTokens !== 1 ? 's' : ''} — miss a day without losing your streak`
     ),
 
@@ -4510,7 +4766,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
         : h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
             todayActLog.map(log => {
               const d = DOMAINS[log.domain];
-              return h('div', { key: log.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', background: C.raised, borderRadius: 4 } },
+              return h('div', { key: log.id, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', background: C.raised, borderRadius: 'var(--radius-card)' } },
                 h('div', { style: { width: 4, height: 4, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
                 h('span', { style: { flex: 1, fontSize: 12.5, color: C.textHi } }, log.activityName),
                 log.detail && h('span', { style: { fontSize: 11, color: '#4a4868' } }, log.detail),
@@ -4519,7 +4775,7 @@ function Dashboard({ state, domainProgress, domainComputed, today, todayLog, onL
                   className: 'rpg-btn',
                   onClick: () => onDeleteLogEntry(log.id),
                   title: 'Remove this log entry and reverse its XP',
-                  style: { width: 22, height: 22, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#3a3850', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s' },
+                  style: { width: 22, height: 22, borderRadius: 'var(--radius-pill)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#3a3850', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s' },
                   onMouseEnter: e => e.currentTarget.style.color = '#e05c5c',
                   onMouseLeave: e => e.currentTarget.style.color = '#3a3850',
                 }, h(Icon, { name: 'x', size: 11 }))
@@ -4541,7 +4797,7 @@ function SectionLabel({ text, icon, accent }) {
 }
 
 function EmptyState({ text }) {
-  return h('div', { style: { padding: '32px 20px', textAlign: 'center', color: '#4a4868', fontSize: 12, letterSpacing: 0.3, border: '1px dashed rgba(255,255,255,0.06)', borderRadius: 4 } }, text);
+  return h('div', { style: { padding: '32px 20px', textAlign: 'center', color: '#4a4868', fontSize: 12, letterSpacing: 0.3, border: '1px dashed rgba(255,255,255,0.06)', borderRadius: 'var(--radius-card)' } }, text);
 }
 
 // ---------- Activities View ----------
@@ -4592,7 +4848,7 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
           return h('button', {
             key: act.id, className: 'rpg-btn',
             onClick: () => onLog(act),
-            style: { display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: C.raised, border: `1px solid ${hexToRgba(d.color, 0.3)}`, borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s' },
+            style: { display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: C.raised, border: `1px solid ${hexToRgba(d.color, 0.3)}`, borderRadius: 'var(--radius-card)', cursor: 'pointer', transition: 'all 0.15s' },
           },
             h('div', { style: { width: 5, height: 5, borderRadius: '50%', background: d.color, flexShrink: 0 } }),
             h('span', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, act.name),
@@ -4633,7 +4889,7 @@ function ActivitiesView({ state, onLog, onEdit, onDelete, onAdd, onToggleFavorit
                       c.domain === act.domain ||
                       (c.id === 'creator' && (act.tags || []).some(t => t.toLowerCase() === 'creative' || t.toLowerCase() === 'creativity'))
                     );
-                    return cls ? h('span', { title: `${cls.name} class`, style: { fontSize: 12, opacity: 0.7 } }, cls.badge) : null;
+                    return cls ? h('span', { title: `${cls.name} class`, style: { fontSize: 12, opacity: 0.7, filter: 'var(--emoji-filter, none)' } }, cls.badge) : null;
                   })()
                 ),
                 h('div', { style: styles.activityCardMeta }, `${d.name} · ${act.subcat} · ${scoringLabel(act)}`),
@@ -4707,7 +4963,7 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
           className: 'rpg-btn',
           style: { ...styles.secondaryBtn, fontSize: 12 },
           onClick: () => { setEditingChain(null); setShowChainEditor(true); },
-        }, '⛓ New chain'),
+        }, h(EmojiLabel, { text: '⛓ New chain' })),
         h('button', { className: 'rpg-btn', style: styles.primaryBtn, onClick: onAdd }, h(Icon, { name: 'plus', size: 14 }), ' New quest')
       )
     ),
@@ -4728,7 +4984,7 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
             h('div', { key: chain.id, style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 12, padding: '12px 14px' } },
               h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-                  h('div', { style: { fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8 } }, '⛓ Chain:'),
+                  h('div', { style: { fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: 0.8 } }, h(EmojiLabel, { text: '⛓ Chain:' })),
                   h('div', { style: { fontSize: 13, fontWeight: 600, color: C.textHi } }, chain.name)
                 ),
                 h('button', {
@@ -4748,7 +5004,7 @@ function QuestsView({ state, onAdd, onEdit, onUpdateProgress, onToggleCheckpoint
                     ),
                     h('div', { style: { flex: 1, opacity: unlocked ? 1 : 0.5 } },
                       !unlocked && h('div', { style: { fontSize: 11, color: C.textMid, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 } },
-                        '🔒', `Requires: ${(state.quests || []).find(x => x.id === q.dependsOn)?.name || 'previous quest'}`
+                        h('span', { style: { filter: 'var(--emoji-filter, none)' } }, '🔒'), `Requires: ${(state.quests || []).find(x => x.id === q.dependsOn)?.name || 'previous quest'}`
                       ),
                       h(QuestRow, { quest: q, onUpdateProgress: unlocked ? onUpdateProgress : null, onToggleCheckpoint: unlocked ? onToggleCheckpoint : null, onDelete, onEdit: unlocked ? onEdit : null, onArchive: unlocked ? onArchive : null, onRemoveFromChain: () => onRemoveFromChain && onRemoveFromChain(q.id) })
                     )
@@ -4853,7 +5109,7 @@ function QuestChainEditorModal({ quests, chains, prefillChain, onSave, onClose }
                 borderRadius: 8, cursor: 'pointer', textAlign: 'left',
               },
             },
-              h('div', { style: { width: 16, height: 16, borderRadius: 4, border: `2px solid ${isSelected ? d.color : C.borderMid}`, background: isSelected ? hexToRgba(d.color, 0.2) : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+              h('div', { style: { width: 16, height: 16, borderRadius: 'var(--radius-card)', border: `2px solid ${isSelected ? d.color : C.borderMid}`, background: isSelected ? hexToRgba(d.color, 0.2) : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
                 isSelected && h(Icon, { name: 'check', size: 10, color: d.color })
               ),
               h(Icon, { name: d.icon, size: 13, color: d.color }),
@@ -5020,7 +5276,7 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
             ),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' } },
               h(AddSubcatButton, { domain: k, color: d.color, onAdd: (sub) => onAddSubcat(k, sub) }),
-              allSubcats.map(s => h('span', { key: s, style: { fontSize: 11, padding: '2px 8px', borderRadius: 3, background: hexToRgba(d.color, 0.1), color: d.color, border: `1px solid ${hexToRgba(d.color, 0.2)}` } }, s))
+              allSubcats.map(s => h('span', { key: s, style: { fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-pill)', background: hexToRgba(d.color, 0.1), color: d.color, border: `1px solid ${hexToRgba(d.color, 0.2)}` } }, s))
             ),
             h('div', { style: { marginTop: 12 } },
               h('div', { style: { fontSize: 12, color: C.textMid, marginBottom: 6 } }, 'Boss gates'),
@@ -5057,7 +5313,7 @@ function CharacterView({ state, domainComputed, onBossClick, onAddSubcat, onEqui
       h('button', {
         className: 'rpg-btn',
         onClick: () => setIdentityOpen(o => !o),
-        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(255,255,255,0.055)', borderRadius: 4, color: C.textHi },
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(255,255,255,0.055)', borderRadius: 'var(--radius-card)', color: C.textHi },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h(Icon, { name: 'award', size: 15, color: '#a78bfa' }),
@@ -5147,7 +5403,7 @@ function ClassMasterySection({ classMastery }) {
         return h('div', { key: cls.id, style: { background: C.hover, border: `1px solid ${C.borderMid}`, borderRadius: 10, padding: '12px 14px' } },
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-              h('span', { style: { fontSize: 18 } }, cls.badge),
+              h('span', { style: { fontSize: 18, filter: 'var(--emoji-filter, none)' } }, cls.badge),
               h('div', null,
                 h('div', { style: { fontSize: 13, fontWeight: 700, color: C.textHi } }, cls.name),
                 h('div', { style: { fontSize: 11, color: C.textMid } }, cls.desc)
@@ -5312,8 +5568,8 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
           ),
           // Requirements breakdown chips
           hasReqs && h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
-            (r.cost || 0) > 0 && h('div', { style: { fontSize: 11, padding: '3px 8px', borderRadius: 3, background: (state.gold || 0) >= (r.cost || 0) ? 'rgba(93,232,160,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${(state.gold || 0) >= (r.cost || 0) ? 'rgba(93,232,160,0.3)' : 'rgba(255,255,255,0.08)'}`, color: (state.gold || 0) >= (r.cost || 0) ? '#5de8a0' : '#9896b0' } },
-              `🪙 ${r.cost} gold`
+            (r.cost || 0) > 0 && h('div', { style: { fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-pill)', background: (state.gold || 0) >= (r.cost || 0) ? 'rgba(93,232,160,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${(state.gold || 0) >= (r.cost || 0) ? 'rgba(93,232,160,0.3)' : 'rgba(255,255,255,0.08)'}`, color: (state.gold || 0) >= (r.cost || 0) ? '#5de8a0' : '#9896b0' } },
+              h(EmojiLabel, { text: `🪙 ${r.cost} gold` })
             ),
             reqs.map((req, i) => {
               let met = false, label = '';
@@ -5328,8 +5584,8 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
                 if (!qExists) { met = true; label = `${req.questName} (removed)`; }
                 else { met = (state.archivedQuests || []).some(q => q.id === req.questId); label = `🎯 ${req.questName}`; }
               }
-              return h('div', { key: i, style: { fontSize: 11, padding: '3px 8px', borderRadius: 3, background: met ? 'rgba(93,232,160,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${met ? 'rgba(93,232,160,0.3)' : 'rgba(255,255,255,0.08)'}`, color: met ? '#5de8a0' : '#9896b0' } },
-                `${label}${met ? ' ✓' : ''}`
+              return h('div', { key: i, style: { fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-pill)', background: met ? 'rgba(93,232,160,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${met ? 'rgba(93,232,160,0.3)' : 'rgba(255,255,255,0.08)'}`, color: met ? '#5de8a0' : '#9896b0' } },
+                h(EmojiLabel, { text: `${label}${met ? ' ✓' : ''}` })
               );
             })
           )
@@ -5393,7 +5649,7 @@ function RewardsView({ state, onBuy, onAdd, onEdit, onDelete, onUseTicket, onSel
 // ---------- Modals ----------
 
 function ModalShell({ title, onClose, children, width = 420 }) {
-  return h('div', { style: styles.modalOverlay, onClick: onClose },
+  return h('div', { className: 'rpg-modal-overlay', style: styles.modalOverlay, onClick: onClose },
     h('div', { style: { ...styles.modal, maxWidth: width, width: '100%' }, onClick: e => e.stopPropagation() },
       h('div', { style: styles.modalHeader },
         h('span', { style: styles.modalTitle }, title),
@@ -5758,19 +6014,21 @@ function RewardFormModal({ reward, state, onClose, onSave }) {
         ),
 
         // Gold cost (always shown, can be 0)
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 } },
-          h('span', { style: { fontSize: 13 } }, '🪙'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 } },
+          h('span', { style: { fontSize: 13, filter: 'var(--emoji-filter, none)' } }, '🪙'),
           h('span', { style: { fontSize: 12, color: '#9896b0', flex: 1 } }, 'Gold coins'),
           h('input', { type: 'number', min: 0, value: cost, onChange: e => setCost(parseInt(e.target.value) || 0), style: { ...styles.input, width: 80, textAlign: 'right', padding: '4px 8px', fontSize: 13 } })
         ),
 
         // Existing additional requirements
         reqs.map((req, i) =>
-          h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 } },
+          h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 6 } },
             h('span', { style: { fontSize: 12, flex: 1, color: '#9896b0' } },
-              req.type === 'activity' ? `🏃 ${req.count}× ${req.activityName}` :
-              req.type === 'streak'   ? `🔥 ${req.days}-day streak` :
-              req.type === 'quest'    ? `🎯 Complete: ${req.questName}` : ''
+              h(EmojiLabel, { text:
+                req.type === 'activity' ? `🏃 ${req.count}× ${req.activityName}` :
+                req.type === 'streak'   ? `🔥 ${req.days}-day streak` :
+                req.type === 'quest'    ? `🎯 Complete: ${req.questName}` : ''
+              })
             ),
             h('button', { className: 'rpg-btn', style: { ...styles.iconBtn, width: 24, height: 24 }, onClick: () => removeReq(i) }, h(Icon, { name: 'x', size: 10 }))
           )
@@ -5780,13 +6038,13 @@ function RewardFormModal({ reward, state, onClose, onSave }) {
         !addingReq && h('div', { style: { display: 'flex', gap: 6, marginTop: 6 } },
           ['activity', 'streak', 'quest'].map(type =>
             h('button', { key: type, className: 'rpg-btn', onClick: () => setAddingReq(type), style: { ...styles.secondaryBtn, flex: 1, justifyContent: 'center', fontSize: 11, padding: '6px 0' } },
-              `+ ${REQ_LABELS[type]}`
+              '+ ', h(EmojiLabel, { text: REQ_LABELS[type] })
             )
           )
         ),
 
         // Inline requirement builder
-        addingReq === 'activity' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(167,139,250,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
+        addingReq === 'activity' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)', border: '1px solid rgba(167,139,250,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
           h('select', { value: reqActivity, onChange: e => setReqActivity(e.target.value), style: styles.input },
             h('option', { value: '' }, '— Choose activity —'),
             activities.map(a => h('option', { key: a.id, value: a.id }, a.name))
@@ -5801,7 +6059,7 @@ function RewardFormModal({ reward, state, onClose, onSave }) {
           )
         ),
 
-        addingReq === 'streak' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(251,146,60,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
+        addingReq === 'streak' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)', border: '1px solid rgba(251,146,60,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
             h('span', { style: { fontSize: 12, color: '#9896b0' } }, 'Consistency streak (days):'),
             h('input', { type: 'number', min: 1, value: reqStreakDays, onChange: e => setReqStreakDays(parseInt(e.target.value) || 1), style: { ...styles.input, width: 80 } })
@@ -5812,7 +6070,7 @@ function RewardFormModal({ reward, state, onClose, onSave }) {
           )
         ),
 
-        addingReq === 'quest' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 4, border: '1px solid rgba(129,140,248,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
+        addingReq === 'quest' && h('div', { style: { marginTop: 8, padding: '10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)', border: '1px solid rgba(129,140,248,0.2)', display: 'flex', flexDirection: 'column', gap: 8 } },
           h('select', { value: reqQuest, onChange: e => setReqQuest(e.target.value), style: styles.input },
             h('option', { value: '' }, '— Choose quest —'),
             quests.map(q => h('option', { key: q.id, value: q.id }, q.name + (q.archivedAt ? ' ✓' : '')))
@@ -6079,7 +6337,7 @@ function ActiveChallengeCard({ challenge, onComplete, onDismiss }) {
           h('span', { style: { fontSize: 11, fontWeight: 700, color: d.color, textTransform: 'uppercase', letterSpacing: 1 } },
             isCompleted ? 'Challenge complete!' : 'Daily challenge'
           ),
-          h('span', { style: { fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: hexToRgba(tc, 0.15), color: tc, border: `1px solid ${hexToRgba(tc, 0.4)}` } }, `Tier ${tier}`)
+          h('span', { style: { fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-pill)', background: hexToRgba(tc, 0.15), color: tc, border: `1px solid ${hexToRgba(tc, 0.4)}` } }, `Tier ${tier}`)
         ),
         !isCompleted && h('div', { style: { fontSize: 11, fontWeight: 600, color: isUrgent ? '#c9a84c' : '#4a4868', display: 'flex', alignItems: 'center', gap: 4 } },
           isUrgent && h(Icon, { name: 'flame', size: 12, color: '#c9a84c' }),
@@ -6134,7 +6392,7 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
     })
     .filter(a => !search.trim() || a.name.toLowerCase().includes(search.toLowerCase()) || (a.tags || []).some(t => t.toLowerCase().includes(search.toLowerCase())));
 
-  return h('div', { style: styles.modalOverlay, onClick: onClose },
+  return h('div', { className: 'rpg-modal-overlay', style: styles.modalOverlay, onClick: onClose },
     h('div', { style: styles.bottomSheet, onClick: e => e.stopPropagation() },
       h('div', { style: styles.modalHeader },
         h('span', { style: styles.modalTitle }, 'Quick log'),
@@ -6155,7 +6413,7 @@ function QuickLogSheet({ activities, onSelect, onClose }) {
                   onClick: () => onSelect(act),
                   style: {
                     display: 'flex', alignItems: 'center', gap: 10,
-                    width: '100%', padding: '10px 12px', borderRadius: 4,
+                    width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-card)',
                     background: 'transparent', border: '1px solid transparent',
                     cursor: 'pointer', textAlign: 'left',
                     transition: 'background 0.12s, border-color 0.12s',
@@ -6189,8 +6447,8 @@ function PowerValuesPopup({ values, onClose, onEdit }) {
         'Your three highest personal values — the principles that anchor every decision.'
       ),
       values.map((v, i) =>
-        h('div', { key: i, style: { display: 'flex', gap: 14, alignItems: 'flex-start', padding: '12px 14px', background: C.void, borderRadius: 4, border: '1px solid ' + C.borderDim } },
-          h('div', { style: { fontSize: 32, lineHeight: 1, flexShrink: 0 } }, v.symbol),
+        h('div', { key: i, style: { display: 'flex', gap: 14, alignItems: 'flex-start', padding: '12px 14px', background: C.void, borderRadius: 'var(--radius-card)', border: '1px solid ' + C.borderDim } },
+          h('div', { style: { fontSize: 32, lineHeight: 1, flexShrink: 0, filter: 'var(--emoji-filter, none)' } }, v.symbol),
           h('div', { style: { flex: 1 } },
             h('div', { style: { fontSize: 14, fontWeight: 700, color: C.textHi, marginBottom: v.desc ? 4 : 0 } }, v.name || '—'),
             v.desc && h('div', { style: { fontSize: 12.5, color: C.textMid, lineHeight: 1.5 } }, v.desc)
@@ -6308,8 +6566,8 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
               const plan = dailyQuestPlans && dailyQuestPlans[selectedDay];
               const note = plan && plan.note;
               if (!note) return null;
-              return h('div', { style: { marginBottom: 12, padding: '8px 10px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 4 } },
-                h('div', { style: { fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#a78bfa', marginBottom: 4 } }, '📝 Mission note'),
+              return h('div', { style: { marginBottom: 12, padding: '8px 10px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 'var(--radius-card)' } },
+                h('div', { style: { fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#a78bfa', marginBottom: 4 } }, h(EmojiLabel, { text: '📝 Mission note' })),
                 h('div', { style: { fontSize: 12, color: '#9896b0', lineHeight: 1.5, whiteSpace: 'pre-wrap' } }, note)
               );
             })(),
@@ -6329,8 +6587,8 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
                         : `${xp} XP`
                     )
                   ),
-                  h('div', { style: { height: 4, background: C.void, borderRadius: 2, overflow: 'hidden' } },
-                    h('div', { style: { height: '100%', width: `${pct}%`, background: d.color, borderRadius: 2 } })
+                  h('div', { style: { height: 4, background: C.void, borderRadius: 'var(--radius-pill)', overflow: 'hidden' } },
+                    h('div', { style: { height: '100%', width: `${pct}%`, background: d.color, borderRadius: 'var(--radius-pill)' } })
                   )
                 );
               })
@@ -6358,13 +6616,13 @@ function StreakCalendarModal({ mode, dailyLogs, activityLog, dailyQuestPlans, ec
     h('div', { style: { marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, color: C.textMid } },
       mode === 'power'
         ? [
-            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#fbbf24', borderRadius: 3, display: 'inline-block' } }), 'Power day'),
-            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 3, display: 'inline-block' } }), 'Consistency day'),
-            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: `1px solid ${C.borderMid}`, borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
+            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#fbbf24', borderRadius: 'var(--radius-pill)', display: 'inline-block' } }), 'Power day'),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 'var(--radius-pill)', display: 'inline-block' } }), 'Consistency day'),
+            h('div', { key: 3, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: `1px solid ${C.borderMid}`, borderRadius: 'var(--radius-pill)', display: 'inline-block' } }), 'Some activity'),
           ]
         : [
-            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#22c55e', borderRadius: 3, display: 'inline-block' } }), `Consistency met (all 4 ≥ ${consistencyMin} XP)`),
-            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: `1px solid ${C.borderMid}`, borderRadius: 3, display: 'inline-block' } }), 'Some activity'),
+            h('div', { key: 1, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: '#22c55e', borderRadius: 'var(--radius-pill)', display: 'inline-block' } }), `Consistency met (all 4 ≥ ${consistencyMin} XP)`),
+            h('div', { key: 2, style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 10, height: 10, background: 'rgba(156,163,175,0.1)', border: `1px solid ${C.borderMid}`, borderRadius: 'var(--radius-pill)', display: 'inline-block' } }), 'Some activity'),
           ],
       h('div', { key: 'tap', style: { fontSize: 10.5, color: '#4a4868', marginTop: 2 } }, 'Tap any day to see what you logged')
     )
@@ -6539,8 +6797,10 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
     // Requirements breakdown
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 } },
       // Gold cost row
-      (reward.cost || 0) > 0 && h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 4 } },
-        h('span', { style: { fontSize: 12, color: C.textMid } }, `🪙 ${reward.cost} gold`),
+      (reward.cost || 0) > 0 && h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)' } },
+        h('span', { style: { fontSize: 12, color: C.textMid } },
+          h('span', { style: { filter: 'var(--emoji-filter, none)' } }, '🪙'), ` ${reward.cost} gold`
+        ),
         h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.gold || 0) >= (reward.cost || 0) ? '#5de8a0' : '#e05c5c' } },
           `${state.gold || 0} available ${(state.gold || 0) >= (reward.cost || 0) ? '✓' : '✗'}`
         )
@@ -6548,15 +6808,15 @@ function BuyConfirmModal({ reward, canAfford, state, onConfirm, onCancel }) {
       // Other requirements
       reqs.map((req, i) => {
         const { met, label, skipped } = reqStatus(req);
-        return h('div', { key: i, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 4, opacity: skipped ? 0.5 : 1 } },
-          h('span', { style: { fontSize: 12, color: C.textMid } }, label),
+        return h('div', { key: i, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#0d0d1a', borderRadius: 'var(--radius-card)', opacity: skipped ? 0.5 : 1 } },
+          h('span', { style: { fontSize: 12, color: C.textMid } }, h(EmojiLabel, { text: label })),
           h('span', { style: { fontSize: 13, color: met ? '#5de8a0' : '#e05c5c' } }, met ? '✓' : '✗')
         );
       }),
       reqs.length === 0 && (reward.cost || 0) === 0 && h('div', { style: { fontSize: 12, color: '#4a4868', padding: '6px 0' } }, 'No requirements — free to claim')
     ),
 
-    !canAfford && h('div', { style: { fontSize: 12, color: '#f09595', background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 4, padding: '8px 12px', marginBottom: 12 } },
+    !canAfford && h('div', { style: { fontSize: 12, color: '#f09595', background: 'rgba(226,75,74,0.08)', border: '1px solid rgba(226,75,74,0.25)', borderRadius: 'var(--radius-card)', padding: '8px 12px', marginBottom: 12 } },
       'Requirements not yet met.'
     ),
     h('div', { style: { display: 'flex', gap: 8 } },
@@ -6576,8 +6836,6 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
 
-  const ss = state.soundSettings || { enabled: true, volume: 0.6, style: 'fantasy' };
-
   const PRESETS = [
     { id: 'easy',      label: 'Relaxed',   desc: 'Lower daily goals, more forgiving streak rules', icon: '🌿' },
     { id: 'balanced',  label: 'Balanced',  desc: 'Default settings, good for most people', icon: '⚖️' },
@@ -6586,7 +6844,11 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
 
   const pv = (state.powerValues || []).filter(v => v && v.name);
   const pvSummary = pv.length > 0
-    ? pv.map(v => `${v.symbol} ${v.name}`).join(' · ')
+    ? pv.map((v, i) => [
+        i > 0 && h('span', { key: `sep-${i}` }, ' · '),
+        h('span', { key: `sym-${i}`, style: { filter: 'var(--emoji-filter, none)' } }, v.symbol),
+        ` ${v.name}`,
+      ])
     : 'Not set yet';
 
   return h('div', { style: { animation: 'fadeIn 0.3s ease' } },
@@ -6611,14 +6873,14 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
             key: p.id, className: 'rpg-btn',
             onClick: () => onSetDifficulty(p.id),
             style: {
-              flex: 1, padding: '12px 10px', borderRadius: 4, cursor: 'pointer',
+              flex: 1, padding: '12px 10px', borderRadius: 'var(--radius-card)', cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, textAlign: 'center',
               background: (state.difficultyPreset || 'balanced') === p.id ? C.accentDim : C.raised,
               border: `1px solid ${(state.difficultyPreset || 'balanced') === p.id ? C.accent : C.borderDim}`,
               transition: 'all 0.15s',
             },
           },
-            h('span', { style: { fontSize: 20 } }, p.icon),
+            h('span', { style: { fontSize: 20, filter: 'var(--emoji-filter, none)' } }, p.icon),
             h('span', { style: { fontSize: 12, fontWeight: 700, color: (state.difficultyPreset || 'balanced') === p.id ? C.accent : C.textHi } }, p.label),
             h('span', { style: { fontSize: 10, color: C.textLo, lineHeight: 1.3 } }, p.desc)
           )
@@ -6632,19 +6894,8 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
       headerExtra: h('span', { style: { fontSize: 11, color: C.textLo, marginLeft: 6, fontStyle: 'italic' } }, pvSummary)
     }),
 
-    // ── SFX on/off — compact row with speaker icon ───────
-    h('section', { style: { marginBottom: 20 } },
-      h('label', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 12px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4 } },
-        h('span', { style: { fontSize: 16, lineHeight: 1, flexShrink: 0 } }, '🔊'),
-        h('span', { style: { flex: 1, fontSize: 12.5, color: C.textMid } }, 'Sound effects'),
-        h('input', {
-          type: 'checkbox',
-          checked: ss.enabled !== false,
-          onChange: e => onSaveSoundSettings({ enabled: e.target.checked }),
-          style: { width: 15, height: 15, accentColor: C.accent, cursor: 'pointer', flexShrink: 0 },
-        })
-      )
-    ),
+    // ── Sound Effects — single section, toggle up top + expandable detail ─
+    h(SoundSettingsSection, { state, onSave: onSaveSoundSettings }),
 
     // ── Advanced Settings (paywall zone) ─────────────────
     h('section', { style: { marginBottom: 24 } },
@@ -6652,10 +6903,10 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
         className: 'rpg-btn',
         onClick: () => setAdvancedOpen(o => !o),
         'data-tutorial-id': 'advanced-settings-btn',
-        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: C.raised, border: `1px solid ${state.advancedSettingsUnlocked ? 'rgba(167,139,250,0.3)' : C.borderDim}`, borderRadius: 4, color: C.textHi },
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: C.raised, border: `1px solid ${state.advancedSettingsUnlocked ? 'rgba(167,139,250,0.3)' : C.borderDim}`, borderRadius: 'var(--radius-card)', color: C.textHi },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h('span', null, state.advancedSettingsUnlocked ? '🔓' : '🔒'),
+          h('span', { style: { filter: 'var(--emoji-filter, none)' } }, state.advancedSettingsUnlocked ? '🔓' : '🔒'),
           h('span', { style: { fontSize: 13, fontWeight: 600 } }, 'Advanced Settings'),
           !state.advancedSettingsUnlocked && h('span', { style: { fontSize: 10, color: C.textLo } }, '— unlocks at combined rank 10')
         ),
@@ -6664,7 +6915,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
         )
       ),
       advancedOpen && h('div', { style: { marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 } },
-        !state.advancedSettingsUnlocked && h('div', { style: { fontSize: 12, color: C.textLo, padding: '8px 12px', background: C.void, borderRadius: 4, border: '1px solid ' + C.borderDim } },
+        !state.advancedSettingsUnlocked && h('div', { style: { fontSize: 12, color: C.textLo, padding: '8px 12px', background: C.void, borderRadius: 'var(--radius-card)', border: '1px solid ' + C.borderDim } },
           'Preview mode — these settings unlock permanently at combined rank 10.'
         ),
 
@@ -6677,7 +6928,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
               return h('button', {
                 key: id, className: 'rpg-btn',
                 onClick: () => onSaveTheme(id),
-                style: { padding: '10px 8px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: active ? C.accentDim : C.void, border: `1px solid ${active ? C.accent : C.borderDim}`, transition: 'all 0.15s' },
+                style: { padding: '10px 8px', borderRadius: 'var(--radius-card)', cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: active ? C.accentDim : C.void, border: `1px solid ${active ? C.accent : C.borderDim}`, transition: 'all 0.15s' },
               },
                 h('span', { style: { fontSize: 20 } }, t.icon),
                 h('div', { style: { fontSize: 11.5, fontWeight: 700, color: active ? C.accent : C.textHi } }, t.label),
@@ -6687,9 +6938,6 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
             })
           )
         ),
-
-        // Sound style + volume (full panel, minus the on/off toggle)
-        h(SoundSettingsSection, { state, onSave: onSaveSoundSettings }),
 
         // Level gates
         h('div', null,
@@ -6705,7 +6953,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
                 ? Object.keys(state.customBosses[k]).filter(lvl => { const ch = state.customBosses[k][lvl]; return ch && ch.filter(c => c && c.trim()).length > 0; }).length
                 : 0;
               const enabled = activeBossLevelsFor(state, k);
-              return h('div', { key: k, style: { background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 4, overflow: 'hidden' } },
+              return h('div', { key: k, style: { background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', overflow: 'hidden' } },
                 h('button', {
                   className: 'rpg-btn',
                   onClick: () => setExpandedDomain(isOpen ? null : k),
@@ -6763,7 +7011,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
       h('button', {
         className: 'rpg-btn',
         onClick: () => setResetOpen(o => !o),
-        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(224,92,92,0.2)', borderRadius: 4, color: C.textHi, transition: 'border-color 0.15s' },
+        style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid rgba(224,92,92,0.2)', borderRadius: 'var(--radius-card)', color: C.textHi, transition: 'border-color 0.15s' },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h(Icon, { name: 'trash2', size: 14, color: C.danger }),
@@ -6782,7 +7030,7 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
           DOMAIN_KEYS.map(k => {
             const d = DOMAINS[k];
             const totalXp = state.domains[k] ? state.domains[k].totalXp : 0;
-            return h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 4 } },
+            return h('div', { key: k, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.void, borderRadius: 'var(--radius-card)' } },
               h(Icon, { name: d.icon, size: 14, color: d.color }),
               h('div', { style: { flex: 1 } },
                 h('div', { style: { fontSize: 12.5, fontWeight: 600, color: C.textHi } }, d.name),
@@ -6805,14 +7053,8 @@ function SettingsView({ state, onResetDomain, onResetAll, onEditBoss, onToggleGa
 // ---------- Power Values (#new) ----------
 
 function SoundSettingsSection({ state, onSave }) {
-  const ss = state.soundSettings || { enabled: true, volume: 0.6, style: 'fantasy' };
+  const ss = state.soundSettings || { enabled: true, volume: 0.6 };
   const [open, setOpen] = React.useState(false);
-
-  const STYLES = [
-    { id: 'fantasy',     label: 'Fantasy',     desc: 'Chimes, bells, resonant tones',    icon: '⚔️' },
-    { id: 'digital',     label: 'Digital',      desc: 'Blips, pulses, synth bleeps',       icon: '⚡' },
-    { id: 'atmospheric', label: 'Atmospheric',  desc: 'Drones, pads, ethereal textures',   icon: '🌑' },
-  ];
 
   const PROMINENCE = [
     { label: 'Subtle',   volume: 0.25 },
@@ -6820,16 +7062,8 @@ function SoundSettingsSection({ state, onSave }) {
     { label: 'Bold',     volume: 1.0  },
   ];
 
-  function previewStyle(styleId) {
-    SoundEngine.setSettings({ ...ss, style: styleId, enabled: true });
-    SoundEngine.play('logActivity');
-    // Restore
-    setTimeout(() => SoundEngine.setSettings({ ...ss, style: styleId }), 600);
-    onSave({ style: styleId });
-  }
-
   function previewEvent(event) {
-    SoundEngine.setSettings({ ...ss, enabled: true });
+    SoundEngine.setSettings({ ...ss, enabled: true, style: THEME_SOUND_STYLE[state.theme] || 'fantasy' });
     SoundEngine.play(event);
   }
 
@@ -6847,20 +7081,35 @@ function SoundSettingsSection({ state, onSave }) {
   ];
 
   return h('section', { style: { marginBottom: 24 } },
-    h('button', {
-      className: 'rpg-btn',
-      onClick: () => setOpen(o => !o),
-      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, color: C.textHi },
+    h('div', {
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', color: C.textHi },
     },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-        h('span', { style: { fontSize: 15 } }, '🔊'),
+      h('div', {
+        onClick: () => setOpen(o => !o),
+        className: 'rpg-btn',
+        style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1 },
+      },
+        h('span', { style: { fontSize: 15, filter: 'var(--emoji-filter, none)' } }, '🔊'),
         h('span', { style: { fontSize: 12.5, fontWeight: 600 } }, 'Sound Effects'),
         h('span', { style: { fontSize: 11, color: C.textLo } },
-          ss.enabled ? `— ${STYLES.find(s => s.id === ss.style)?.label || 'Fantasy'}, ${PROMINENCE.find(p => Math.abs(p.volume - ss.volume) < 0.2)?.label || 'Moderate'}` : '— Disabled'
+          ss.enabled ? `— ${PROMINENCE.find(p => Math.abs(p.volume - ss.volume) < 0.2)?.label || 'Moderate'}` : '— Disabled'
         )
       ),
-      h('div', { style: { transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' } },
-        h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+        h('input', {
+          type: 'checkbox',
+          checked: ss.enabled !== false,
+          onClick: e => e.stopPropagation(),
+          onChange: e => onSave({ enabled: e.target.checked }),
+          style: { width: 15, height: 15, accentColor: C.accent, cursor: 'pointer', flexShrink: 0 },
+        }),
+        h('div', {
+          onClick: () => setOpen(o => !o),
+          className: 'rpg-btn',
+          style: { cursor: 'pointer', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' },
+        },
+          h(Icon, { name: 'chevronRight', size: 14, color: C.textLo })
+        )
       )
     ),
 
@@ -6874,41 +7123,20 @@ function SoundSettingsSection({ state, onSave }) {
             h('button', {
               key: p.label, className: 'rpg-btn',
               onClick: () => onSave({ volume: p.volume }),
-              style: { flex: 1, padding: '8px 0', borderRadius: 4, border: `1px solid ${Math.abs(ss.volume - p.volume) < 0.2 ? C.accent : C.borderDim}`, background: Math.abs(ss.volume - p.volume) < 0.2 ? C.accentDim : 'transparent', color: Math.abs(ss.volume - p.volume) < 0.2 ? C.accent : C.textMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s' },
+              style: { flex: 1, padding: '8px 0', borderRadius: 'var(--radius-card)', border: `1px solid ${Math.abs(ss.volume - p.volume) < 0.2 ? C.accent : C.borderDim}`, background: Math.abs(ss.volume - p.volume) < 0.2 ? C.accentDim : 'transparent', color: Math.abs(ss.volume - p.volume) < 0.2 ? C.accent : C.textMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s' },
             }, p.label)
           )
         ),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-          h('span', { style: { fontSize: 11, color: C.textLo } }, '🔈'),
+          h('span', { style: { fontSize: 11, color: C.textLo, filter: 'var(--emoji-filter, none)' } }, '🔈'),
           h('input', {
             type: 'range', min: 0, max: 1, step: 0.05,
             value: ss.volume,
             onChange: e => onSave({ volume: parseFloat(e.target.value) }),
             style: { flex: 1, accentColor: C.accent },
           }),
-          h('span', { style: { fontSize: 11, color: C.textLo } }, '🔊'),
+          h('span', { style: { fontSize: 11, color: C.textLo, filter: 'var(--emoji-filter, none)' } }, '🔊'),
           h('span', { style: { fontSize: 11, fontWeight: 700, color: C.textMid, minWidth: 30, textAlign: 'right' } }, `${Math.round(ss.volume * 100)}%`)
-        )
-      ),
-
-      // Style selector
-      h('div', null,
-        h('div', { style: { fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 } }, 'Sound Style'),
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-          STYLES.map(s =>
-            h('button', {
-              key: s.id, className: 'rpg-btn',
-              onClick: () => previewStyle(s.id),
-              style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 4, border: `1px solid ${ss.style === s.id ? C.accent : C.borderDim}`, background: ss.style === s.id ? C.accentDim : 'transparent', cursor: 'pointer', transition: 'all 0.12s', textAlign: 'left' },
-            },
-              h('span', { style: { fontSize: 18, flexShrink: 0 } }, s.icon),
-              h('div', { style: { flex: 1 } },
-                h('div', { style: { fontSize: 12.5, fontWeight: 700, color: ss.style === s.id ? C.accent : C.textHi } }, s.label),
-                h('div', { style: { fontSize: 11, color: C.textLo, marginTop: 1 } }, s.desc)
-              ),
-              ss.style === s.id && h('span', { style: { fontSize: 10, color: C.accent, fontWeight: 700 } }, 'Active — tap to preview')
-            )
-          )
         )
       ),
 
@@ -6920,7 +7148,7 @@ function SoundSettingsSection({ state, onSave }) {
             h('button', {
               key: ev.id, className: 'rpg-btn',
               onClick: () => previewEvent(ev.id),
-              style: { padding: '6px 12px', borderRadius: 4, border: '1px solid ' + C.borderDim, background: 'transparent', color: C.textMid, fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s' },
+              style: { padding: '6px 12px', borderRadius: 'var(--radius-card)', border: '1px solid ' + C.borderDim, background: 'transparent', color: C.textMid, fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s' },
             }, ev.label)
           )
         )
@@ -6970,10 +7198,10 @@ function PowerValuesSection({ state, onSave, headerExtra }) {
     h('button', {
       className: 'rpg-btn',
       onClick: () => setOpen(o => !o),
-      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, color: C.textHi },
+      style: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', color: C.textHi },
     },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' } },
-        h(Icon, { name: 'star', size: 15, color: '#c9a84c' }),
+        h(Icon, { name: 'star', size: 15, color: C.gold }),
         h('span', { style: { fontSize: 12.5, fontWeight: 600, flexShrink: 0 } }, 'Power Values'),
         headerExtra || null
       ),
@@ -6986,11 +7214,11 @@ function PowerValuesSection({ state, onSave, headerExtra }) {
         'Your 3 highest personal values. Their symbols stay visible in the top bar as a constant reminder.'
       ),
       values.map((v, i) =>
-        h('div', { key: i, style: { background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '12px 14px' } },
+        h('div', { key: i, style: { background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '12px 14px' } },
           h('div', { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 8 } }, `Value ${i + 1}`),
           h('div', { style: { display: 'flex', gap: 8, marginBottom: 10 } },
-            h('div', { style: { width: 46, height: 40, borderRadius: 4, background: C.panel, border: '1px solid ' + C.borderMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 } },
-              v.symbol || '·'
+            h('div', { style: { width: 46, height: 40, borderRadius: 'var(--radius-card)', background: C.panel, border: '1px solid ' + C.borderMid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 } },
+              h('span', { style: { filter: 'var(--emoji-filter, none)' } }, v.symbol || '·')
             ),
             h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 6 } },
               h('input', {
@@ -7013,12 +7241,12 @@ function PowerValuesSection({ state, onSave, headerExtra }) {
                 key: emoji, className: 'rpg-btn',
                 onClick: () => update(i, 'symbol', emoji),
                 style: {
-                  fontSize: 18, padding: '5px 7px', borderRadius: 4,
+                  fontSize: 18, padding: '5px 7px', borderRadius: 'var(--radius-card)',
                   border: `1px solid ${v.symbol === emoji ? C.accent : C.borderDim}`,
                   background: v.symbol === emoji ? C.accentDim : 'transparent',
                   cursor: 'pointer', transition: 'all 0.12s',
                 },
-              }, emoji)
+              }, h('span', { style: { filter: 'var(--emoji-filter, none)' } }, emoji))
             )
           )
         )
@@ -7291,7 +7519,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
                   h('div', { style: { flex: 1, minWidth: 0 } },
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
                       h('span', { style: { fontSize: 13, color: C.textHi } }, c.name),
-                      h('span', { style: { fontWeight: 800, fontSize: 10, color: tc, background: hexToRgba(tc, 0.15), border: `1px solid ${hexToRgba(tc, 0.4)}`, borderRadius: 4, padding: '1px 5px' } }, ct)
+                      h('span', { style: { fontWeight: 800, fontSize: 10, color: tc, background: hexToRgba(tc, 0.15), border: `1px solid ${hexToRgba(tc, 0.4)}`, borderRadius: 'var(--radius-card)', padding: '1px 5px' } }, ct)
                     ),
                     c.desc && h('div', { style: { fontSize: 11, color: C.textMid } }, c.desc)
                   ),
@@ -7304,7 +7532,7 @@ function ChallengeLibrarySection({ state, onSaveLibrary, onSaveSpawnChance }) {
                         key: t, className: 'rpg-btn',
                         onClick: () => updateChallengeTier(c.id, t),
                         style: {
-                          width: 24, height: 22, borderRadius: 4, fontSize: 10, fontWeight: 800,
+                          width: 24, height: 22, borderRadius: 'var(--radius-card)', fontSize: 10, fontWeight: 800,
                           border: `1.5px solid ${isActive ? ttc : C.borderMid}`,
                           background: isActive ? hexToRgba(ttc, 0.18) : 'transparent',
                           color: isActive ? ttc : '#5e5e6b',
@@ -7530,7 +7758,6 @@ const C = {
 
 const styles = {
   app: {
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     background: C.void, color: C.textHi,
     minHeight: '100vh', overflow: 'hidden', width: '100%', position: 'relative',
   },
@@ -7542,70 +7769,70 @@ const styles = {
 
   // Domain meters
   bigMetersGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 },
-  bigMeterCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', transition: 'border-color 0.2s' },
-  bigMeterIcon: { width: 32, height: 32, borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  bigMeterCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '14px 16px', transition: 'border-color 0.2s' },
+  bigMeterIcon: { width: 32, height: 32, borderRadius: 'var(--radius-card)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   bigMeterName: { fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: C.textHi },
   bigMeterSubName: { fontSize: 10.5, color: C.textMid, marginTop: 1 },
   bigMeterValue: { fontSize: 22, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1 },
-  meterTrack: { position: 'relative', height: 7, background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 2, overflow: 'hidden' },
-  meterFill: { position: 'absolute', top: 0, left: 0, bottom: 0, borderRadius: 2, transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)', animation: 'barFill 0.7s cubic-bezier(0.4,0,0.2,1)' },
-  overflowBadge: { fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, border: '1px solid', letterSpacing: 0.5 },
+  meterTrack: { position: 'relative', height: 7, background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-pill)', overflow: 'hidden' },
+  meterFill: { position: 'absolute', top: 0, left: 0, bottom: 0, borderRadius: 'var(--radius-pill)', transition: 'width 0.6s cubic-bezier(0.4,0,0.2,1)', animation: 'barFill 0.7s cubic-bezier(0.4,0,0.2,1)' },
+  overflowBadge: { fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 'var(--radius-pill)', border: '1px solid', letterSpacing: 0.5 },
 
   // Activity cards
-  activityCard: { display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, transition: 'border-color 0.15s' },
+  activityCard: { display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', transition: 'border-color 0.15s' },
   quickLogDot: { width: 3, height: 3, borderRadius: '50%', flexShrink: 0, marginTop: 7 },
   activityCardName: { fontSize: 13, fontWeight: 600, color: C.textHi },
   activityCardMeta: { fontSize: 11, color: C.textMid, marginTop: 2 },
   activityCardDesc: { fontSize: 11.5, color: C.textMid, marginTop: 3, lineHeight: 1.4 },
 
   // Quest cards
-  questCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', transition: 'border-color 0.2s' },
+  questCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '14px 16px', transition: 'border-color 0.2s' },
   questName: { fontSize: 13, fontWeight: 700, color: C.textHi },
   questMeta: { fontSize: 11, color: C.textMid },
   questProgressText: { fontSize: 11.5, fontWeight: 700 },
 
   // Modals
   modalOverlay: { position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(4,4,10,0.88)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modal: { background: C.panel, border: '1px solid ' + C.borderMid, borderTop: '1px solid rgba(167,139,250,0.25)', borderRadius: 4, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.7)' },
+  modal: { background: C.panel, border: '1px solid ' + C.borderMid, borderTop: '1px solid rgba(167,139,250,0.25)', borderRadius: 'var(--radius-card)', width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.7)' },
   modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', borderBottom: '1px solid ' + C.borderDim },
   modalTitle: { fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: C.textHi },
   modalBody: { padding: 20, display: 'flex', flexDirection: 'column', gap: 14 },
 
   // Inputs
   label: { display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 6 },
-  input: { background: C.void, border: '1px solid ' + C.borderMid, borderRadius: 4, color: C.textHi, padding: '9px 12px', fontSize: 13, width: '100%', outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s' },
+  input: { background: C.void, border: '1px solid ' + C.borderMid, borderRadius: 'var(--radius-card)', color: C.textHi, padding: '9px 12px', fontSize: 13, width: '100%', outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s' },
 
   // Buttons
-  primaryBtn: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 4, background: C.accentDim, border: '1px solid ' + C.accent, color: C.accent, fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.15s' },
-  secondaryBtn: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px', borderRadius: 4, background: 'transparent', border: '1px solid ' + C.borderMid, color: C.textMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
-  iconBtn: { width: 30, height: 30, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 },
-  iconBtnDanger: { width: 30, height: 30, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 },
+  primaryBtn: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 'var(--radius-card)', background: C.accentDim, border: '1px solid ' + C.accent, color: C.accent, fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.15s' },
+  secondaryBtn: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px', borderRadius: 'var(--radius-card)', background: 'transparent', border: '1px solid ' + C.borderMid, color: C.textMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+  iconBtn: { width: 30, height: 30, borderRadius: 'var(--radius-card)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 },
+  iconBtnDanger: { width: 30, height: 30, borderRadius: 'var(--radius-card)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 },
 
   // FAB
-  fab: { position: 'fixed', bottom: 24, right: 24, zIndex: 90, width: 50, height: 50, borderRadius: 4, background: C.accent, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(167,139,250,0.4)', transition: 'all 0.2s' },
+  fab: { position: 'fixed', bottom: 24, right: 24, zIndex: 90, width: 50, height: 50, borderRadius: 'var(--radius-card)', background: C.accent, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(167,139,250,0.4)', transition: 'all 0.2s' },
 
   // Toast
-  toast: { position: 'fixed', top: 16, right: 16, zIndex: 9998, background: C.raised, border: '1px solid ' + C.borderMid, borderLeft: '3px solid ' + C.accent, borderRadius: 4, padding: '10px 16px', fontSize: 13, fontWeight: 500, color: C.textHi, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', animation: 'toastSlide 0.25s ease', maxWidth: 320 },
+  toast: { position: 'fixed', top: 16, right: 16, zIndex: 9998, background: C.raised, border: '1px solid ' + C.borderMid, borderLeft: '3px solid ' + C.accent, borderRadius: 'var(--radius-card)', padding: '10px 16px', fontSize: 13, fontWeight: 500, color: C.textHi, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', animation: 'toastSlide 0.25s ease', maxWidth: 320 },
 
   // Filter chips
-  filterChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 3, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, border: '1px solid ' + C.borderDim, background: 'transparent', color: C.textMid, cursor: 'pointer', transition: 'all 0.15s' },
+  filterChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 'var(--radius-pill)', fontSize: 11, fontWeight: 600, letterSpacing: 0.5, border: '1px solid ' + C.borderDim, background: 'transparent', color: C.textMid, cursor: 'pointer', transition: 'all 0.15s' },
 
   // Character view
   charSummary: { display: 'flex', alignItems: 'center', gap: 16, padding: '20px 0 24px', borderBottom: '1px solid ' + C.borderDim, marginBottom: 24 },
-  charAvatar: { width: 52, height: 52, borderRadius: 4, flexShrink: 0, background: C.accentDim, border: '1px solid ' + C.borderGlow, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(167,139,250,0.2)' },
-  domainCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', marginBottom: 10 },
-  bossPill: { padding: '5px 10px', borderRadius: 3, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, border: '1px solid', cursor: 'default', display: 'inline-flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' },
+  charAvatar: { width: 52, height: 52, borderRadius: 'var(--radius-card)', flexShrink: 0, background: C.accentDim, border: '1px solid ' + C.borderGlow, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(167,139,250,0.2)' },
+  domainCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '14px 16px', marginBottom: 10 },
+  bossPill: { padding: '5px 10px', borderRadius: 'var(--radius-pill)', fontSize: 11, fontWeight: 600, letterSpacing: 0.5, border: '1px solid', cursor: 'default', display: 'inline-flex', alignItems: 'center', gap: 5, transition: 'all 0.15s' },
 
   // Rewards
-  rewardCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, transition: 'border-color 0.15s' },
-  ticketCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 },
+  rewardCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, transition: 'border-color 0.15s' },
+  ticketCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 },
 
   // Boss modal
-  tierBtn: { flex: 1, padding: '14px 10px', borderRadius: 4, border: '1px solid', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'transparent', transition: 'all 0.15s' },
+  tierBtn: { flex: 1, padding: '14px 10px', borderRadius: 'var(--radius-card)', border: '1px solid', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'transparent', transition: 'all 0.15s' },
 
   // Auth
   authScreen: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.void, padding: 20 },
-  authCard: { background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, padding: '32px', width: '100%', maxWidth: 400, boxShadow: '0 24px 80px rgba(0,0,0,0.6)' },
+  authCard: { background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 'var(--radius-card)', padding: '32px', width: '100%', maxWidth: 400, boxShadow: '0 24px 80px rgba(0,0,0,0.6)' },
   authTitle: { fontSize: 18, fontWeight: 800, color: C.textHi, marginBottom: 4 },
   authSub: { fontSize: 13, color: C.textMid, marginBottom: 24 },
 
@@ -7613,25 +7840,25 @@ const styles = {
   bottomSheet: { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200, background: C.panel, border: '1px solid ' + C.borderMid, borderBottom: 'none', borderRadius: '4px 4px 0 0', padding: 20, boxShadow: '0 -8px 40px rgba(0,0,0,0.5)', maxHeight: '80vh', overflowY: 'auto' },
 
   // Settings
-  settingCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  settingCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', overflow: 'hidden', marginBottom: 8 },
   settingRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid ' + C.borderDim },
 
   // Economy
-  ecoGroup: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '14px 16px', marginBottom: 10 },
+  ecoGroup: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '14px 16px', marginBottom: 10 },
   ecoGroupLabel: { fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: C.textLo, marginBottom: 10 },
   ecoField: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },
   ecoLabel: { flex: 1, fontSize: 12, color: C.textMid },
-  ecoInput: { width: 72, background: C.void, border: '1px solid ' + C.borderMid, borderRadius: 3, color: C.textHi, padding: '5px 8px', fontSize: 12, textAlign: 'right', outline: 'none' },
+  ecoInput: { width: 72, background: C.void, border: '1px solid ' + C.borderMid, borderRadius: 'var(--radius-pill)', color: C.textHi, padding: '5px 8px', fontSize: 12, textAlign: 'right', outline: 'none' },
 
   // Account (kept for auth screens, hidden in main UI)
-  accountBtn: { width: 30, height: 30, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', fontSize: 12, fontWeight: 700 },
-  accountMenu: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' },
+  accountBtn: { width: 30, height: 30, borderRadius: 'var(--radius-card)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: C.hover, border: '1px solid ' + C.borderDim, color: C.textMid, cursor: 'pointer', fontSize: 12, fontWeight: 700 },
+  accountMenu: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 'var(--radius-card)', minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' },
   accountMenuEmail: { padding: '10px 14px', fontSize: 11, color: C.textMid, borderBottom: '1px solid ' + C.borderDim },
   accountMenuItem: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', background: 'transparent', border: 'none', color: C.textMid, fontSize: 12, cursor: 'pointer', transition: 'background 0.12s, color 0.12s' },
 
   // Streak calendar
   calendarGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 },
-  calendarDay: { width: '100%', aspectRatio: '1', borderRadius: 2, cursor: 'default' },
+  calendarDay: { width: '100%', aspectRatio: '1', borderRadius: 'var(--radius-pill)', cursor: 'default' },
   calendarLegend: { display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8, flexWrap: 'wrap' },
   calendarLegendItem: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: C.textMid },
 
@@ -7639,38 +7866,38 @@ const styles = {
   header: { display: 'none' },
   headerLeft: { display: 'none' },
   headerRight: { display: 'none' },
-  logoMark: { width: 32, height: 32, borderRadius: 4, background: C.accentDim, border: '1px solid ' + C.borderGlow, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  logoMark: { width: 32, height: 32, borderRadius: 'var(--radius-card)', background: C.accentDim, border: '1px solid ' + C.borderGlow, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 13, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: C.gold },
   subtitle: { fontSize: 10, color: C.textLo },
   nav: { display: 'none' },
   navBtn: { display: 'none' },
   navBtnActive: { display: 'none' },
   main: { flex: 1 },
-  streakChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim, fontSize: 12, fontWeight: 700 },
+  streakChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 'var(--radius-pill)', background: C.raised, border: '1px solid ' + C.borderDim, fontSize: 12, fontWeight: 700 },
   streakNum: { fontSize: 13, fontWeight: 800, lineHeight: 1 },
   streakLabel: { fontSize: 10, color: C.textMid },
-  goldChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim, color: C.gold, fontSize: 12, fontWeight: 700 },
-  bonusBell: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim, color: C.textMid, fontSize: 12, fontWeight: 600, position: 'relative', cursor: 'pointer' },
-  bonusBadge: { position: 'absolute', top: -5, right: -5, background: C.accent, color: 'white', fontSize: 9, fontWeight: 700, lineHeight: 1, padding: '2px 4px', borderRadius: 3, minWidth: 14, textAlign: 'center' },
-  pValuesChip: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 3, background: C.raised, border: '1px solid ' + C.borderDim },
+  goldChip: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 'var(--radius-pill)', background: C.raised, border: '1px solid ' + C.borderDim, color: C.gold, fontSize: 12, fontWeight: 700 },
+  bonusBell: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 'var(--radius-pill)', background: C.raised, border: '1px solid ' + C.borderDim, color: C.textMid, fontSize: 12, fontWeight: 600, position: 'relative', cursor: 'pointer' },
+  bonusBadge: { position: 'absolute', top: -5, right: -5, background: C.accent, color: 'white', fontSize: 9, fontWeight: 700, lineHeight: 1, padding: '2px 4px', borderRadius: 'var(--radius-pill)', minWidth: 14, textAlign: 'center' },
+  pValuesChip: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 'var(--radius-pill)', background: C.raised, border: '1px solid ' + C.borderDim },
   pValuesLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.textLo },
   pValuesIcons: { display: 'flex', gap: 2 },
 
   // Daily quest
-  modeToggle: { display: 'flex', gap: 2, padding: 3, background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 4 },
-  modeToggleBtn: { padding: '5px 12px', borderRadius: 3, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', background: 'transparent', border: 'none', color: C.textMid, cursor: 'pointer' },
+  modeToggle: { display: 'flex', gap: 2, padding: 3, background: C.void, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)' },
+  modeToggleBtn: { padding: '5px 12px', borderRadius: 'var(--radius-pill)', fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', background: 'transparent', border: 'none', color: C.textMid, cursor: 'pointer' },
   modeToggleBtnActive: { background: C.accentDim, color: C.accent },
-  questPanelCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 4, padding: '16px 18px' },
-  questPickerDropdown: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 30, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 4, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' },
+  questPanelCard: { background: C.raised, border: '1px solid ' + C.borderDim, borderRadius: 'var(--radius-card)', padding: '16px 18px' },
+  questPickerDropdown: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 30, background: C.panel, border: '1px solid ' + C.borderMid, borderRadius: 'var(--radius-card)', maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' },
 
   // Quick log
   quickLogGrid: { display: 'flex', flexDirection: 'column', gap: 4 },
-  quickLogBtn: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', borderRadius: 4, background: C.raised, border: '1px solid ' + C.borderDim, cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.12s' },
+  quickLogBtn: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-card)', background: C.raised, border: '1px solid ' + C.borderDim, cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.12s' },
   quickLogName: { fontSize: 13, fontWeight: 600, color: C.textHi },
   quickLogMeta: { fontSize: 11, color: C.textMid, marginTop: 1 },
 
   // Danger buttons
-  dangerBtnSmall: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 4, background: 'rgba(224,92,92,0.1)', border: '1px solid rgba(224,92,92,0.3)', color: C.danger, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+  dangerBtnSmall: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 'var(--radius-card)', background: 'rgba(224,92,92,0.1)', border: '1px solid rgba(224,92,92,0.3)', color: C.danger, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
 };
 
 // ---------- Render ----------
