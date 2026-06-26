@@ -1986,6 +1986,8 @@ function RPGLife({ user, onSignOut }) {
 
   function saveTheme(themeId) {
     setState(prev => ({ ...prev, theme: themeId }));
+    SoundEngine.setSettings({ ...(state.soundSettings || {}), style: THEME_SOUND_STYLE[themeId] || 'fantasy' });
+    SoundEngine.play('logActivity');
   }
 
   const lastStreakCheckRef = useRef(null);
@@ -3315,7 +3317,50 @@ function RPGLife({ user, onSignOut }) {
             h('circle', { cx: '212', cy: '180', r: '1.5', style: { fill: 'var(--accent)' }, opacity: '0.22' }),
             h('circle', { cx: '468', cy: '180', r: '1.5', style: { fill: 'var(--accent)' }, opacity: '0.22' }),
 
-            ...(state.theme === 'sakura' ? [
+            ...(state.theme === 'ember' ? [
+              // ── Fire sword — jagged flame-edged blade for the Ember theme ──
+              h('path', {
+                key: 'f-blade',
+                d: 'M335,390 L330,358 L337,332 L329,302 L336,272 L326,242 L334,212 L323,182 L333,152 L340,88 L347,152 L357,182 L346,212 L354,242 L344,272 L351,302 L343,332 L350,358 L345,390 Z',
+                fill: C.textHi, opacity: '0.92',
+              }),
+              h('path', { key: 'f-blade-glow', d: 'M340,90 L340,386', fill: 'none', stroke: '#ff5a32', strokeWidth: '1.6', opacity: '0.85', style: { animation: 'emberGlowLine 1.8s ease-in-out infinite' } }),
+              // Crossguard — angled up like wisps of flame
+              h('path', { key: 'f-guard-l', d: 'M294,254 Q300,242 312,246 L332,250 L332,258 L310,260 Q298,262 294,254 Z', fill: C.textHi, opacity: '0.9' }),
+              h('path', { key: 'f-guard-r', d: 'M386,254 Q380,242 368,246 L348,250 L348,258 L370,260 Q382,262 386,254 Z', fill: C.textHi, opacity: '0.9' }),
+              // Guard jewel — molten core
+              h('polygon', { key: 'f-jewel', points: '340,240 348,252 340,264 332,252', style: { fill: 'var(--accent)' } }),
+              h('polygon', { key: 'f-jewel-shine', points: '340,243 346,252 340,261 334,252', style: { fill: 'var(--gold)' }, opacity: '0.7' }),
+              // Grip
+              h('rect', { key: 'f-grip', x: '336', y: '152', width: '8', height: '82', fill: C.textHi, opacity: '0.7', rx: '2' }),
+              h('line', { key: 'f-wrap-1', x1: '335', y1: '168', x2: '345', y2: '174', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 'f-wrap-2', x1: '335', y1: '186', x2: '345', y2: '192', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 'f-wrap-3', x1: '335', y1: '204', x2: '345', y2: '210', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              h('line', { key: 'f-wrap-4', x1: '335', y1: '222', x2: '345', y2: '228', style: { stroke: 'var(--bg-panel)' }, strokeWidth: '1.5' }),
+              // Pommel — a small flame finial
+              h('polygon', { key: 'f-pommel', points: '340,116 349,134 340,152 331,134', fill: C.textHi }),
+              h('polygon', { key: 'f-pommel-jewel', points: '340,121 345,134 340,147 335,134', style: { fill: 'var(--accent)' } }),
+              // Rising spark particles
+              h('circle', { key: 'e-spark-1', cx: '322', cy: '300', r: '2', fill: '#ff8040', style: { animation: 'emberRise 2.6s ease-in infinite' } }),
+              h('circle', { key: 'e-spark-2', cx: '359', cy: '260', r: '1.6', fill: '#ffb020', style: { animation: 'emberRise 3.2s ease-in 0.8s infinite' } }),
+              h('circle', { key: 'e-spark-3', cx: '328', cy: '340', r: '1.4', fill: '#ff6a3c', style: { animation: 'emberRise 2.9s ease-in 1.6s infinite' } }),
+            ] : state.theme === 'cyberpunk' ? [
+              // ── Lightsaber — glowing energy blade for the Neon Noir theme ──
+              h('rect', { key: 'ls-glow', x: '330', y: '88', width: '20', height: '260', rx: '10', style: { fill: 'var(--accent)' }, opacity: '0.28' }),
+              h('rect', { key: 'ls-core', x: '336', y: '88', width: '8', height: '260', rx: '4', fill: '#ffffff', opacity: '0.95' }),
+              h('rect', { key: 'ls-tint', x: '336', y: '88', width: '8', height: '260', rx: '4', style: { fill: 'var(--accent)' }, opacity: '0.5' }),
+              // Emitter housing where blade meets hilt
+              h('rect', { key: 'ls-emitter', x: '326', y: '346', width: '28', height: '14', rx: '3', fill: C.textHi, opacity: '0.9' }),
+              // Hilt body with grip ridges
+              h('rect', { key: 'ls-hilt', x: '332', y: '360', width: '16', height: '70', rx: '4', fill: C.textHi, opacity: '0.85' }),
+              h('rect', { key: 'ls-band-1', x: '330', y: '374', width: '20', height: '4', style: { fill: 'var(--accent)' }, opacity: '0.8' }),
+              h('rect', { key: 'ls-band-2', x: '330', y: '390', width: '20', height: '4', style: { fill: 'var(--accent)' }, opacity: '0.8' }),
+              h('rect', { key: 'ls-band-3', x: '330', y: '406', width: '20', height: '4', style: { fill: 'var(--accent)' }, opacity: '0.8' }),
+              // Activation button
+              h('circle', { key: 'ls-button', cx: '340', cy: '419', r: '3', style: { fill: 'var(--gold)' } }),
+              // Pommel cap
+              h('rect', { key: 'ls-pommel', x: '334', y: '428', width: '12', height: '8', rx: '2', fill: C.textHi, opacity: '0.7' }),
+            ] : state.theme === 'sakura' ? [
               // ── Kawaii wand — replaces the sword for the Sakura theme ──
               // Candy-cane stick with a glossy highlight stripe
               h('rect', { key: 'w-stick', x: '334', y: '160', width: '12', height: '215', rx: '6', style: { fill: 'var(--accent)' }, opacity: '0.9' }),
@@ -3371,15 +3416,6 @@ function RPGLife({ user, onSignOut }) {
               h('polygon', { key: 's-pommel-jewel', points: '340,124 345,136 340,148 335,136', style: { fill: 'var(--accent)' } }),
               h('polygon', { key: 's-pommel-shine', points: '340,108 344,116 340,124 336,116', style: { fill: 'var(--accent)' }, opacity: '0.7' }),
             ]),
-
-            ...(state.theme === 'ember' ? [
-              // ── Ember-only extras: a glowing molten core down the blade
-              // and rising spark particles, layered on top of the sword ──
-              h('path', { key: 'e-blade-glow', d: 'M340,90 L340,383', fill: 'none', stroke: '#ff5a32', strokeWidth: '1.4', opacity: '0.8', style: { animation: 'emberGlowLine 1.8s ease-in-out infinite' } }),
-              h('circle', { key: 'e-spark-1', cx: '322', cy: '300', r: '2', fill: '#ff8040', style: { animation: 'emberRise 2.6s ease-in infinite' } }),
-              h('circle', { key: 'e-spark-2', cx: '359', cy: '260', r: '1.6', fill: '#ffb020', style: { animation: 'emberRise 3.2s ease-in 0.8s infinite' } }),
-              h('circle', { key: 'e-spark-3', cx: '328', cy: '340', r: '1.4', fill: '#ff6a3c', style: { animation: 'emberRise 2.9s ease-in 1.6s infinite' } }),
-            ] : []),
           ),
           h('div', { style: { textAlign: 'center', marginTop: 2 } },
             h('div', { className: 'rpg-sidebar-logo-title' }, 'RPGLife'),
