@@ -14,10 +14,20 @@ function Icon({ name, size = 16, color = 'currentColor', style = {} }) {
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
     // strokeWidth lives in style (not a bare attribute) so themes can
-    // make the icon set read chunkier/cuter via --icon-stroke.
-    style: { flexShrink: 0, strokeWidth: 'var(--icon-stroke, 2)', ...style },
+    // make the icon set read chunkier/cuter via --icon-stroke. CSS `color`
+    // is set too so any inner fill="currentColor" accents (filled dots,
+    // hearts, etc. in theme-specific icon variants) match the stroke color.
+    style: { flexShrink: 0, strokeWidth: 'var(--icon-stroke, 2)', color, ...style },
     dangerouslySetInnerHTML: { __html: inner },
   });
+}
+
+// Resolves a base icon name to a theme-specific variant when one exists
+// (e.g. 'shield' + 'sakura' -> 'shield_sakura'), falling back to the base
+// icon for themes that don't override it (default theme never does).
+function themedIcon(base, theme) {
+  const key = base + '_' + theme;
+  return window.ICONS[key] ? key : base;
 }
 
 // Renders a string that may start or end with a colorful emoji, recoloring just
@@ -313,11 +323,12 @@ function uid(prefix='id') {
 
 // Each theme has its own fixed sound palette — users only get an enable/disable toggle.
 const THEME_SOUND_STYLE = {
-  default:   'fantasy',
-  ember:     'ember',
-  gilded:    'gilded',
-  sakura:    'sakura',
-  cyberpunk: 'digital',
+  default:    'fantasy',
+  ember:      'ember',
+  gilded:     'gilded',
+  sakura:     'sakura',
+  cyberpunk:  'digital',
+  cloudbunny: 'cloud',
 };
 
 const SoundEngine = (() => {
@@ -762,7 +773,72 @@ const SoundEngine = (() => {
     },
   };
 
-  const STYLES = { fantasy: FANTASY, digital: DIGITAL, ember: EMBER, gilded: GILDED, sakura: SAKURA };
+  // ── CLOUD style — soft airy sine chimes with long floaty decays ──
+
+  const CLOUD = {
+    click() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(740, 'sine', t,        0.07, 0.12);
+      osc(900, 'sine', t + 0.02, 0.05, 0.07);
+    },
+    nav() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(500, 750, 'sine', t, 0.09, 0.13);
+    },
+    logActivity() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(587, 'sine', t,        0.3, 0.16);
+      osc(740, 'sine', t + 0.08, 0.3, 0.16);
+      osc(880, 'sine', t + 0.16, 0.4, 0.18);
+    },
+    levelUp() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [523, 659, 784, 988, 1175].forEach((f, i) => osc(f, 'sine', t + i * 0.09, 0.35, 0.22));
+      osc(1568, 'sine', t + 0.45, 0.5, 0.15);
+    },
+    bossDefeated() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(392, 'sine', t,        0.6, 0.22);
+      osc(587, 'sine', t + 0.15, 0.6, 0.2);
+      osc(784, 'sine', t + 0.3,  0.6, 0.22);
+      osc(1175,'sine', t + 0.45, 0.6, 0.2);
+    },
+    achievement() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.07, 0.14, 0.21].forEach((d, i) => osc(880 + i * 150, 'sine', t + d, 0.22, 0.16 - i * 0.015));
+    },
+    questComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(659, 'sine', t,        0.3, 0.18);
+      osc(784, 'sine', t + 0.1,  0.3, 0.18);
+      osc(988, 'sine', t + 0.2,  0.4, 0.2);
+    },
+    streakMilestone() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(988,  'sine', t,        0.25, 0.18);
+      osc(1318, 'sine', t + 0.12, 0.3,  0.2);
+    },
+    coinPurchase() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [0, 0.05, 0.1].forEach((d, i) => osc(1046 + i * 130, 'sine', t + d, 0.09, 0.13));
+    },
+    tutorial() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      osc(740, 'sine', t, 0.15, 0.12);
+    },
+    streakRisk() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      oscFreqSweep(400, 320, 'sine', t,        0.35, 0.13);
+      oscFreqSweep(370, 300, 'sine', t + 0.3,  0.35, 0.1);
+    },
+    dayComplete() {
+      const c = getCtx(); if (!c) return; const t = c.currentTime;
+      [392, 494, 587, 740, 880, 1047].forEach((f, i) => osc(f, 'sine', t + i * 0.1, 0.4, 0.22));
+      osc(1568, 'sine', t + 0.6, 0.6, 0.18);
+    },
+  };
+
+  const STYLES = { fantasy: FANTASY, digital: DIGITAL, ember: EMBER, gilded: GILDED, sakura: SAKURA, cloud: CLOUD };
 
   function play(event) {
     if (!enabled) return;
@@ -1249,6 +1325,142 @@ const THEMES = {
 
       ::-webkit-scrollbar-track { background: rgba(255,143,171,0.06) !important; }
       ::-webkit-scrollbar-thumb { background: rgba(255,143,171,0.35) !important; border-radius: var(--radius-pill) !important; }
+    `,
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // FLUFFY — soft sky-blue and cloud-white, fluffy and gentle
+  // Reference: a plush white bunny napping on a pile of clouds.
+  // ══════════════════════════════════════════════════════════════
+  cloudbunny: {
+    label: 'Fluffy',
+    icon: '🐰',
+    desc: 'Cloud-white and sky-blue pastels with a fluffy bunny softness',
+    fonts: 'https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Quicksand:wght@400;500;600;700&display=swap',
+    css: `
+      :root {
+        --bg-void:     #f3f8ff;
+        --bg-panel:    #eaf3ff;
+        --bg-raised:   #ffffff;
+        --bg-hover:    #e0edff;
+        --border-dim:  rgba(125,170,230,0.16);
+        --border-mid:  rgba(125,170,230,0.3);
+        --border-glow: rgba(125,170,230,0.5);
+        --gold:        #ffb3c6;
+        --gold-dim:    rgba(255,179,198,0.15);
+        --gold-glow:   rgba(255,179,198,0.35);
+        --accent:      #7fb8e8;
+        --accent-dim:  rgba(127,184,232,0.12);
+        --accent-glow: rgba(127,184,232,0.35);
+        --text-hi:     #3c4a66;
+        --text-mid:    #7a8aa8;
+        --text-lo:     #b8c4da;
+        --danger:      #e2789a;
+        --success:     #7dd9b0;
+        --radius-card: 20px;
+        --radius-pill: 999px;
+        --icon-stroke: 2.4;
+        --emoji-filter: grayscale(1) sepia(1) hue-rotate(165deg) saturate(2.2) brightness(1.4);
+      }
+
+      html, body, input, select, textarea, button { font-family: 'Quicksand', sans-serif !important; }
+      .rpg-sidebar-logo-title, .rpg-topbar-title {
+        font-family: 'Fredoka', cursive !important;
+        letter-spacing: 0.5px !important;
+        font-weight: 600 !important;
+      }
+      .rpg-nav-item { font-family: 'Quicksand', sans-serif !important; font-weight: 700 !important; letter-spacing: 0.2px !important; }
+
+      html, body { background: var(--bg-void) !important; color: var(--text-hi) !important; }
+
+      /* No scanlines on a soft pastel theme */
+      body::after { display: none !important; }
+
+      /* Sidebar — drifting cloud gradient */
+      .rpg-sidebar {
+        background: linear-gradient(180deg, #fbfdff 0%, #e9f2ff 100%) !important;
+        border-right: 1px solid rgba(125,170,230,0.18) !important;
+        box-shadow: 2px 0 20px rgba(125,170,230,0.1) !important;
+      }
+      .rpg-sidebar-logo { border-bottom: 1px solid rgba(125,170,230,0.15) !important; }
+
+      /* Nav — rounded floating pill instead of a side bar */
+      .rpg-nav-item {
+        margin: 0 10px !important;
+        width: calc(100% - 20px) !important;
+        border-radius: var(--radius-card) !important;
+        color: var(--text-mid) !important;
+      }
+      .rpg-nav-item::before { display: none !important; }
+      .rpg-nav-item:hover { background: rgba(125,170,230,0.12) !important; color: var(--text-hi) !important; }
+      .rpg-nav-item.active {
+        background: linear-gradient(135deg, #aed3f7, #ffd2e0) !important;
+        color: #28344c !important;
+        box-shadow: 0 4px 14px rgba(125,170,230,0.35) !important;
+      }
+
+      /* Logo */
+      .rpg-sidebar-logo-title {
+        color: #5b9bdb !important;
+        font-size: 24px !important;
+        letter-spacing: 1px !important;
+        text-shadow: 0 2px 0 rgba(180,210,245,0.7), 0 0 14px rgba(127,184,232,0.3) !important;
+      }
+      .rpg-sidebar-logo-sub { color: #8fa8c9 !important; }
+
+      /* Topbar */
+      .rpg-topbar {
+        background: rgba(248,251,255,0.92) !important;
+        backdrop-filter: blur(14px) !important;
+        border-bottom: 1px solid rgba(125,170,230,0.15) !important;
+      }
+      .rpg-topbar-title { color: #5b7da3 !important; }
+
+      /* Chips — full pill, fluffy-cloud feel */
+      .rpg-hud-chip {
+        background: #ffffff !important;
+        border: 1px solid rgba(125,170,230,0.3) !important;
+        border-radius: var(--radius-pill) !important;
+        box-shadow: 0 1px 6px rgba(125,170,230,0.15) !important;
+      }
+      .rpg-hud-chip:hover { background: #eef6ff !important; box-shadow: 0 2px 10px rgba(125,170,230,0.25) !important; }
+      .rpg-hud-chip.gold-chip { color: #d98fa3 !important; }
+      .rpg-hud-chip.streak-chip { color: #6fa8d8 !important; }
+      .rpg-hud-chip.power-chip { color: #8fa0d8 !important; }
+
+      /* FAB — round cloud-puff button */
+      .rpg-fab {
+        background: linear-gradient(135deg, #9cc8f2, #ffc2d6) !important;
+        box-shadow: 0 6px 20px rgba(127,184,232,0.45) !important;
+        border-radius: 50% !important;
+      }
+      .rpg-fab:hover { box-shadow: 0 8px 26px rgba(127,184,232,0.6) !important; transform: scale(1.06) !important; }
+
+      /* Toast */
+      .rpg-toast {
+        border-left: 3px solid #7fb8e8 !important;
+        background: #ffffff !important;
+        color: var(--text-hi) !important;
+        box-shadow: 0 8px 32px rgba(125,170,230,0.25) !important;
+        border: 1px solid rgba(125,170,230,0.2) !important;
+      }
+
+      /* Modal */
+      .rpg-modal-overlay { background: rgba(210,230,250,0.5) !important; backdrop-filter: blur(10px) !important; }
+
+      input, textarea, select {
+        background: #ffffff !important;
+        border: 1px solid rgba(125,170,230,0.3) !important;
+        color: var(--text-hi) !important;
+        border-radius: var(--radius-card) !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 3px rgba(127,184,232,0.18) !important;
+      }
+
+      ::-webkit-scrollbar-track { background: rgba(125,170,230,0.06) !important; }
+      ::-webkit-scrollbar-thumb { background: rgba(125,170,230,0.32) !important; border-radius: var(--radius-pill) !important; }
     `,
   },
 
@@ -3360,6 +3572,29 @@ function RPGLife({ user, onSignOut }) {
               h('circle', { key: 'ls-button', cx: '340', cy: '419', r: '3', style: { fill: 'var(--gold)' } }),
               // Pommel cap
               h('rect', { key: 'ls-pommel', x: '334', y: '428', width: '12', height: '8', rx: '2', fill: C.textHi, opacity: '0.7' }),
+            ] : state.theme === 'cloudbunny' ? [
+              // ── Fluffy bunny head — replaces the sword for the Cloud Bunny theme ──
+              // Small puff cloud floating beside the ears
+              h('path', { key: 'cb-cloud', d: 'M386,118a14,14 0 0 0-3,-27.6 17,17 0 0 0-32.6,-5.4 13,13 0 0 0-2.4,25.8z', fill: '#ffffff', style: { stroke: 'var(--border-mid)' }, strokeWidth: '2' }),
+              // Ears — tall floppy teardrops with soft pink inner shading
+              h('path', { key: 'cb-ear-l', d: 'M310,232 C293,190 293,118 316,86 C333,114 335,182 327,230 Z', fill: '#ffffff', style: { stroke: 'var(--border-mid)' }, strokeWidth: '2' }),
+              h('path', { key: 'cb-ear-l-in', d: 'M313,212 C304,178 306,132 317,108 C326,132 326,178 320,210 Z', style: { fill: 'var(--gold)' }, opacity: '0.5' }),
+              h('path', { key: 'cb-ear-r', d: 'M370,232 C387,190 387,118 364,86 C347,114 345,182 353,230 Z', fill: '#ffffff', style: { stroke: 'var(--border-mid)' }, strokeWidth: '2' }),
+              h('path', { key: 'cb-ear-r-in', d: 'M367,212 C376,178 374,132 363,108 C354,132 354,178 360,210 Z', style: { fill: 'var(--gold)' }, opacity: '0.5' }),
+              // Body / tail peeking out below the head
+              h('ellipse', { key: 'cb-body', cx: '340', cy: '396', rx: '34', ry: '24', fill: '#ffffff', style: { stroke: 'var(--border-mid)' }, strokeWidth: '2' }),
+              // Head
+              h('ellipse', { key: 'cb-head', cx: '340', cy: '268', rx: '62', ry: '58', fill: '#ffffff', style: { stroke: 'var(--border-mid)' }, strokeWidth: '2' }),
+              // Blush cheeks
+              h('circle', { key: 'cb-cheek-l', cx: '300', cy: '286', r: '10', style: { fill: 'var(--gold)' }, opacity: '0.4' }),
+              h('circle', { key: 'cb-cheek-r', cx: '380', cy: '286', r: '10', style: { fill: 'var(--gold)' }, opacity: '0.4' }),
+              // Eyes
+              h('circle', { key: 'cb-eye-l', cx: '318', cy: '260', r: '4.5', fill: 'var(--text-hi)' }),
+              h('circle', { key: 'cb-eye-r', cx: '362', cy: '260', r: '4.5', fill: 'var(--text-hi)' }),
+              // Nose
+              h('ellipse', { key: 'cb-nose', cx: '340', cy: '280', rx: '6', ry: '4', style: { fill: 'var(--gold)' } }),
+              // Smile
+              h('path', { key: 'cb-mouth', d: 'M328,292 Q340,302 352,292', fill: 'none', style: { stroke: 'var(--text-mid)' }, strokeWidth: '2' }),
             ] : state.theme === 'sakura' ? [
               // ── Kawaii wand — replaces the sword for the Sakura theme ──
               // Candy-cane stick with a glossy highlight stripe
@@ -3438,7 +3673,7 @@ function RPGLife({ user, onSignOut }) {
             onClick: () => { setActiveTab(tab.id); SoundEngine.play('nav'); },
             'data-tutorial-id': `tab-${tab.id}`,
           },
-            h('span', { className: 'nav-icon' }, h(Icon, { name: tab.icon, size: 21, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
+            h('span', { className: 'nav-icon' }, h(Icon, { name: themedIcon(tab.icon, state.theme), size: 21, color: activeTab === tab.id ? '#a78bfa' : '#9896b0' })),
             tab.label,
             tab.id === 'character' && state.newAchievementsSince && h('span', { style: { width: 7, height: 7, borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 6px #a78bfa', marginLeft: 'auto', flexShrink: 0 } })
           )
@@ -3608,7 +3843,7 @@ function RPGLife({ user, onSignOut }) {
               className: `rpg-mobile-nav-item rpg-btn${activeTab === tab.id ? ' active' : ''}`,
               onClick: () => { setActiveTab(tab.id); SoundEngine.play('nav'); },
             },
-              h(Icon, { name: tab.icon, size: 22, color: activeTab === tab.id ? '#a78bfa' : '#4a4868' }),
+              h(Icon, { name: themedIcon(tab.icon, state.theme), size: 22, color: activeTab === tab.id ? '#a78bfa' : '#4a4868' }),
               tab.label
             )
           )

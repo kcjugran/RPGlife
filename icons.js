@@ -23,4 +23,44 @@ window.ICONS = {
   settings: "<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\" /><circle cx=\"12\" cy=\"12\" r=\"3\" />",
   calendar: "<rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\" /><line x1=\"16\" x2=\"16\" y1=\"2\" y2=\"6\" /><line x1=\"8\" x2=\"8\" y1=\"2\" y2=\"6\" /><line x1=\"3\" x2=\"21\" y1=\"10\" y2=\"10\" />",
   chevronLeft: "<path d=\"m15 18-6-6 6-6\" />",
+
+  // ── Ember — warrior / forge aesthetic, theme-specific main-nav icons ──
+  scroll_ember: "<path d=\"M12 2v14\" /> <path d=\"M9 6h6\" /> <path d=\"M12 16l-2.5 5h5z\" /> <path d=\"M8.5 21h7\" />",
+  zap_ember: "<path d=\"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z\" />",
+  target_ember: "<path d=\"M4 4l16 16\" /> <path d=\"M20 4L4 20\" /> <circle cx=\"12\" cy=\"12\" r=\"2.4\" />",
+  shield_ember: "<path d=\"M6 11c0-4 2.5-7 6-7s6 3 6 7v5a2 2 0 0 1-2 2h-1l-1 3-1-3h-2l-1 3-1-3H8a2 2 0 0 1-2-2z\" /> <path d=\"M5 9 3 6\" /> <path d=\"M19 9l2-3\" />",
+  gift_ember: "<rect x=\"3\" y=\"10\" width=\"18\" height=\"9\" rx=\"1\" /> <path d=\"M3 10c0-3 2-5 9-5s9 2 9 5\" /> <line x1=\"12\" y1=\"10\" x2=\"12\" y2=\"19\" /> <circle cx=\"12\" cy=\"13.5\" r=\"1.3\" />",
+  settings_ember: "<path d=\"M14.5 3.5 20 9l-2 2-5.5-5.5z\" /> <path d=\"M13 9 4 18\" /> <path d=\"M3 21l2-2\" />",
+
+  // ── Gilded — luxury minimalism, theme-specific main-nav icons ──
+  scroll_gilded: "<path d=\"M20 4c-5 0-10 3-13 9-1 2-2 5-3 7 2-1 5-2 7-3 6-3 9-8 9-13z\" /> <path d=\"M9 15l6-6\" />",
+  zap_gilded: "<path d=\"M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z\" />",
+  target_gilded: "<circle cx=\"12\" cy=\"12\" r=\"7\" /> <path d=\"M4 9l2 1M4 12h2.5M4 15l2-1\" /> <path d=\"M20 9l-2 1M20 12h-2.5M20 15l-2-1\" />",
+  shield_gilded: "<path d=\"M3 17h18l-2-9-4 4-3-6-3 6-4-4z\" /> <line x1=\"3\" y1=\"20\" x2=\"21\" y2=\"20\" />",
+  gift_gilded: "<rect x=\"4\" y=\"9\" width=\"16\" height=\"11\" rx=\"1\" /> <path d=\"M4 9l2-5h12l2 5\" /> <polygon points=\"12 12 13.5 14.5 12 17 10.5 14.5\" />",
+  settings_gilded: "<circle cx=\"12\" cy=\"12\" r=\"8\" /> <circle cx=\"12\" cy=\"12\" r=\"1.4\" /> <path d=\"M12 4v2.2M12 17.8V20M4 12h2.2M17.8 12H20M6.9 6.9l1.5 1.5M15.5 15.5l1.6 1.6M6.9 17.1l1.5-1.5M15.5 8.5l1.6-1.6\" />",
+
+  // ── Sakura — kawaii, filled/rounded theme-specific main-nav icons ──
+  scroll_sakura: "<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"3\" /> <path d=\"M10 8c0-1 .8-1.6 1.5-1 .7-.6 1.5 0 1.5 1 0 1-1.5 2-1.5 2s-1.5-1-1.5-2z\" fill=\"currentColor\" stroke=\"none\" /> <line x1=\"7\" y1=\"14\" x2=\"17\" y2=\"14\" /> <line x1=\"7\" y1=\"17\" x2=\"14\" y2=\"17\" />",
+  zap_sakura: "<path d=\"M12 3c.5 3 2 5.5 5 6-3 .5-4.5 3-5 6-.5-3-2-5.5-5-6 3-.5 4.5-3 5-6z\" fill=\"currentColor\" stroke=\"none\" />",
+  target_sakura: "<circle cx=\"12\" cy=\"12\" r=\"9\" /> <path d=\"M12 3a9 9 0 0 1 9 9\" /> <path d=\"M12 21a9 9 0 0 1-9-9\" /> <circle cx=\"12\" cy=\"12\" r=\"2\" fill=\"currentColor\" stroke=\"none\" />",
+  shield_sakura: "<circle cx=\"12\" cy=\"12\" r=\"9\" /> <circle cx=\"9\" cy=\"11\" r=\"1\" fill=\"currentColor\" stroke=\"none\" /> <circle cx=\"15\" cy=\"11\" r=\"1\" fill=\"currentColor\" stroke=\"none\" /> <path d=\"M9 15c1 1.2 5 1.2 6 0\" /> <circle cx=\"7\" cy=\"13.7\" r=\"1.3\" fill=\"currentColor\" stroke=\"none\" opacity=\"0.45\" /> <circle cx=\"17\" cy=\"13.7\" r=\"1.3\" fill=\"currentColor\" stroke=\"none\" opacity=\"0.45\" />",
+  gift_sakura: "<rect x=\"4\" y=\"10\" width=\"16\" height=\"10\" rx=\"3\" /> <path d=\"M4 10c0-1 1-2 2-2h12c1 0 2 1 2 2\" /> <line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"20\" /> <path d=\"M12 8c-1.5-2-4-2-4 0s2.5 1 4 0zm0 0c1.5-2 4-2 4 0s-2.5 1-4 0z\" fill=\"currentColor\" stroke=\"none\" />",
+  settings_sakura: "<circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"currentColor\" stroke=\"none\" /> <circle cx=\"12\" cy=\"5\" r=\"3\" /> <circle cx=\"19\" cy=\"12\" r=\"3\" /> <circle cx=\"12\" cy=\"19\" r=\"3\" /> <circle cx=\"5\" cy=\"12\" r=\"3\" />",
+
+  // ── Cloud Bunny — soft and fluffy, theme-specific main-nav icons ──
+  scroll_cloudbunny: "<path d=\"M7 13a4 4 0 0 1-.5-7.9A5 5 0 0 1 16 4a4.5 4.5 0 0 1 4.5 4.5A4 4 0 0 1 17 13z\" /> <line x1=\"9\" y1=\"17\" x2=\"15\" y2=\"17\" /> <line x1=\"9\" y1=\"20\" x2=\"13\" y2=\"20\" />",
+  zap_cloudbunny: "<ellipse cx=\"12\" cy=\"16\" rx=\"5\" ry=\"4\" /> <circle cx=\"7\" cy=\"9\" r=\"2\" /> <circle cx=\"11\" cy=\"6.5\" r=\"2\" /> <circle cx=\"15.5\" cy=\"7\" r=\"2\" /> <circle cx=\"18\" cy=\"10.5\" r=\"2\" />",
+  target_cloudbunny: "<path d=\"M7 21c5-1 10-6 11-13-7 1-12 6-13 11z\" /> <path d=\"M15 6l2-3\" /> <path d=\"M12 5l1-3\" /> <path d=\"M18 9l3-1\" />",
+  shield_cloudbunny: "<path d=\"M8 9c-1-3 0-6 2-6 1 2 1 4 1 6\" /> <path d=\"M16 9c1-3 0-6-2-6-1 2-1 4-1 6\" /> <circle cx=\"12\" cy=\"13\" r=\"6\" /> <circle cx=\"10\" cy=\"12\" r=\"0.8\" fill=\"currentColor\" stroke=\"none\" /> <circle cx=\"14\" cy=\"12\" r=\"0.8\" fill=\"currentColor\" stroke=\"none\" /> <path d=\"M10.5 15c1 1 2.5 1 3 0\" />",
+  gift_cloudbunny: "<rect x=\"4\" y=\"10\" width=\"16\" height=\"10\" rx=\"3\" /> <path d=\"M4 10c0-1 1-2 2-2h12c1 0 2 1 2 2\" /> <line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"20\" /> <path d=\"M11 8c-1-3-1-6 1-6s1 3 0 6z\" /> <path d=\"M13 8c1-3 1-6-1-6s-1 3 0 6z\" />",
+  settings_cloudbunny: "<path d=\"M7 15a3.5 3.5 0 0 1-.8-6.9A4.5 4.5 0 0 1 15 6.5 3.8 3.8 0 0 1 19 10a3.5 3.5 0 0 1-1 5z\" /> <circle cx=\"12\" cy=\"11\" r=\"2.2\" />",
+
+  // ── Neon Noir / Cyberpunk — futuristic, theme-specific main-nav icons ──
+  scroll_cyberpunk: "<rect x=\"3\" y=\"4\" width=\"18\" height=\"13\" rx=\"1\" /> <line x1=\"3\" y1=\"9\" x2=\"21\" y2=\"9\" /> <line x1=\"6\" y1=\"12\" x2=\"14\" y2=\"12\" /> <line x1=\"6\" y1=\"14.5\" x2=\"11\" y2=\"14.5\" /> <line x1=\"12\" y1=\"17\" x2=\"12\" y2=\"20\" /> <line x1=\"7\" y1=\"20\" x2=\"17\" y2=\"20\" />",
+  zap_cyberpunk: "<path d=\"M11 3 5 13h5l-2 8 8-10h-5z\" /> <circle cx=\"18\" cy=\"6\" r=\"1\" fill=\"currentColor\" stroke=\"none\" />",
+  target_cyberpunk: "<circle cx=\"12\" cy=\"12\" r=\"8\" /> <line x1=\"12\" y1=\"2\" x2=\"12\" y2=\"6\" /> <line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"22\" /> <line x1=\"2\" y1=\"12\" x2=\"6\" y2=\"12\" /> <line x1=\"18\" y1=\"12\" x2=\"22\" y2=\"12\" /> <circle cx=\"12\" cy=\"12\" r=\"1.5\" fill=\"currentColor\" stroke=\"none\" />",
+  shield_cyberpunk: "<rect x=\"5\" y=\"6\" width=\"14\" height=\"13\" rx=\"2\" /> <line x1=\"12\" y1=\"2\" x2=\"12\" y2=\"6\" /> <circle cx=\"12\" cy=\"2\" r=\"1\" fill=\"currentColor\" stroke=\"none\" /> <rect x=\"8\" y=\"10\" width=\"3\" height=\"3\" /> <rect x=\"13\" y=\"10\" width=\"3\" height=\"3\" /> <line x1=\"9\" y1=\"16\" x2=\"15\" y2=\"16\" />",
+  gift_cyberpunk: "<polygon points=\"12 2 21 7 21 17 12 22 3 17 3 7\" /> <line x1=\"12\" y1=\"2\" x2=\"12\" y2=\"22\" /> <line x1=\"3\" y1=\"7\" x2=\"21\" y2=\"17\" /> <line x1=\"21\" y1=\"7\" x2=\"3\" y2=\"17\" />",
+  settings_cyberpunk: "<rect x=\"7\" y=\"7\" width=\"10\" height=\"10\" rx=\"1\" /> <line x1=\"9\" y1=\"3\" x2=\"9\" y2=\"7\" /> <line x1=\"15\" y1=\"3\" x2=\"15\" y2=\"7\" /> <line x1=\"9\" y1=\"17\" x2=\"9\" y2=\"21\" /> <line x1=\"15\" y1=\"17\" x2=\"15\" y2=\"21\" /> <line x1=\"3\" y1=\"9\" x2=\"7\" y2=\"9\" /> <line x1=\"3\" y1=\"15\" x2=\"7\" y2=\"15\" /> <line x1=\"17\" y1=\"9\" x2=\"21\" y2=\"9\" /> <line x1=\"17\" y1=\"15\" x2=\"21\" y2=\"15\" /> <circle cx=\"12\" cy=\"12\" r=\"2\" />",
 };
