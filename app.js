@@ -7954,6 +7954,34 @@ function LoginScreen({ onSignedIn }) {
   );
 }
 
+const AUTH_BASE_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+  :root {
+    --bg-void:    #080810;
+    --bg-panel:   #0d0d1a;
+    --bg-raised:  #12121f;
+    --bg-hover:   #1a1a2e;
+    --border-dim: rgba(255,255,255,0.055);
+    --border-mid: rgba(255,255,255,0.10);
+    --border-glow: rgba(167,139,250,0.45);
+    --gold:       #c9a84c;
+    --gold-dim:   rgba(201,168,76,0.15);
+    --gold-glow:  rgba(201,168,76,0.3);
+    --accent:     #a78bfa;
+    --accent-dim: rgba(167,139,250,0.12);
+    --accent-glow:rgba(167,139,250,0.3);
+    --text-hi:    #eceaf6;
+    --text-mid:   #9896b0;
+    --text-lo:    #4a4868;
+    --danger:     #e05c5c;
+    --success:    #5de8a0;
+    --radius-card: 4px;
+    --radius-pill: 3px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg-void); color: var(--text-hi); font-family: Inter, sans-serif; }
+`;
+
 function AuthGate() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
   const [ready, setReady] = useState(false);
@@ -7979,19 +8007,31 @@ function AuthGate() {
   }, []);
 
   if (!ready || !window.RPGLifeSync) {
-    return h('div', { style: styles.loadingScreen }, h('div', { style: styles.loadingText }, 'Loading...'));
+    return h(React.Fragment, null,
+      h('style', null, AUTH_BASE_CSS),
+      h('div', { style: styles.loadingScreen }, h('div', { style: styles.loadingText }, 'Loading...'))
+    );
   }
 
   if (!window.RPGLifeSync.isConfigured()) {
-    return h(ConfigErrorScreen, { error: window.RPGLifeSync.configError() });
+    return h(React.Fragment, null,
+      h('style', null, AUTH_BASE_CSS),
+      h(ConfigErrorScreen, { error: window.RPGLifeSync.configError() })
+    );
   }
 
   if (user === undefined) {
-    return h('div', { style: styles.loadingScreen }, h('div', { style: styles.loadingText }, 'Loading...'));
+    return h(React.Fragment, null,
+      h('style', null, AUTH_BASE_CSS),
+      h('div', { style: styles.loadingScreen }, h('div', { style: styles.loadingText }, 'Loading...'))
+    );
   }
 
   if (user === null) {
-    return h(LoginScreen, { onSignedIn: () => { /* onAuthChange will pick it up */ } });
+    return h(React.Fragment, null,
+      h('style', null, AUTH_BASE_CSS),
+      h(LoginScreen, { onSignedIn: () => { /* onAuthChange will pick it up */ } })
+    );
   }
 
   return h(RPGLife, {
